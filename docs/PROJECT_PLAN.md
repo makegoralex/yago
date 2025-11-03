@@ -1,4 +1,3 @@
-
 # Yago POS Platform Technical Plan
 
 ## Executive Summary
