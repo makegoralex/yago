@@ -17,7 +17,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // --- BASIC ROUTES ---
-app.get("/", (_req, res) => {
+app.get("/api", (_req, res) => {
   res.send("✅ Yago POS API is running");
 });
 
