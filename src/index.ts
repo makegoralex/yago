@@ -45,6 +45,10 @@ app.get('/healthz', (_req: Request, res: Response) => {
   res.json({ status: 'ok' });
 });
 
+app.get('/', (_req: Request, res: Response) => {
+  res.send('✅ Yago POS API is running');
+});
+
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 async function connectToDatabase(): Promise<void> {
