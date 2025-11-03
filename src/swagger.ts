@@ -71,6 +71,24 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
     },
   },
   paths: {
+    '/': {
+      get: {
+        summary: 'Root availability check',
+        responses: {
+          '200': {
+            description: 'Root route response',
+            content: {
+              'text/plain': {
+                schema: {
+                  type: 'string',
+                  example: '✅ Yago POS API is running',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     '/healthz': {
       get: {
         summary: 'Health check',
@@ -242,6 +260,30 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           },
           '403': {
             description: 'Forbidden',
+          },
+        },
+      },
+    },
+    '/api/catalog': {
+      get: {
+        summary: 'Catalog module placeholder',
+        tags: ['Catalog'],
+        responses: {
+          '200': {
+            description: 'Catalog module placeholder response',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    message: {
+                      type: 'string',
+                      example: 'catalog module placeholder',
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },

@@ -3,6 +3,7 @@ import swaggerUi from 'swagger-ui-express';
 
 import { authMiddleware } from './middleware/auth';
 import { authRouter } from './routes/auth';
+import { catalogRouter } from './routes/catalog';
 import { buildSwaggerDocument } from './swagger';
 
 const app = express();
@@ -10,11 +11,16 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.get('/', (_req, res) => {
+  res.send('✅ Yago POS API is running');
+});
+
 app.get('/healthz', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api/catalog', catalogRouter);
 
 app.get('/api/protected', authMiddleware, (req, res) => {
   res.json({
