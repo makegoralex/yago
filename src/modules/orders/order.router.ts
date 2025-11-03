@@ -3,6 +3,8 @@ import { isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { ProductModel } from '../catalog/catalog.model';
+import { CustomerModel } from '../customers/customer.model';
+import { earnLoyaltyPoints } from '../loyalty/loyalty.service';
 import {
   OrderModel,
   type OrderDocument,
@@ -174,13 +176,31 @@ router.post(
   '/',
   requireRole(MANAGER_ROLES),
   asyncHandler(async (req, res) => {
-    const { orgId, locationId, registerId, cashierId, customerId, items, totals } = req.body ?? {};
+    const { orgId, locationId, registerId, cashierId, customerId, items, totals } =
+      req.body ?? {};
 
     if (!orgId || !locationId || !registerId || !cashierId) {
       res
         .status(400)
         .json({ data: null, error: 'orgId, locationId, registerId, and cashierId are required' });
       return;
+    }
+
+    let normalizedCustomerId: Types.ObjectId | undefined;
+    if (customerId !== undefined && customerId !== null) {
+      if (typeof customerId !== 'string' || !isValidObjectId(customerId)) {
+        res.status(400).json({ data: null, error: 'customerId must be a valid id when provided' });
+        return;
+      }
+
+      const customer = await CustomerModel.findById(customerId);
+
+      if (!customer) {
+        res.status(404).json({ data: null, error: 'Customer not found' });
+        return;
+      }
+
+      normalizedCustomerId = new Types.ObjectId(customerId);
     }
 
     let orderItems: OrderItem[];
@@ -206,10 +226,7 @@ router.post(
       locationId: String(locationId).trim(),
       registerId: String(registerId).trim(),
       cashierId: String(cashierId).trim(),
-      customerId:
-        customerId !== undefined && customerId !== null
-          ? String(customerId).trim() || undefined
-          : undefined,
+      customerId: normalizedCustomerId,
       items: orderItems,
       totals: orderTotals,
       payments: [],
@@ -332,6 +349,14 @@ router.post(
     order.status = 'paid';
 
     await order.save();
+
+    if (order.customerId) {
+      try {
+        await earnLoyaltyPoints(order.customerId.toString(), order.totals.grandTotal);
+      } catch (error) {
+        console.error('Failed to apply loyalty points after payment', error);
+      }
+    }
 
     res.json({ data: order, error: null });
   })

@@ -196,7 +196,7 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           locationId: { type: 'string', example: 'store-1' },
           registerId: { type: 'string', example: 'reg-1' },
           cashierId: { type: 'string', example: 'cashier-23' },
-          customerId: { type: 'string', example: 'customer-501' },
+          customerId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9900' },
           items: {
             type: 'array',
             items: { $ref: '#/components/schemas/OrderItem' },
@@ -223,7 +223,7 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           locationId: { type: 'string', example: 'store-1' },
           registerId: { type: 'string', example: 'reg-1' },
           cashierId: { type: 'string', example: 'cashier-23' },
-          customerId: { type: 'string', example: 'customer-501' },
+          customerId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9900' },
           items: {
             type: 'array',
             items: { $ref: '#/components/schemas/OrderItemInput' },
@@ -248,6 +248,45 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
         properties: {
           method: { type: 'string', enum: ['cash', 'card', 'loyalty'], example: 'card' },
           amount: { type: 'number', example: 8.5 },
+        },
+      },
+      Customer: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: '665c2ba2d6f42e4a3c8fb321' },
+          name: { type: 'string', example: 'Jane Patron' },
+          phone: { type: 'string', example: '+15551234567' },
+          email: { type: 'string', example: 'jane@yago.coffee' },
+          points: { type: 'number', example: 125.5 },
+          totalSpent: { type: 'number', example: 512.25 },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CustomerInput: {
+        type: 'object',
+        required: ['name', 'phone'],
+        properties: {
+          name: { type: 'string', example: 'Jane Patron' },
+          phone: { type: 'string', example: '+15551234567' },
+          email: { type: 'string', example: 'jane@yago.coffee' },
+        },
+      },
+      LoyaltyEarnRequest: {
+        type: 'object',
+        required: ['customerId', 'orderId', 'amount'],
+        properties: {
+          customerId: { type: 'string', example: '665c2ba2d6f42e4a3c8fb321' },
+          orderId: { type: 'string', example: '665c2ba2d6f42e4a3c8fa120' },
+          amount: { type: 'number', example: 24.5 },
+        },
+      },
+      LoyaltyRedeemRequest: {
+        type: 'object',
+        required: ['customerId', 'points'],
+        properties: {
+          customerId: { type: 'string', example: '665c2ba2d6f42e4a3c8fb321' },
+          points: { type: 'number', example: 100 },
         },
       },
     },
@@ -1027,6 +1066,179 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           '400': { description: 'Order must be paid before fiscalization' },
           '403': { description: 'Forbidden — admin or cashier role required' },
           '404': { description: 'Order not found' },
+        },
+      },
+    },
+    '/api/customers': {
+      get: {
+        summary: 'List customers',
+        tags: ['Customers'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Customers retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/Customer' },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '403': { description: 'Forbidden — admin or cashier role required' },
+        },
+      },
+      post: {
+        summary: 'Create a customer',
+        tags: ['Customers'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CustomerInput' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Customer created',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/Customer' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid payload' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
+          '409': { description: 'Customer with phone already exists' },
+        },
+      },
+    },
+    '/api/customers/search': {
+      get: {
+        summary: 'Find customer by phone',
+        tags: ['Customers'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'phone',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Phone number to search',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Customer found',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/Customer' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Missing phone parameter' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
+          '404': { description: 'Customer not found' },
+        },
+      },
+    },
+    '/api/loyalty/earn': {
+      post: {
+        summary: 'Award loyalty points',
+        tags: ['Loyalty'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/LoyaltyEarnRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Points awarded',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        customer: { $ref: '#/components/schemas/Customer' },
+                        pointsEarned: { type: 'number', example: 1.25 },
+                      },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid payload' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
+          '404': { description: 'Order not found' },
+        },
+      },
+    },
+    '/api/loyalty/redeem': {
+      post: {
+        summary: 'Redeem loyalty points',
+        tags: ['Loyalty'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/LoyaltyRedeemRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Points redeemed',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        customer: { $ref: '#/components/schemas/Customer' },
+                        pointsRedeemed: { type: 'number', example: 10 },
+                      },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid payload or insufficient points' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
         },
       },
     },

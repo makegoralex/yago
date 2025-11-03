@@ -6,6 +6,8 @@ import { authRouter } from './routes/auth';
 import catalogRouter from './modules/catalog/catalog.router';
 import { buildSwaggerDocument } from './swagger';
 import orderRouter from './modules/orders/order.router';
+import customersRouter from './modules/customers/customer.router';
+import loyaltyRouter from './modules/loyalty/loyalty.router';
 
 const app = express();
 
@@ -23,6 +25,8 @@ app.get('/healthz', (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/catalog', catalogRouter);
 app.use('/api/orders', orderRouter);
+app.use('/api/customers', customersRouter);
+app.use('/api/loyalty', loyaltyRouter);
 
 app.get('/api/protected', authMiddleware, (req, res) => {
   res.json({

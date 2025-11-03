@@ -31,7 +31,7 @@ export interface Order {
   locationId: string;
   registerId: string;
   cashierId: string;
-  customerId?: string;
+  customerId?: Types.ObjectId;
   items: OrderItem[];
   totals: OrderTotals;
   payments: OrderPayment[];
@@ -87,7 +87,7 @@ const orderSchema = new Schema<OrderDocument>(
     locationId: { type: String, required: true, trim: true },
     registerId: { type: String, required: true, trim: true },
     cashierId: { type: String, required: true, trim: true },
-    customerId: { type: String, trim: true },
+    customerId: { type: Schema.Types.ObjectId, ref: 'Customer' },
     items: { type: [orderItemSchema], default: [] },
     totals: { type: orderTotalsSchema, required: true },
     payments: { type: [paymentSchema], default: [] },
@@ -103,5 +103,6 @@ const orderSchema = new Schema<OrderDocument>(
 
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ 'items.productId': 1 });
+orderSchema.index({ customerId: 1 });
 
 export const OrderModel = model<OrderDocument>('Order', orderSchema);
