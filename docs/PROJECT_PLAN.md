@@ -114,3 +114,4 @@ Yago is a point-of-sale (POS) platform built to support small and mid-sized reta
 - **CDC**: Change Data Capture.
 - **SLO**: Service Level Objective.
 - **ETL**: Extract, Transform, Load.
+
