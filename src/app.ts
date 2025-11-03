@@ -46,3 +46,20 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 export default app;
+
+
+import path from "path";
+import express from "express";
+
+const app = express();
+
+// …твой API ниже…
+
+// Serve static files from frontend build
+const frontendPath = path.join(__dirname, "../frontend/dist");
+app.use(express.static(frontendPath));
+
+// Fallback for SPA routing
+app.get("*", (_, res) => {
+  res.sendFile(path.join(frontendPath, "index.html"));
+});
