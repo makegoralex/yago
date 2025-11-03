@@ -46,7 +46,7 @@ const swaggerDocument = buildSwaggerDocument();
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // --- FRONTEND (PWA) ---
-const frontendPath = path.join(__dirname, "../../frontend/dist");
+const frontendPath = path.join(__dirname, "../frontend/dist");
 app.use(express.static(frontendPath));
 
 // SPA fallback (React Router)
