@@ -136,6 +136,120 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           isActive: { type: 'boolean', example: true },
         },
       },
+      OrderItem: {
+        type: 'object',
+        properties: {
+          productId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9942' },
+          name: { type: 'string', example: 'Flat White' },
+          qty: { type: 'number', example: 2 },
+          price: { type: 'number', example: 4.5 },
+          modifiersApplied: {
+            type: 'array',
+            items: { type: 'string', example: 'Extra shot' },
+          },
+          total: { type: 'number', example: 9 },
+        },
+      },
+      OrderItemInput: {
+        type: 'object',
+        required: ['productId', 'qty'],
+        properties: {
+          productId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9942' },
+          name: { type: 'string', example: 'Flat White w/ oat milk' },
+          qty: { type: 'number', example: 1 },
+          price: { type: 'number', example: 4.5 },
+          modifiersApplied: {
+            type: 'array',
+            items: { type: 'string', example: 'Oat Milk' },
+          },
+        },
+      },
+      OrderTotals: {
+        type: 'object',
+        properties: {
+          subtotal: { type: 'number', example: 9 },
+          discount: { type: 'number', example: 1 },
+          tax: { type: 'number', example: 0.5 },
+          grandTotal: { type: 'number', example: 8.5 },
+        },
+      },
+      OrderTotalsAdjustments: {
+        type: 'object',
+        properties: {
+          discount: { type: 'number', example: 1 },
+          tax: { type: 'number', example: 0.5 },
+        },
+      },
+      OrderPayment: {
+        type: 'object',
+        properties: {
+          method: { type: 'string', enum: ['cash', 'card', 'loyalty'] },
+          amount: { type: 'number', example: 8.5 },
+          txnId: { type: 'string', example: 'MOCK-665c2ba2d6f42e4a3c8f9942' },
+        },
+      },
+      Order: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: '665c2ba2d6f42e4a3c8fa120' },
+          orgId: { type: 'string', example: 'yago-coffee' },
+          locationId: { type: 'string', example: 'store-1' },
+          registerId: { type: 'string', example: 'reg-1' },
+          cashierId: { type: 'string', example: 'cashier-23' },
+          customerId: { type: 'string', example: 'customer-501' },
+          items: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/OrderItem' },
+          },
+          totals: { $ref: '#/components/schemas/OrderTotals' },
+          payments: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/OrderPayment' },
+          },
+          status: {
+            type: 'string',
+            enum: ['draft', 'paid', 'fiscalized', 'cancelled'],
+            example: 'paid',
+          },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      OrderCreateRequest: {
+        type: 'object',
+        required: ['orgId', 'locationId', 'registerId', 'cashierId', 'items'],
+        properties: {
+          orgId: { type: 'string', example: 'yago-coffee' },
+          locationId: { type: 'string', example: 'store-1' },
+          registerId: { type: 'string', example: 'reg-1' },
+          cashierId: { type: 'string', example: 'cashier-23' },
+          customerId: { type: 'string', example: 'customer-501' },
+          items: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/OrderItemInput' },
+          },
+          totals: { $ref: '#/components/schemas/OrderTotalsAdjustments' },
+        },
+      },
+      OrderItemsUpdateRequest: {
+        type: 'object',
+        required: ['items'],
+        properties: {
+          items: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/OrderItemInput' },
+          },
+          totals: { $ref: '#/components/schemas/OrderTotalsAdjustments' },
+        },
+      },
+      OrderPaymentRequest: {
+        type: 'object',
+        required: ['method', 'amount'],
+        properties: {
+          method: { type: 'string', enum: ['cash', 'card', 'loyalty'], example: 'card' },
+          amount: { type: 'number', example: 8.5 },
+        },
+      },
     },
   },
   paths: {
@@ -645,6 +759,274 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           '403': {
             description: 'Forbidden — admin role required',
           },
+        },
+      },
+    },
+    '/api/orders': {
+      get: {
+        summary: 'List orders',
+        tags: ['Orders'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            schema: {
+              type: 'string',
+              enum: ['draft', 'paid', 'fiscalized', 'cancelled'],
+            },
+            description: 'Filter orders by status',
+          },
+          {
+            name: 'from',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', format: 'date-time' },
+            description: 'Return orders created after this ISO date',
+          },
+          {
+            name: 'to',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', format: 'date-time' },
+            description: 'Return orders created before this ISO date',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Orders retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/Order' },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid filter parameters' },
+        },
+      },
+      post: {
+        summary: 'Create draft order',
+        tags: ['Orders'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/OrderCreateRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Order created',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/Order' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid payload' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
+        },
+      },
+    },
+    '/api/orders/{id}': {
+      get: {
+        summary: 'Get order by id',
+        tags: ['Orders'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Order retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/Order' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid identifier supplied' },
+          '404': { description: 'Order not found' },
+        },
+      },
+      delete: {
+        summary: 'Cancel an order',
+        tags: ['Orders'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Order cancelled',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/Order' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid identifier or state' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
+          '404': { description: 'Order not found' },
+        },
+      },
+    },
+    '/api/orders/{id}/items': {
+      put: {
+        summary: 'Replace items in an order',
+        tags: ['Orders'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/OrderItemsUpdateRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Order updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/Order' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid identifier or payload' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
+          '404': { description: 'Order not found' },
+        },
+      },
+    },
+    '/api/orders/{id}/pay': {
+      post: {
+        summary: 'Record payment for an order',
+        tags: ['Orders'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/OrderPaymentRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Order paid',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/Order' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid identifier or payment payload' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
+          '404': { description: 'Order not found' },
+          '409': { description: 'Order already paid or cancelled' },
+        },
+      },
+    },
+    '/api/orders/{id}/fiscalize': {
+      post: {
+        summary: 'Mark an order as fiscalized',
+        tags: ['Orders'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Order fiscalized',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/Order' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Order must be paid before fiscalization' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
+          '404': { description: 'Order not found' },
         },
       },
     },

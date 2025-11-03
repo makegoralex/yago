@@ -5,6 +5,7 @@ import { authMiddleware } from './middleware/auth';
 import { authRouter } from './routes/auth';
 import catalogRouter from './modules/catalog/catalog.router';
 import { buildSwaggerDocument } from './swagger';
+import orderRouter from './modules/orders/order.router';
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.get('/healthz', (_req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/catalog', catalogRouter);
+app.use('/api/orders', orderRouter);
 
 app.get('/api/protected', authMiddleware, (req, res) => {
   res.json({
