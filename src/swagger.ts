@@ -68,6 +68,74 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           refreshToken: { type: 'string' },
         },
       },
+      CatalogCategory: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: '665c2ba2d6f42e4a3c8f9921' },
+          name: { type: 'string', example: 'Espresso' },
+          sortOrder: { type: 'integer', example: 1 },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CatalogCategoryInput: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: { type: 'string', example: 'Espresso' },
+          sortOrder: { type: 'integer', example: 1 },
+        },
+      },
+      CatalogCategoryUpdateInput: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', example: 'Espresso' },
+          sortOrder: { type: 'integer', example: 1 },
+        },
+      },
+      CatalogProduct: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: '665c2ba2d6f42e4a3c8f9942' },
+          name: { type: 'string', example: 'Flat White' },
+          categoryId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9921' },
+          price: { type: 'number', example: 4.5 },
+          modifiers: {
+            type: 'array',
+            items: { type: 'string', example: 'Oat Milk' },
+          },
+          isActive: { type: 'boolean', example: true },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CatalogProductInput: {
+        type: 'object',
+        required: ['name', 'categoryId', 'price'],
+        properties: {
+          name: { type: 'string', example: 'Flat White' },
+          categoryId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9921' },
+          price: { type: 'number', example: 4.5 },
+          modifiers: {
+            type: 'array',
+            items: { type: 'string', example: 'Oat Milk' },
+          },
+          isActive: { type: 'boolean', example: true },
+        },
+      },
+      CatalogProductUpdateInput: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', example: 'Flat White' },
+          categoryId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9921' },
+          price: { type: 'number', example: 4.5 },
+          modifiers: {
+            type: 'array',
+            items: { type: 'string', example: 'Oat Milk' },
+          },
+          isActive: { type: 'boolean', example: true },
+        },
+      },
     },
   },
   paths: {
@@ -264,26 +332,318 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
         },
       },
     },
-    '/api/catalog': {
+    '/api/catalog/categories': {
       get: {
-        summary: 'Catalog module placeholder',
+        summary: 'List catalog categories',
         tags: ['Catalog'],
+        security: [{ BearerAuth: [] }],
         responses: {
           '200': {
-            description: 'Catalog module placeholder response',
+            description: 'Catalog categories retrieved',
             content: {
               'application/json': {
                 schema: {
                   type: 'object',
                   properties: {
-                    message: {
-                      type: 'string',
-                      example: 'catalog module placeholder',
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/CatalogCategory' },
                     },
+                    error: { type: 'null', example: null },
                   },
                 },
               },
             },
+          },
+        },
+      },
+      post: {
+        summary: 'Create a catalog category',
+        tags: ['Catalog'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CatalogCategoryInput' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Category created',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/CatalogCategory' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid request payload',
+          },
+          '403': {
+            description: 'Forbidden — admin role required',
+          },
+        },
+      },
+    },
+    '/api/catalog/categories/{id}': {
+      put: {
+        summary: 'Update a catalog category',
+        tags: ['Catalog'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CatalogCategoryUpdateInput' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Category updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/CatalogCategory' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid identifier or payload',
+          },
+          '404': {
+            description: 'Category not found',
+          },
+          '403': {
+            description: 'Forbidden — admin role required',
+          },
+        },
+      },
+      delete: {
+        summary: 'Delete a catalog category',
+        tags: ['Catalog'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Category deleted',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                      },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid identifier',
+          },
+          '404': {
+            description: 'Category not found',
+          },
+          '403': {
+            description: 'Forbidden — admin role required',
+          },
+        },
+      },
+    },
+    '/api/catalog/products': {
+      get: {
+        summary: 'List catalog products',
+        tags: ['Catalog'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'categoryId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter products by category identifier',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Catalog products retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/CatalogProduct' },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid query parameters',
+          },
+        },
+      },
+      post: {
+        summary: 'Create a catalog product',
+        tags: ['Catalog'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CatalogProductInput' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Product created',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/CatalogProduct' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid request payload',
+          },
+          '403': {
+            description: 'Forbidden — admin role required',
+          },
+        },
+      },
+    },
+    '/api/catalog/products/{id}': {
+      put: {
+        summary: 'Update a catalog product',
+        tags: ['Catalog'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CatalogProductUpdateInput' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Product updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/CatalogProduct' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid identifier or payload',
+          },
+          '404': {
+            description: 'Product not found',
+          },
+          '403': {
+            description: 'Forbidden — admin role required',
+          },
+        },
+      },
+      delete: {
+        summary: 'Delete a catalog product',
+        tags: ['Catalog'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Product deleted',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                      },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid identifier',
+          },
+          '404': {
+            description: 'Product not found',
+          },
+          '403': {
+            description: 'Forbidden — admin role required',
           },
         },
       },

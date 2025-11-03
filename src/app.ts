@@ -3,7 +3,7 @@ import swaggerUi from 'swagger-ui-express';
 
 import { authMiddleware } from './middleware/auth';
 import { authRouter } from './routes/auth';
-import { catalogRouter } from './routes/catalog';
+import catalogRouter from './modules/catalog/catalog.router';
 import { buildSwaggerDocument } from './swagger';
 
 const app = express();
