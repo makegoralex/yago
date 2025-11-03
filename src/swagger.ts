@@ -289,6 +289,45 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           points: { type: 'number', example: 100 },
         },
       },
+      ReportsSummary: {
+        type: 'object',
+        properties: {
+          totalOrders: { type: 'integer', example: 128 },
+          totalRevenue: { type: 'number', example: 2350.75 },
+          avgCheck: { type: 'number', example: 18.36 },
+          totalCustomers: { type: 'integer', example: 82 },
+          totalPointsIssued: { type: 'number', example: 415.2 },
+          totalPointsRedeemed: { type: 'number', example: 120.5 },
+        },
+      },
+      ReportsDailyEntry: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', example: '2024-06-15' },
+          totalRevenue: { type: 'number', example: 325.5 },
+          orderCount: { type: 'integer', example: 27 },
+        },
+      },
+      ReportsTopProduct: {
+        type: 'object',
+        properties: {
+          productId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9921' },
+          name: { type: 'string', example: 'Flat White' },
+          totalQuantity: { type: 'integer', example: 154 },
+          totalRevenue: { type: 'number', example: 924.5 },
+        },
+      },
+      ReportsTopCustomer: {
+        type: 'object',
+        properties: {
+          customerId: { type: 'string', example: '665c2ba2d6f42e4a3c8fb321' },
+          name: { type: 'string', example: 'Jane Patron' },
+          phone: { type: 'string', example: '+15551234567' },
+          email: { type: 'string', example: 'jane@yago.coffee' },
+          totalSpent: { type: 'number', example: 752.6 },
+          pointsBalance: { type: 'number', example: 45.3 },
+        },
+      },
     },
   },
   paths: {
@@ -1239,6 +1278,148 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           },
           '400': { description: 'Invalid payload or insufficient points' },
           '403': { description: 'Forbidden — admin or cashier role required' },
+        },
+      },
+    },
+    '/api/reports/summary': {
+      get: {
+        summary: 'Get aggregated business metrics',
+        tags: ['Reports'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Summary metrics calculated successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/ReportsSummary' },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '403': { description: 'Forbidden — admin role required' },
+        },
+      },
+    },
+    '/api/reports/daily': {
+      get: {
+        summary: 'Get daily revenue breakdown',
+        tags: ['Reports'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'from',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', example: '2024-06-01' },
+            description: 'Start date (inclusive) in YYYY-MM-DD format',
+          },
+          {
+            name: 'to',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', example: '2024-06-30' },
+            description: 'End date (inclusive) in YYYY-MM-DD format',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Daily metrics generated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/ReportsDailyEntry' },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid date range' },
+          '403': { description: 'Forbidden — admin role required' },
+        },
+      },
+    },
+    '/api/reports/top-products': {
+      get: {
+        summary: 'Get top selling products',
+        tags: ['Reports'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', example: 5 },
+            description: 'Number of products to return',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Top products calculated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/ReportsTopProduct' },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid limit parameter' },
+          '403': { description: 'Forbidden — admin role required' },
+        },
+      },
+    },
+    '/api/reports/top-customers': {
+      get: {
+        summary: 'Get top customers by spending',
+        tags: ['Reports'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', example: 5 },
+            description: 'Number of customers to return',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Top customers calculated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/ReportsTopCustomer' },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid limit parameter' },
+          '403': { description: 'Forbidden — admin role required' },
         },
       },
     },
