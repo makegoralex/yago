@@ -1,341 +1,116 @@
-Цель: спроектировать масштабируемую много-точечную POS-платформу для кофеен (и в перспективе — мульти-ресторан), с быстрым стартом (Web/PWA), автодеплоем, безопасной архитектурой и возможностью пошаговой разработки через Codex (ветки/PR).
 
-1) Видение и scope
-
-MVP (итерация 0–1):
-
-Web-приложение (PWA) кассира и админки.
-
-Мульти-точечность и мульти-тенантность: 1 аккаунт = сеть, в ней локации/кассы.
-
-Товары/модификаторы/категории, корзина, оплата «нал/безнал», чек.
-
-Лояльность по номеру телефона (создание/поиск гостя, скидки/баллы).
-
-Инвентаризация: списания по рецептурам/ингредиентам.
-
-Базовая статистика/отчёты (дневные выручки, категория/товар, кассир).
-
-Интеграции: АТОЛ (фискализация), терминал оплаты (абстрактный драйвер).
-
-Автодеплой GitHub Actions → VPS (PM2).
-
-Дальше (итерации 2+):
-
-Kiosk/терминалы самообслуживания (web kiosk).
-
-Мобильные приложения (iOS/Android) на базе PWA/Capacitor.
-
-Производство (кухня/цех), поставки, план-факт списаний.
-
-Расширенная аналитика (когорты, CLV, RFM).
-
-Роли/права, SSO, бэкап/ретеншн, аудиты.
-
-Маркетинг: промокоды, акции, пуш/смс-кампании.
-
-2) Технологии и инфраструктура
-
-Backend: Node.js 18 LTS, Express, TypeScript.
-
-DB: MongoDB (Atlas/самостоятельно) — быстрая схема для MVP; миграции через migrate-mongo.
-
-Cache/Queue (позже): Redis (кэш справочников/сессий; очереди печати чеков).
-
-Frontend (web): React + Vite, TypeScript, TailwindCSS, Zustand/Redux Toolkit.
-
-PWA: оффлайн-кэш меню, сохранение черновиков чеков при обрыве сети.
-
-CI/CD: GitHub Actions → SFTP/SSH деплой на VPS, PM2 процессы.
-
-Рантайм: Linux (Ubuntu), Nginx (reverse proxy) + Node (порт 3000).
-
-Логи/мониторинг: PM2 logs, Healthcheck /healthz, (позже) Loki/Prometheus/Grafana.
-
-Фискализация: адаптер АТОЛ (REST/JSON); интерфейс драйверов.
-
-Эквайринг: абстракция PaymentTerminalDriver (Ingenico/Альфа/Тинькофф и т. п.).
-
-I18n/локаль: ru-RU; поддержка мультивалют (на уровне цены/налогов).
-
-Time: сервера в UTC; в БД сохраняем UTC; фронт → локаль.
-
-3) Архитектура (логические модули)
-
-Core / общие:
-
-Auth & RBAC: JWT (access+refresh), роли: owner, admin, manager, cashier, kitchen.
-
-Tenants: organization → locations → registers (кассы).
-
-Catalog: категории, товары, вариации, модификаторы, рецепты (ингредиенты).
-
-Pricing & Taxes: цены, скидки, промо; налоги (ставки).
-
-Customers (CRM-lite): профиль по телефону, история заказов, баланс/баллы.
-
-Loyalty: правила начисления/списания баллов, купоны, персональные скидки.
-
-Orders / POS: корзина, чек, статус заказа (draft → paid → fiscalized).
-
-Inventory: склады/остатки, поступления, списания, авто-списание по рецепту.
-
-Reports: x/z-отчёты, продажи по дням/часам, ABC/XYZ.
-
-Integrations: Atol, PaymentTerminal (через интерфейсы, см. §7).
-
-Доп. модули (после MVP):
-
-KDS (кухонный дисплей).
-
-Kiosk (self-order).
-
-Production & Supplies: планирование производства, заказы поставщикам.
-
-Accounting export: выгрузки в 1С/CSV.
-
-4) API дизайн (REST)
-
-База: /api/v1
-
-Auth: POST /auth/register, POST /auth/login, POST /auth/refresh, POST /auth/invite
-
-Tenants/locations/registers: CRUD; привязка пользователей/ролей.
-
-Catalog: GET/POST/PUT/DELETE /catalog/* (categories, products, modifiers, recipes)
-
-Customers/loyalty: GET /customers?phone=, POST /loyalty/earn, POST /loyalty/redeem
-
-Orders/POS:
-
-POST /orders (draft), PUT /orders/:id/items,
-
-POST /orders/:id/pay (method = cash/card/loyalty),
-
-POST /orders/:id/fiscalize (внутренний вызов адаптера),
-
-GET /orders/:id, GET /orders?dateFrom&dateTo&status
-
-Inventory: POST /stock/receive, POST /stock/writeoff, GET /stock/levels
-
-Reports: GET /reports/sales-daily, GET /reports/x, GET /reports/z
-
-Integrations: POST /integrations/atol/fiscalize, POST /integrations/terminal/pay
-
-Стандарты:
-
-Ответы JSON { data, error }; ошибки — Problem Details (type, title, detail, status).
-
-Пагинация: ?limit=&offset=; сорт ?sort=field,-field.
-
-Идемпотентность платежей/фискализации через idempotency_key.
-
-5) Данные (упрощённые схемы)
-// tenant.ts
-Organization { _id, name, owners:[userId], createdAt }
-Location { _id, orgId, name, address, timezone, registers:[registerId] }
-Register { _id, orgId, locationId, name, code, isActive }
-
-// user.ts
-User { _id, orgId, email, phone, passwordHash, roles:[role], status }
-
-// product.ts
-Category { _id, orgId, name, sort }
-Modifier { _id, orgId, name, priceDelta, type: 'single'|'multi', options:[...] }
-Product {
-  _id, orgId, name, sku, categoryId, price, taxRate, modifiers:[modifierId],
-  recipe: [{ ingredientId, qty, unit }], isActive
-}
-Ingredient { _id, orgId, name, unit, costPrice, stockLevel }
-
-// customer.ts
-Customer { _id, orgId, phone, name, points, history:[orderId] }
-
-// order.ts
-Order {
-  _id, orgId, locationId, registerId, cashierId, customerId?,
-  items:[{ productId, name, qty, price, modifiersApplied:[...], total }],
-  totals:{ subtotal, discount, tax, grandTotal },
-  payments:[{ method, amount, txnId? }],
-  status: 'draft'|'paid'|'fiscalized'|'cancelled',
-  idempotencyKey, createdAt
-}
-
-6) Директории (монорепа с пакетами)
-/apps
-  /api          # Express API (Node 18, TS)
-  /pos-web      # Web/PWA кассира (React)
-  /admin-web    # Админка (React)
-/packages
-  /ui           # общий UI-kit (React)
-  /core         # доменные модели/валидации/zod
-  /sdk          # JS SDK для фронтов
-  /drivers      # адаптеры: atol, terminals
-/config
-  nginx.conf
-  pm2.config.js
-/docs
-  PROJECT_PLAN.md
-
-
-API (apps/api):
-
-src/
-  index.ts (bootstrap)
-  server.ts (Express app)
-  modules/
-    auth/
-    tenants/
-    catalog/
-    orders/
-    customers/
-    loyalty/
-    inventory/
-    reports/
-    integrations/
-  shared/
-    db.ts (Mongo conn)
-    logger.ts
-    errors.ts
-    middlewares/
-
-7) Интеграции: интерфейсы драйверов
-// packages/drivers/src/AtolDriver.ts
-export interface FiscalDriver {
-  fiscalize(order: Order): Promise<{ fiscalDocId: string; url?: string }>;
-}
-export class AtolDriver implements FiscalDriver { /* REST к АТОЛ */ }
-
-// packages/drivers/src/PaymentTerminal.ts
-export interface PaymentTerminalDriver {
-  pay(amount: number, currency: string, orderId: string): Promise<{ txnId: string }>;
-  refund(txnId: string): Promise<void>;
-}
-
-
-В API используем абстракции, конкретный драйвер подставляется по ENV (feature-flag).
-
-8) Безопасность
-
-JWT, refresh-token rotation, httpOnly cookies (для веб).
-
-RBAC per-route: middleware requireRole('cashier'|'admin'|…).
-
-Tenant isolation: все запросы фильтруются по orgId.
-
-Rate limiting (login/числовые операции).
-
-Валидация входных данных (zod/yup).
-
-Secrets через .env (не коммитим).
-
-9) Конфигурация и ENV
-Backend .env
-NODE_ENV=production
-PORT=3000
-MONGO_URI=mongodb://user:pass@host:27017/yago?authSource=admin
-JWT_SECRET=***
-JWT_REFRESH_SECRET=***
-ATOL_BASE_URL=https://...
-ATOL_LOGIN=...
-ATOL_PASS=...
-PAYMENT_DRIVER=mock|ingenico|tinkoff
-
-Frontend .env
-VITE_API_BASE=/api/v1
-
-10) CI/CD и ветвление
-
-Branch protection: main — защита, merge только через PR, требовать успешный CI.
-
-Правило работы с Codex: всегда в feature/*, затем PR → review → merge.
-
-GitHub Actions:
-
-build-test.yml: lint + typecheck + unit tests.
-
-deploy.yml: деплой только при push: main.
-
-PM2: pm2 start apps/api/dist/index.js --name api, pm2 start apps/pos-web/dist/server.js --name pos (если SSR) или отдача статикой через Nginx.
-
-11) Качество и тесты
-
-ESLint + Prettier + TypeScript strict.
-
-Unit: Vitest/Jest (модули каталога, расчёт тоталов, лояльность).
-
-Integration: Supertest (REST эндпоинты).
-
-E2E (позже): Playwright (основные сценарии кассира).
-
-Contracts: OpenAPI (Swagger UI на /docs).
-
-12) План внедрения (итерации для Codex)
-
-Итерация A (база):
-
-feature/init-api: каркас API (Express+TS, healthcheck, auth stub).
-
-feature/auth-rbac: JWT, роли, guards, refresh.
-
-feature/tenants: org/location/register CRUD.
-
-feature/catalog-core: категории/товары/модификаторы/рецепты.
-
-feature/orders-core: корзина → заказ → оплата (mock), статусы, тоталы.
-
-feature/loyalty-basic: клиенты, поиск по телефону, начисление/списание баллов.
-
-feature/inventory-writeoff: авто-списание по рецептам при оплате.
-
-feature/reports-basic: продажи по дням, x/z.
-
-Итерация B (интеграции/UI):
-
-feature/atol-driver: драйвер АТОЛ + фискализация.
-
-feature/terminal-driver-mock: абстракция оплаты, мок-терминал.
-
-feature/pos-web: экран кассира (PWA), оффлайн-кэш меню.
-
-feature/admin-web: CRUD каталога, лояльность, отчёты.
-
-Итерация C (расширения):
-
-feature/kiosk-web
-
-feature/kds
-
-feature/production-supplies
-
-Для каждой ветки просить Codex: создать ветку → реализовать модуль → unit-тесты → PR с описанием.
-
-13) Нагрузочная и отказоустойчивость (после MVP)
-
-Разнести API и Web на разные PM2 процессы.
-
-Вынести MongoDB на управляемый кластер/реплику.
-
-Кэшировать справочники (каталог) в Redis.
-
-Очереди на печать чеков (если драйверы нестабильны).
-
-14) UX-детали POS
-
-Горячие клавиши, быстрый поиск по SKU/названию.
-
-Быстрые модификаторы/частые товары.
-
-Профиль клиента по телефону + баланс/история.
-
-Быстрая смена кассиров (PIN).
-
-Светофор статусов: создан → оплачен → фискализирован.
-
-15) Лицензии и юридическое
-
-Используем только OSS с совместимыми лицензиями (MIT/Apache).
-
-Интеграции с АТОЛ/терминалами — соответствовать их SDK/лицензиям.
-
-Персональные данные: хранить минимум, согласия/политика.
+# Yago POS Platform Technical Plan
+
+## Executive Summary
+Yago is a point-of-sale (POS) platform built to support small and mid-sized retailers with unified in-store and online sales. The system must provide reliable checkout flows, accurate inventory synchronization, and insightful analytics while remaining extensible for future business needs. This document describes the target architecture, key workflows, and implementation roadmap. Notes labeled **Improvement** indicate optimizations added during this review to strengthen the original plan.
+
+## Product Goals
+- Offer intuitive checkout tools for cashiers and self-service kiosks.
+- Keep inventory, pricing, and promotions synchronized across channels in near real time.
+- Deliver actionable reporting dashboards for store managers and headquarters.
+- Support integrations with payment providers, accounting suites, and e-commerce platforms.
+- Maintain offline capability for core POS flows with graceful resynchronization.
+
+## High-Level Architecture
+- **Client Applications**: Web-based cashier console (desktop touchscreen) and optional tablet companion. Both built with React + TypeScript and packaged via Electron for kiosk deployment. Offline storage via IndexedDB and Service Workers.
+- **API Gateway**: Node.js (NestJS) service exposing REST + GraphQL endpoints, handling request validation, authentication, and routing. **Improvement**: Introduce rate limiting and schema versioning at the gateway to avoid breaking dependent stores during releases.
+- **Domain Microservices** (containerized with Docker, orchestrated via Kubernetes):
+  - **Auth Service** (NestJS + PostgreSQL) managing users, roles, and session tokens with OAuth2 support for external partners.
+  - **Catalog Service** (Node.js/NestJS + PostgreSQL) storing products, categories, prices, and promotions.
+  - **Inventory Service** (Go + PostgreSQL + Redis) tracking stock levels per location; emits events when thresholds breached.
+  - **Sales Service** (Go + PostgreSQL + Kafka) recording transactions, handling refunds, and calculating taxes/discounts.
+  - **Payments Adapter** (Node.js + third-party SDKs) abstracting payment gateways (Stripe, Adyen, offline card terminals). **Improvement**: Wrap payment calls in a circuit breaker pattern and add idempotency keys to safeguard against duplicate charges.
+  - **Reporting & Analytics** (Python/FastAPI + BigQuery) aggregating sales and inventory data; exports to BI tools.
+  - **Notification Service** (Python + Redis Streams) dispatching email/SMS/webhook alerts to staff and partners.
+- **Integration Layer**: Kafka topics for event-driven data exchange; Change Data Capture (CDC) into the data warehouse. **Improvement**: Add an event schema registry (Apicurio) to enforce compatibility.
+- **Data Stores**:
+  - PostgreSQL cluster with logical replication for OLTP workloads.
+  - Redis for caching session tokens, inventory lookups, and short-lived data.
+  - Kafka for asynchronous workflows.
+  - BigQuery (or Snowflake) for analytics.
+  - S3-compatible object storage for receipts, invoices, and exports.
+- **Infrastructure**: Deployed on AWS using EKS, managed PostgreSQL (Aurora), MSK for Kafka, and CloudFront for CDN. Terraform for IaC; ArgoCD for GitOps deployment.
+
+## Security & Compliance
+- JWT access tokens with refresh tokens stored securely.
+- RBAC with fine-grained permissions for cashier, manager, and admin roles.
+- PCI DSS compliant handling of payment data; all card handling done via tokenization.
+- **Improvement**: Adopt confidential secret storage (AWS Secrets Manager) and enforce TLS mutual authentication between internal services handling payments.
+
+## Observability & Reliability
+- Centralized logging (Elastic Stack) with correlation IDs passed through headers.
+- Metrics via Prometheus + Grafana dashboards for service health.
+- Tracing with OpenTelemetry exporters to Jaeger.
+- Error budgets defined per service; SLO alerts integrated with PagerDuty.
+- **Improvement**: Add synthetic monitoring scripts that execute critical flows (checkout, refund) every 5 minutes to detect regressions.
+
+## Offline & Resilience Strategy
+- POS clients cache product catalog, tax rules, and recent orders locally.
+- Offline mode queues transactions locally with timestamp, cashier ID, and device signature.
+- Background sync service retries batches with exponential backoff once connectivity returns.
+- **Improvement**: Provide visual cues to cashiers about sync status and allow manual conflict resolution when inventory discrepancies occur.
+
+## Data Model Highlights
+- **Product**: id, sku, barcode, title, description, price tiers, tax class, category_id.
+- **InventoryLevel**: id, product_id, location_id, on_hand, reserved, reorder_point.
+- **Order**: id, order_number, location_id, customer_id, line_items[], payments[], totals.
+- **Payment**: id, provider, amount, currency, status, metadata.
+- **Customer**: id, loyalty_id, contact info, consent flags.
+- **Promotion**: id, rule_type, trigger, reward, schedule.
+- **Improvement**: Add `sales_channel` dimension to orders to support omnichannel analytics.
+
+## Key Workflows
+1. **Checkout Flow**
+   1. Cashier scans items; POS client fetches price/discount from Catalog Service.
+   2. POS client calls Sales Service to create a pending order.
+   3. Payment Adapter processes payment; success triggers Sales Service to finalize order and emit `order.completed` event.
+   4. Inventory Service consumes event, decrements stock, and updates thresholds.
+   5. Notification Service sends receipt via email/SMS.
+2. **Inventory Adjustment**
+   1. Manager submits adjustment via web dashboard.
+   2. Inventory Service records change and publishes `inventory.adjusted`.
+   3. Catalog Service updates availability flags; Analytics pipeline consumes for reporting.
+3. **Reporting Dashboard Refresh**
+   1. Analytics service schedules nightly ETL from OLTP to warehouse.
+   2. Precomputed aggregates stored for fast dashboard rendering.
+   3. **Improvement**: Add incremental micro-batch processing every hour to keep reports fresh without full reloads.
+
+## API Design Principles
+- REST endpoints under `/api/v1` with consistent naming; GraphQL for custom dashboard queries.
+- Use JSON:API conventions for pagination, filtering, and error responses.
+- Async webhooks for third-party integrations.
+- **Improvement**: Publish OpenAPI specs and automatically validate contracts in CI.
+
+## DevOps Pipeline
+- Monorepo with Nx managing front-end and back-end packages.
+- CI: GitHub Actions running lint, unit/integration tests, and contract tests.
+- CD: ArgoCD watches container registry tags; staged rollouts with canary deployments.
+- Feature flags via LaunchDarkly for gradual feature exposure.
+- **Improvement**: Add load testing stage (k6) before production promotion to guarantee throughput targets.
+
+## User Experience Considerations
+- Touch-friendly UI with large tappable targets and high-contrast themes.
+- Accessibility compliance (WCAG 2.1 AA) for color, keyboard navigation, and screen readers.
+- Configurable quick-action buttons for popular items.
+- **Improvement**: Add guided onboarding checklists for new staff and contextual tooltips triggered by activity logs.
+
+## Implementation Roadmap
+1. Platform foundations: infra setup, CI/CD, authentication.
+2. Core POS MVP: Catalog, Inventory, Sales, Payments, cashier UI with offline support.
+3. Reporting & analytics dashboards.
+4. Integrations (accounting, e-commerce).
+5. Advanced features: loyalty, gift cards, AI-assisted upsell recommendations.
+6. Continuous optimization based on telemetry and user feedback.
+
+## Risks & Mitigations
+- **Connectivity failures**: Provide offline queueing and device health checks.
+- **Data consistency**: Apply saga patterns with compensating actions for multi-service transactions.
+- **Scalability**: Horizontal autoscaling with resource quotas; load testing before major releases.
+- **Security breaches**: Regular penetration tests, dependency scanning, and security incident response playbooks.
+- **Change management**: Offer training materials, sandbox environments, and phased rollouts.
+
+## Appendix: Terminology
+- **POS**: Point of Sale.
+- **CDC**: Change Data Capture.
+- **SLO**: Service Level Objective.
+- **ETL**: Extract, Transform, Load.
