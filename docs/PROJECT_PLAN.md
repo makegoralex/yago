@@ -52,7 +52,7 @@ Yago is a point-of-sale (POS) platform built to support small and mid-sized reta
 ## Data Model Highlights
 - **Product**: id, sku, barcode, title, description, price tiers, tax class, category_id.
 - **InventoryLevel**: id, product_id, location_id, on_hand, reserved, reorder_point.
-- **Order**: id, order_number, location_id, customer_id, line_items[], payments[], totals.
+- **Order**: id, order_number, location_id, register_id, cashier_id, customer_id, line_items[], subtotal, discount, total, payment snapshot, status lifecycle (`draft` → `paid` → `completed`).
 - **Payment**: id, provider, amount, currency, status, metadata.
 - **Customer**: id, loyalty_id, contact info, consent flags.
 - **Promotion**: id, rule_type, trigger, reward, schedule.

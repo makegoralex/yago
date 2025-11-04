@@ -1,6 +1,8 @@
 import { Schema, model, Types, Document } from 'mongoose';
 
-export type OrderStatus = 'draft' | 'paid' | 'fiscalized' | 'cancelled';
+export type OrderStatus = 'draft' | 'paid' | 'completed';
+
+export type PaymentMethod = 'cash' | 'card';
 
 export interface OrderItem {
   productId: Types.ObjectId;
@@ -11,30 +13,23 @@ export interface OrderItem {
   total: number;
 }
 
-export interface OrderTotals {
-  subtotal: number;
-  discount?: number;
-  tax?: number;
-  grandTotal: number;
-}
-
-export type PaymentMethod = 'cash' | 'card' | 'loyalty';
-
 export interface OrderPayment {
   method: PaymentMethod;
   amount: number;
-  txnId?: string;
+  change?: number;
 }
 
 export interface Order {
   orgId: string;
   locationId: string;
   registerId: string;
-  cashierId: string;
+  cashierId: Types.ObjectId;
   customerId?: Types.ObjectId;
   items: OrderItem[];
-  totals: OrderTotals;
-  payments: OrderPayment[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  payment?: OrderPayment;
   status: OrderStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -58,25 +53,15 @@ const orderItemSchema = new Schema<OrderItem>(
   { _id: false }
 );
 
-const orderTotalsSchema = new Schema<OrderTotals>(
-  {
-    subtotal: { type: Number, required: true, min: 0 },
-    discount: { type: Number, required: false, min: 0 },
-    tax: { type: Number, required: false, min: 0 },
-    grandTotal: { type: Number, required: true, min: 0 },
-  },
-  { _id: false }
-);
-
 const paymentSchema = new Schema<OrderPayment>(
   {
     method: {
       type: String,
-      enum: ['cash', 'card', 'loyalty'],
+      enum: ['cash', 'card'],
       required: true,
     },
     amount: { type: Number, required: true, min: 0 },
-    txnId: { type: String },
+    change: { type: Number, required: false, min: 0 },
   },
   { _id: false }
 );
@@ -86,14 +71,16 @@ const orderSchema = new Schema<OrderDocument>(
     orgId: { type: String, required: true, trim: true },
     locationId: { type: String, required: true, trim: true },
     registerId: { type: String, required: true, trim: true },
-    cashierId: { type: String, required: true, trim: true },
+    cashierId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     customerId: { type: Schema.Types.ObjectId, ref: 'Customer' },
     items: { type: [orderItemSchema], default: [] },
-    totals: { type: orderTotalsSchema, required: true },
-    payments: { type: [paymentSchema], default: [] },
+    subtotal: { type: Number, required: true, min: 0, default: 0 },
+    discount: { type: Number, required: true, min: 0, default: 0 },
+    total: { type: Number, required: true, min: 0, default: 0 },
+    payment: { type: paymentSchema, required: false },
     status: {
       type: String,
-      enum: ['draft', 'paid', 'fiscalized', 'cancelled'],
+      enum: ['draft', 'paid', 'completed'],
       required: true,
       default: 'draft',
     },
@@ -104,5 +91,6 @@ const orderSchema = new Schema<OrderDocument>(
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ 'items.productId': 1 });
 orderSchema.index({ customerId: 1 });
+orderSchema.index({ cashierId: 1, status: 1 });
 
 export const OrderModel = model<OrderDocument>('Order', orderSchema);

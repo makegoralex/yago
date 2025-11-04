@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import app from './app';
 import { appConfig, validateConfig } from './config/env';
 import { ensureDefaultAdminExists } from './startup/createAdmin';
+import { ensureDemoCatalogSeeded } from './startup/seedCatalog';
 
 const startServer = async (): Promise<void> => {
   try {
@@ -12,6 +13,7 @@ const startServer = async (): Promise<void> => {
     console.log('Connected to MongoDB');
 
     await ensureDefaultAdminExists();
+    await ensureDemoCatalogSeeded();
 
     app.listen(appConfig.port, '0.0.0.0', () => {
       console.log(`Server is running on port ${appConfig.port}`);

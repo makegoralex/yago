@@ -10,17 +10,18 @@ import {
   type OrderDocument,
   type OrderItem,
   type OrderStatus,
-  type OrderTotals,
   type PaymentMethod,
 } from './order.model';
 
 const router = Router();
 
-const MANAGER_ROLES = ['admin', 'cashier'];
-const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'card', 'loyalty'];
-const ORDER_STATUSES: OrderStatus[] = ['draft', 'paid', 'fiscalized', 'cancelled'];
+const CASHIER_ROLES = ['admin', 'cashier'];
+const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'card'];
+const ORDER_STATUSES: OrderStatus[] = ['draft', 'paid', 'completed'];
+const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['draft', 'paid'];
+const FULFILLED_ORDER_STATUSES: OrderStatus[] = ['paid', 'completed'];
 
-const roundCurrency = (value: number): number => Number(value.toFixed(2));
+const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (async (req, res, next) => {
@@ -34,60 +35,76 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
 
 router.use(authMiddleware);
 
-interface ItemInput {
+type ItemPayload = {
   productId: string;
-  name?: string;
   qty: number;
-  price?: number;
   modifiersApplied?: string[];
-}
+};
 
-interface TotalsInput {
+type ItemsRequestPayload = {
+  items: ItemPayload[];
   discount?: number;
-  tax?: number;
-}
+  customerId?: string | null;
+};
 
-const ensureItemsValid = async (items: ItemInput[]): Promise<OrderItem[]> => {
-  if (!Array.isArray(items) || items.length === 0) {
-    throw new Error('At least one item is required');
+const normalizeDiscount = (discount?: number): number => {
+  if (discount === undefined) {
+    return 0;
   }
 
-  const productIds: string[] = [];
+  if (typeof discount !== 'number' || Number.isNaN(discount) || discount < 0) {
+    throw new Error('Discount must be a positive number');
+  }
+
+  return roundCurrency(discount);
+};
+
+const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
+  if (!Array.isArray(items)) {
+    throw new Error('Items payload must be an array');
+  }
+
+  if (items.length === 0) {
+    return [];
+  }
+
+  const uniqueIds = new Set<string>();
+  const sanitizedItems: ItemPayload[] = [];
 
   for (const item of items) {
     if (!item || typeof item !== 'object') {
       throw new Error('Invalid item payload');
     }
 
-    const { productId, qty, price, modifiersApplied } = item;
+    const { productId, qty, modifiersApplied } = item;
 
     if (!productId || typeof productId !== 'string' || !isValidObjectId(productId)) {
       throw new Error('Each item must include a valid productId');
     }
 
-    productIds.push(productId);
-
-    if (typeof qty !== 'number' || Number.isNaN(qty) || qty <= 0) {
-      throw new Error('Each item must include a quantity greater than zero');
-    }
-
-    if (price !== undefined && (typeof price !== 'number' || price < 0)) {
-      throw new Error('Item price must be a positive number when provided');
+    if (typeof qty !== 'number' || Number.isNaN(qty) || qty < 0) {
+      throw new Error('Each item must include a quantity greater than or equal to zero');
     }
 
     if (
       modifiersApplied !== undefined &&
-      (!Array.isArray(modifiersApplied) ||
-        !modifiersApplied.every((modifier) => typeof modifier === 'string'))
+      (!Array.isArray(modifiersApplied) || !modifiersApplied.every((modifier) => typeof modifier === 'string'))
     ) {
       throw new Error('modifiersApplied must be an array of strings');
     }
+
+    uniqueIds.add(productId);
+
+    sanitizedItems.push({
+      productId,
+      qty,
+      modifiersApplied: modifiersApplied?.map((modifier) => modifier.trim()).filter(Boolean),
+    });
   }
 
-  const uniqueIds = [...new Set(productIds)];
-  const products = await ProductModel.find({ _id: { $in: uniqueIds } }).select('name price');
+  const products = await ProductModel.find({ _id: { $in: [...uniqueIds] } }).select('name price');
 
-  if (products.length !== uniqueIds.length) {
+  if (products.length !== uniqueIds.size) {
     throw new Error('One or more products could not be found');
   }
 
@@ -96,140 +113,94 @@ const ensureItemsValid = async (items: ItemInput[]): Promise<OrderItem[]> => {
     productMap.set(product.id, { name: product.name, price: product.price });
   }
 
-  return items.map((item) => {
-    const product = productMap.get(item.productId);
-    if (!product) {
-      throw new Error('Product lookup failed');
-    }
+  return sanitizedItems
+    .filter((item) => item.qty > 0)
+    .map((item) => {
+      const product = productMap.get(item.productId);
+      if (!product) {
+        throw new Error('Product lookup failed');
+      }
 
-    const normalizedName = item.name?.trim() || product.name;
-    const normalizedPrice = roundCurrency(item.price ?? product.price);
+      const price = roundCurrency(product.price);
+      const total = roundCurrency(price * item.qty);
 
-    const modifiers = item.modifiersApplied
-      ?.map((modifier) => modifier.trim())
-      .filter(Boolean);
+      const modifiers = item.modifiersApplied?.length ? item.modifiersApplied : undefined;
 
-    const total = roundCurrency(normalizedPrice * item.qty);
-
-    return {
-      productId: new Types.ObjectId(item.productId),
-      name: normalizedName,
-      qty: item.qty,
-      price: normalizedPrice,
-      modifiersApplied: modifiers?.length ? modifiers : undefined,
-      total,
-    } satisfies OrderItem;
-  });
+      return {
+        productId: new Types.ObjectId(item.productId),
+        name: product.name,
+        qty: item.qty,
+        price,
+        modifiersApplied: modifiers,
+        total,
+      } satisfies OrderItem;
+    });
 };
 
-const buildTotals = (items: OrderItem[], totalsInput?: TotalsInput): OrderTotals => {
+const recalculateTotals = (items: OrderItem[], discount?: number): { subtotal: number; discount: number; total: number } => {
   const subtotal = roundCurrency(items.reduce((acc, item) => acc + item.total, 0));
+  const normalizedDiscount = normalizeDiscount(discount);
 
-  const discountValue = totalsInput?.discount;
-  const taxValue = totalsInput?.tax;
-
-  if (
-    (discountValue !== undefined &&
-      (typeof discountValue !== 'number' || Number.isNaN(discountValue) || discountValue < 0)) ||
-    (taxValue !== undefined &&
-      (typeof taxValue !== 'number' || Number.isNaN(taxValue) || taxValue < 0))
-  ) {
-    throw new Error('Discount and tax must be positive numbers');
+  if (normalizedDiscount > subtotal) {
+    throw new Error('Discount cannot exceed subtotal');
   }
 
-  const normalizedDiscount = discountValue !== undefined ? roundCurrency(discountValue) : 0;
-  const normalizedTax = taxValue !== undefined ? roundCurrency(taxValue) : 0;
+  const total = roundCurrency(subtotal - normalizedDiscount);
 
-  const grandTotal = roundCurrency(subtotal - normalizedDiscount + normalizedTax);
-
-  if (grandTotal < 0) {
-    throw new Error('Grand total cannot be negative');
-  }
-
-  const totals: OrderTotals = {
-    subtotal,
-    grandTotal,
-  };
-
-  if (discountValue !== undefined) {
-    totals.discount = normalizedDiscount;
-  }
-
-  if (taxValue !== undefined) {
-    totals.tax = normalizedTax;
-  }
-
-  return totals;
+  return { subtotal, discount: normalizedDiscount, total };
 };
 
-const assertOrderMutable = (order: OrderDocument) => {
-  if (order.status === 'fiscalized') {
-    throw new Error('Fiscalized orders cannot be modified');
-  }
-
-  if (order.status === 'cancelled') {
-    throw new Error('Cancelled orders cannot be modified');
+const ensureDraftOrder = (order: OrderDocument): void => {
+  if (order.status !== 'draft') {
+    throw new Error('Only draft orders can be modified');
   }
 };
 
 router.post(
-  '/',
-  requireRole(MANAGER_ROLES),
+  '/start',
+  requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
-    const { orgId, locationId, registerId, cashierId, customerId, items, totals } =
-      req.body ?? {};
+    const { orgId, locationId, registerId, customerId } = req.body ?? {};
+    const cashierId = req.user?.id;
 
-    if (!orgId || !locationId || !registerId || !cashierId) {
+    if (!cashierId) {
+      res.status(403).json({ data: null, error: 'Unable to determine cashier' });
+      return;
+    }
+
+    if (!orgId || !locationId || !registerId) {
       res
         .status(400)
-        .json({ data: null, error: 'orgId, locationId, registerId, and cashierId are required' });
+        .json({ data: null, error: 'orgId, locationId, and registerId are required to start an order' });
       return;
     }
 
     let normalizedCustomerId: Types.ObjectId | undefined;
-    if (customerId !== undefined && customerId !== null) {
+    if (customerId) {
       if (typeof customerId !== 'string' || !isValidObjectId(customerId)) {
-        res.status(400).json({ data: null, error: 'customerId must be a valid id when provided' });
+        res.status(400).json({ data: null, error: 'customerId must be a valid identifier' });
         return;
       }
 
       const customer = await CustomerModel.findById(customerId);
-
       if (!customer) {
         res.status(404).json({ data: null, error: 'Customer not found' });
         return;
       }
 
-      normalizedCustomerId = new Types.ObjectId(customerId);
-    }
-
-    let orderItems: OrderItem[];
-    try {
-      orderItems = await ensureItemsValid(items);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Invalid order items';
-      res.status(400).json({ data: null, error: message });
-      return;
-    }
-
-    let orderTotals: OrderTotals;
-    try {
-      orderTotals = buildTotals(orderItems, totals);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Invalid totals payload';
-      res.status(400).json({ data: null, error: message });
-      return;
+      normalizedCustomerId = customer._id;
     }
 
     const order = await OrderModel.create({
       orgId: String(orgId).trim(),
       locationId: String(locationId).trim(),
       registerId: String(registerId).trim(),
-      cashierId: String(cashierId).trim(),
+      cashierId: new Types.ObjectId(cashierId),
       customerId: normalizedCustomerId,
-      items: orderItems,
-      totals: orderTotals,
-      payments: [],
+      items: [],
+      subtotal: 0,
+      discount: 0,
+      total: 0,
       status: 'draft',
     });
 
@@ -237,9 +208,9 @@ router.post(
   })
 );
 
-router.put(
+router.post(
   '/:id/items',
-  requireRole(MANAGER_ROLES),
+  requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -256,35 +227,61 @@ router.put(
     }
 
     try {
-      assertOrderMutable(order);
+      ensureDraftOrder(order);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Order cannot be modified';
       res.status(400).json({ data: null, error: message });
       return;
     }
 
-    const { items, totals } = req.body ?? {};
+    const payload = (req.body ?? {}) as ItemsRequestPayload;
 
-    let orderItems: OrderItem[];
+    let items: OrderItem[] = [];
     try {
-      orderItems = await ensureItemsValid(items);
+      items = await buildOrderItems(payload.items ?? []);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid order items';
       res.status(400).json({ data: null, error: message });
       return;
     }
 
-    let orderTotals: OrderTotals;
+    let totals: { subtotal: number; discount: number; total: number };
     try {
-      orderTotals = buildTotals(orderItems, totals);
+      totals = recalculateTotals(items, payload.discount);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Invalid totals payload';
+      const message = error instanceof Error ? error.message : 'Unable to calculate totals';
       res.status(400).json({ data: null, error: message });
       return;
     }
 
-    order.items = orderItems;
-    order.totals = orderTotals;
+    if (payload.customerId !== undefined) {
+      if (payload.customerId === null) {
+        order.customerId = undefined;
+      } else if (typeof payload.customerId === 'string') {
+        const trimmedCustomerId = payload.customerId.trim();
+
+        if (!isValidObjectId(trimmedCustomerId)) {
+          res.status(400).json({ data: null, error: 'customerId must be a valid identifier or null' });
+          return;
+        }
+
+        const customer = await CustomerModel.findById(trimmedCustomerId);
+        if (!customer) {
+          res.status(404).json({ data: null, error: 'Customer not found' });
+          return;
+        }
+
+        order.customerId = customer._id;
+      } else {
+        res.status(400).json({ data: null, error: 'customerId must be a valid identifier or null' });
+        return;
+      }
+    }
+
+    order.items = items;
+    order.subtotal = totals.subtotal;
+    order.discount = totals.discount;
+    order.total = totals.total;
 
     await order.save();
 
@@ -294,10 +291,10 @@ router.put(
 
 router.post(
   '/:id/pay',
-  requireRole(MANAGER_ROLES),
+  requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { method, amount } = req.body ?? {};
+    const { method, amount, change } = req.body ?? {};
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid order id' });
@@ -305,12 +302,12 @@ router.post(
     }
 
     if (!method || !PAYMENT_METHODS.includes(method)) {
-      res.status(400).json({ data: null, error: 'Payment method must be cash, card, or loyalty' });
+      res.status(400).json({ data: null, error: 'Payment method must be cash or card' });
       return;
     }
 
     if (typeof amount !== 'number' || Number.isNaN(amount) || amount <= 0) {
-      res.status(400).json({ data: null, error: 'Payment amount must be provided' });
+      res.status(400).json({ data: null, error: 'Payment amount must be greater than zero' });
       return;
     }
 
@@ -321,38 +318,48 @@ router.post(
       return;
     }
 
-    try {
-      assertOrderMutable(order);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Order cannot be modified';
-      res.status(400).json({ data: null, error: message });
+    if (order.status !== 'draft') {
+      res.status(409).json({ data: null, error: 'Only draft orders can be paid' });
       return;
     }
 
-    if (order.status === 'paid') {
-      res.status(409).json({ data: null, error: 'Order is already paid' });
+    if (order.total <= 0) {
+      res.status(400).json({ data: null, error: 'Cannot pay for an empty order' });
       return;
     }
 
-    if (roundCurrency(amount) !== roundCurrency(order.totals.grandTotal)) {
-      res.status(400).json({ data: null, error: 'Payment amount must equal the order total' });
+    const normalizedAmount = roundCurrency(amount);
+    if (normalizedAmount < order.total) {
+      res.status(400).json({ data: null, error: 'Payment amount cannot be less than order total' });
       return;
     }
 
-    const payment = {
-      method: method as PaymentMethod,
-      amount: roundCurrency(amount),
-      txnId: `MOCK-${order.id}`,
+    const normalizedChange = method === 'cash'
+      ? roundCurrency(change ?? normalizedAmount - order.total)
+      : 0;
+
+    if (method === 'cash' && normalizedAmount < order.total) {
+      res.status(400).json({ data: null, error: 'Cash payments must cover the order total' });
+      return;
+    }
+
+    if (normalizedChange < 0) {
+      res.status(400).json({ data: null, error: 'Change cannot be negative' });
+      return;
+    }
+
+    order.payment = {
+      method,
+      amount: normalizedAmount,
+      change: normalizedChange > 0 ? normalizedChange : undefined,
     };
-
-    order.payments = [payment];
     order.status = 'paid';
 
     await order.save();
 
     if (order.customerId) {
       try {
-        await earnLoyaltyPoints(order.customerId.toString(), order.totals.grandTotal);
+        await earnLoyaltyPoints(order.customerId.toString(), order.total);
       } catch (error) {
         console.error('Failed to apply loyalty points after payment', error);
       }
@@ -363,8 +370,8 @@ router.post(
 );
 
 router.post(
-  '/:id/fiscalize',
-  requireRole(MANAGER_ROLES),
+  '/:id/complete',
+  requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -381,16 +388,75 @@ router.post(
     }
 
     if (order.status !== 'paid') {
-      res
-        .status(400)
-        .json({ data: null, error: 'Only paid orders can be fiscalized' });
+      res.status(400).json({ data: null, error: 'Only paid orders can be completed' });
       return;
     }
 
-    order.status = 'fiscalized';
+    order.status = 'completed';
     await order.save();
 
     res.json({ data: order, error: null });
+  })
+);
+
+router.get(
+  '/active',
+  requireRole(CASHIER_ROLES),
+  asyncHandler(async (req, res) => {
+    const cashierId = req.user?.id;
+    if (!cashierId) {
+      res.status(403).json({ data: null, error: 'Unable to determine cashier' });
+      return;
+    }
+
+    const { registerId } = req.query;
+
+    const filter: Record<string, unknown> = {
+      cashierId: new Types.ObjectId(cashierId),
+      status: { $in: ACTIVE_ORDER_STATUSES },
+    };
+
+    if (registerId && typeof registerId === 'string') {
+      filter.registerId = registerId;
+    }
+
+    const orders = await OrderModel.find(filter).sort({ updatedAt: -1 });
+
+    res.json({ data: orders, error: null });
+  })
+);
+
+router.get(
+  '/today',
+  requireRole(CASHIER_ROLES),
+  asyncHandler(async (req, res) => {
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(now);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const filter: Record<string, unknown> = {
+      createdAt: { $gte: startOfDay, $lte: endOfDay },
+      status: { $in: FULFILLED_ORDER_STATUSES },
+    };
+
+    const { cashierId: cashierParam } = req.query;
+
+    if (req.user?.role === 'admin' && typeof cashierParam === 'string') {
+      if (!isValidObjectId(cashierParam)) {
+        res.status(400).json({ data: null, error: 'cashierId must be a valid identifier' });
+        return;
+      }
+
+      filter.cashierId = new Types.ObjectId(cashierParam);
+    } else if (req.user?.id) {
+      filter.cashierId = new Types.ObjectId(req.user.id);
+    }
+
+    const orders = await OrderModel.find(filter).sort({ createdAt: -1 });
+
+    res.json({ data: orders, error: null });
   })
 );
 
@@ -418,21 +484,30 @@ router.get(
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const { status, from, to } = req.query;
+    const { status, from, to, cashierId, registerId } = req.query;
 
     const filter: Record<string, unknown> = {};
 
     if (status) {
-      if (
-        typeof status !== 'string' ||
-        !ORDER_STATUSES.includes(status as (typeof ORDER_STATUSES)[number])
-      ) {
+      if (typeof status !== 'string' || !ORDER_STATUSES.includes(status as OrderStatus)) {
         res.status(400).json({ data: null, error: 'Invalid status filter' });
         return;
       }
 
-      const statusValue = status as string;
-      filter.status = statusValue;
+      filter.status = status;
+    }
+
+    if (cashierId) {
+      if (typeof cashierId !== 'string' || !isValidObjectId(cashierId)) {
+        res.status(400).json({ data: null, error: 'cashierId must be a valid identifier' });
+        return;
+      }
+
+      filter.cashierId = new Types.ObjectId(cashierId);
+    }
+
+    if (registerId && typeof registerId === 'string') {
+      filter.registerId = registerId;
     }
 
     if (from) {
@@ -458,41 +533,6 @@ router.get(
     const orders = await OrderModel.find(filter).sort({ createdAt: -1 });
 
     res.json({ data: orders, error: null });
-  })
-);
-
-router.delete(
-  '/:id',
-  requireRole(MANAGER_ROLES),
-  asyncHandler(async (req, res) => {
-    const { id } = req.params;
-
-    if (!isValidObjectId(id)) {
-      res.status(400).json({ data: null, error: 'Invalid order id' });
-      return;
-    }
-
-    const order = await OrderModel.findById(id);
-
-    if (!order) {
-      res.status(404).json({ data: null, error: 'Order not found' });
-      return;
-    }
-
-    if (order.status === 'fiscalized') {
-      res.status(400).json({ data: null, error: 'Fiscalized orders cannot be cancelled' });
-      return;
-    }
-
-    if (order.status === 'cancelled') {
-      res.status(409).json({ data: null, error: 'Order is already cancelled' });
-      return;
-    }
-
-    order.status = 'cancelled';
-    await order.save();
-
-    res.json({ data: order, error: null });
   })
 );
 

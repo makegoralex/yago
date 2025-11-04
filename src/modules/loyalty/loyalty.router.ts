@@ -53,13 +53,13 @@ router.post(
       return;
     }
 
-    if (order.status === 'cancelled') {
-      res.status(400).json({ data: null, error: 'Cannot apply loyalty to a cancelled order' });
+    if (order.status === 'draft') {
+      res.status(400).json({ data: null, error: 'Order must be paid before awarding points' });
       return;
     }
 
-    if (order.status === 'draft') {
-      res.status(400).json({ data: null, error: 'Order must be paid before awarding points' });
+    if (order.status !== 'paid' && order.status !== 'completed') {
+      res.status(400).json({ data: null, error: 'Only paid orders accrue loyalty points' });
       return;
     }
 

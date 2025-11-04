@@ -17,38 +17,13 @@ const LoginPage: React.FC = () => {
     event.preventDefault();
     setLoading(true);
     try {
-      // запрос к API
       const response = await api.post('/api/auth/login', { email, password });
-
-      // ✅ правильная обработка ответа от сервера
-      if (response.status === 200 && response.data?.tokens) {
-        const { user: payloadUser, tokens } = response.data;
-
-        // сохраняем токены и пользователя
-        setSession({
-          user: payloadUser,
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          remember,
-        });
-
-        notify({
-          title: 'Добро пожаловать!',
-          description: `Привет, ${payloadUser.name}`,
-          type: 'success',
-        });
-
-        navigate('/pos');
-      } else {
-        throw new Error('Login failed');
-      }
+      const { accessToken, refreshToken, user: payloadUser } = response.data.data;
+      setSession({ user: payloadUser, accessToken, refreshToken, remember });
+      notify({ title: 'Добро пожаловать!', description: `Привет, ${payloadUser.name}`, type: 'success' });
+      navigate('/pos');
     } catch (error) {
-      console.error('Login error:', error);
-      notify({
-        title: 'Ошибка входа',
-        description: 'Не удалось войти. Проверьте данные.',
-        type: 'error',
-      });
+      notify({ title: 'Ошибка входа', description: 'Не удалось войти. Проверьте данные.', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -64,9 +39,7 @@ const LoginPage: React.FC = () => {
       <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-soft">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-slate-900">Yago POS</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Войдите, чтобы продолжить работу кассира.
-          </p>
+          <p className="mt-2 text-sm text-slate-500">Войдите, чтобы продолжить работу кассира.</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>

@@ -164,28 +164,12 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           },
         },
       },
-      OrderTotals: {
-        type: 'object',
-        properties: {
-          subtotal: { type: 'number', example: 9 },
-          discount: { type: 'number', example: 1 },
-          tax: { type: 'number', example: 0.5 },
-          grandTotal: { type: 'number', example: 8.5 },
-        },
-      },
-      OrderTotalsAdjustments: {
-        type: 'object',
-        properties: {
-          discount: { type: 'number', example: 1 },
-          tax: { type: 'number', example: 0.5 },
-        },
-      },
       OrderPayment: {
         type: 'object',
         properties: {
-          method: { type: 'string', enum: ['cash', 'card', 'loyalty'] },
-          amount: { type: 'number', example: 8.5 },
-          txnId: { type: 'string', example: 'MOCK-665c2ba2d6f42e4a3c8f9942' },
+          method: { type: 'string', enum: ['cash', 'card'] },
+          amount: { type: 'number', example: 520 },
+          change: { type: 'number', example: 30 },
         },
       },
       Order: {
@@ -195,40 +179,33 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           orgId: { type: 'string', example: 'yago-coffee' },
           locationId: { type: 'string', example: 'store-1' },
           registerId: { type: 'string', example: 'reg-1' },
-          cashierId: { type: 'string', example: 'cashier-23' },
+          cashierId: { type: 'string', example: '665c2ba2d6f42e4a3c8fa300' },
           customerId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9900' },
           items: {
             type: 'array',
             items: { $ref: '#/components/schemas/OrderItem' },
           },
-          totals: { $ref: '#/components/schemas/OrderTotals' },
-          payments: {
-            type: 'array',
-            items: { $ref: '#/components/schemas/OrderPayment' },
-          },
+          subtotal: { type: 'number', example: 490 },
+          discount: { type: 'number', example: 40 },
+          total: { type: 'number', example: 450 },
+          payment: { $ref: '#/components/schemas/OrderPayment' },
           status: {
             type: 'string',
-            enum: ['draft', 'paid', 'fiscalized', 'cancelled'],
-            example: 'paid',
+            enum: ['draft', 'paid', 'completed'],
+            example: 'completed',
           },
           createdAt: { type: 'string', format: 'date-time' },
           updatedAt: { type: 'string', format: 'date-time' },
         },
       },
-      OrderCreateRequest: {
+      OrderStartRequest: {
         type: 'object',
-        required: ['orgId', 'locationId', 'registerId', 'cashierId', 'items'],
+        required: ['orgId', 'locationId', 'registerId'],
         properties: {
           orgId: { type: 'string', example: 'yago-coffee' },
           locationId: { type: 'string', example: 'store-1' },
-          registerId: { type: 'string', example: 'reg-1' },
-          cashierId: { type: 'string', example: 'cashier-23' },
+          registerId: { type: 'string', example: 'main-register' },
           customerId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9900' },
-          items: {
-            type: 'array',
-            items: { $ref: '#/components/schemas/OrderItemInput' },
-          },
-          totals: { $ref: '#/components/schemas/OrderTotalsAdjustments' },
         },
       },
       OrderItemsUpdateRequest: {
@@ -239,7 +216,22 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
             type: 'array',
             items: { $ref: '#/components/schemas/OrderItemInput' },
           },
-          totals: { $ref: '#/components/schemas/OrderTotalsAdjustments' },
+          discount: { type: 'number', example: 40 },
+          customerId: {
+            type: 'string',
+            nullable: true,
+            example: '665c2ba2d6f42e4a3c8f9900',
+            description: 'Attach or replace customer on the order. Set null to detach.',
+          },
+        },
+      },
+      OrderPaymentRequest: {
+        type: 'object',
+        required: ['method', 'amount'],
+        properties: {
+          method: { type: 'string', enum: ['cash', 'card'] },
+          amount: { type: 'number', example: 500 },
+          change: { type: 'number', example: 50 },
         },
       },
       OrderPaymentRequest: {
@@ -852,9 +844,23 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
             required: false,
             schema: {
               type: 'string',
-              enum: ['draft', 'paid', 'fiscalized', 'cancelled'],
+              enum: ['draft', 'paid', 'completed'],
             },
             description: 'Filter orders by status',
+          },
+          {
+            name: 'cashierId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter by cashier identifier (admin only)',
+          },
+          {
+            name: 'registerId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter by register identifier',
           },
           {
             name: 'from',
@@ -892,15 +898,27 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           '400': { description: 'Invalid filter parameters' },
         },
       },
+    },
+    '/api/orders/start': {
       post: {
-        summary: 'Create draft order',
+        summary: 'Start a new draft order',
         tags: ['Orders'],
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/OrderCreateRequest' },
+              schema: { $ref: '#/components/schemas/OrderStartRequest' },
+              examples: {
+                start: {
+                  summary: 'Create order at register #1',
+                  value: {
+                    orgId: 'yago-coffee',
+                    locationId: 'moscow-hq',
+                    registerId: 'front-bar',
+                  },
+                },
+              },
             },
           },
         },
@@ -921,6 +939,7 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           },
           '400': { description: 'Invalid payload' },
           '403': { description: 'Forbidden — admin or cashier role required' },
+          '404': { description: 'Customer not found' },
         },
       },
     },
@@ -956,42 +975,10 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           '404': { description: 'Order not found' },
         },
       },
-      delete: {
-        summary: 'Cancel an order',
-        tags: ['Orders'],
-        security: [{ BearerAuth: [] }],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            schema: { type: 'string' },
-          },
-        ],
-        responses: {
-          '200': {
-            description: 'Order cancelled',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    data: { $ref: '#/components/schemas/Order' },
-                    error: { type: 'null', example: null },
-                  },
-                },
-              },
-            },
-          },
-          '400': { description: 'Invalid identifier or state' },
-          '403': { description: 'Forbidden — admin or cashier role required' },
-          '404': { description: 'Order not found' },
-        },
-      },
     },
     '/api/orders/{id}/items': {
-      put: {
-        summary: 'Replace items in an order',
+      post: {
+        summary: 'Add or update items in an order',
         tags: ['Orders'],
         security: [{ BearerAuth: [] }],
         parameters: [
@@ -1007,6 +994,18 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           content: {
             'application/json': {
               schema: { $ref: '#/components/schemas/OrderItemsUpdateRequest' },
+              examples: {
+                update: {
+                  summary: 'Update order items',
+                  value: {
+                    items: [
+                      { productId: '665c2ba2d6f42e4a3c8f9942', qty: 2 },
+                      { productId: '665c2ba2d6f42e4a3c8f9951', qty: 1 },
+                    ],
+                    discount: 40,
+                  },
+                },
+              },
             },
           },
         },
@@ -1049,6 +1048,16 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           content: {
             'application/json': {
               schema: { $ref: '#/components/schemas/OrderPaymentRequest' },
+              examples: {
+                cash: {
+                  summary: 'Cash payment',
+                  value: { method: 'cash', amount: 500, change: 50 },
+                },
+                card: {
+                  summary: 'Card payment',
+                  value: { method: 'card', amount: 450 },
+                },
+              },
             },
           },
         },
@@ -1070,13 +1079,13 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           '400': { description: 'Invalid identifier or payment payload' },
           '403': { description: 'Forbidden — admin or cashier role required' },
           '404': { description: 'Order not found' },
-          '409': { description: 'Order already paid or cancelled' },
+          '409': { description: 'Order already paid or completed' },
         },
       },
     },
-    '/api/orders/{id}/fiscalize': {
+    '/api/orders/{id}/complete': {
       post: {
-        summary: 'Mark an order as fiscalized',
+        summary: 'Complete a paid order',
         tags: ['Orders'],
         security: [{ BearerAuth: [] }],
         parameters: [
@@ -1089,7 +1098,7 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
         ],
         responses: {
           '200': {
-            description: 'Order fiscalized',
+            description: 'Order completed',
             content: {
               'application/json': {
                 schema: {
@@ -1102,9 +1111,82 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
               },
             },
           },
-          '400': { description: 'Order must be paid before fiscalization' },
+          '400': { description: 'Order must be paid before completion' },
           '403': { description: 'Forbidden — admin or cashier role required' },
           '404': { description: 'Order not found' },
+        },
+      },
+    },
+    '/api/orders/active': {
+      get: {
+        summary: 'List active orders for the current cashier',
+        tags: ['Orders'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'registerId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter by register identifier',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Active orders retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/Order' },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '403': { description: 'Forbidden — admin or cashier role required' },
+        },
+      },
+    },
+    '/api/orders/today': {
+      get: {
+        summary: 'Orders created today',
+        tags: ['Orders'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'cashierId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Admin-only filter for a specific cashier',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Orders for the current day',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/Order' },
+                    },
+                    error: { type: 'null', example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid filter parameters' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
         },
       },
     },

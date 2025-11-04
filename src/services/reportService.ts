@@ -1,12 +1,9 @@
 import { Types } from 'mongoose';
 
 import { CustomerModel } from '../modules/customers/customer.model';
-import {
-  OrderModel,
-  type OrderStatus,
-} from '../modules/orders/order.model';
+import { OrderModel, type OrderStatus } from '../modules/orders/order.model';
 
-const REVENUE_STATUSES: OrderStatus[] = ['paid', 'fiscalized'];
+const REVENUE_STATUSES: OrderStatus[] = ['paid', 'completed'];
 
 const roundTwoDecimals = (value: number): number =>
   Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
@@ -52,7 +49,7 @@ export const getSummaryReport = async (): Promise<SummaryReport> => {
       $group: {
         _id: null,
         totalOrders: { $sum: 1 },
-        totalRevenue: { $sum: '$totals.grandTotal' },
+        totalRevenue: { $sum: '$total' },
       },
     },
   ]);
@@ -134,7 +131,7 @@ export const getDailyReport = async (
             date: '$createdAt',
           },
         },
-        revenue: { $sum: '$totals.grandTotal' },
+        revenue: { $sum: '$total' },
         orders: { $sum: 1 },
       },
     },
