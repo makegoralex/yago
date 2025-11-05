@@ -29,6 +29,27 @@ router.get(
 );
 
 router.get(
+  '/:id',
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    if (!id || typeof id !== 'string') {
+      res.status(400).json({ data: null, error: 'Customer id is required' });
+      return;
+    }
+
+    const customer = await CustomerModel.findById(id.trim());
+
+    if (!customer) {
+      res.status(404).json({ data: null, error: 'Customer not found' });
+      return;
+    }
+
+    res.json({ data: customer, error: null });
+  })
+);
+
+router.get(
   '/search',
   asyncHandler(async (req, res) => {
     const { phone } = req.query;

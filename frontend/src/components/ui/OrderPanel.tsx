@@ -1,6 +1,6 @@
 import React from 'react';
 
-import type { OrderItem, PaymentMethod } from '../../store/order';
+import type { CustomerSummary, OrderItem, PaymentMethod } from '../../store/order';
 
 type OrderPanelProps = {
   items: OrderItem[];
@@ -18,6 +18,9 @@ type OrderPanelProps = {
   isProcessing: boolean;
   earnedPoints?: number;
   visible?: boolean;
+  customer?: CustomerSummary | null;
+  onRedeemLoyalty?: () => void;
+  onClearDiscount?: () => void;
 };
 
 const statusLabels: Record<NonNullable<OrderPanelProps['status']>, string> = {
@@ -42,6 +45,9 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   isProcessing,
   earnedPoints = 0,
   visible = true,
+  customer,
+  onRedeemLoyalty,
+  onClearDiscount,
 }) => {
   const hasItems = items.length > 0;
   const canPay = status === null || status === 'draft';
@@ -82,6 +88,38 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           ) : null}
         </div>
       </div>
+      {customer ? (
+        <div className="mx-4 mb-3 rounded-2xl border border-secondary/20 bg-secondary/5 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-base font-semibold text-slate-900">{customer.name}</p>
+              <p className="text-sm text-slate-500">{customer.phone}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase text-slate-400">Баллы</p>
+              <p className="text-lg font-semibold text-emerald-600">{customer.points.toFixed(0)}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onRedeemLoyalty}
+              className="rounded-2xl bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-secondary/80 disabled:opacity-60"
+            >
+              Списать баллы
+            </button>
+            {discount > 0 ? (
+              <button
+                type="button"
+                onClick={onClearDiscount}
+                className="rounded-2xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-100"
+              >
+                Сбросить скидку
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <div className="flex-1 overflow-y-auto px-4">
         {!hasItems ? (
           <div className="flex h-full items-center justify-center text-center text-sm text-slate-400">

@@ -20,6 +20,15 @@ const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'card'];
 const ORDER_STATUSES: OrderStatus[] = ['draft', 'paid', 'completed'];
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['draft', 'paid'];
 const FULFILLED_ORDER_STATUSES: OrderStatus[] = ['paid', 'completed'];
+const CUSTOMER_PROJECTION = 'name phone points';
+
+const reloadOrderWithCustomer = async (orderId: Types.ObjectId | string | null | undefined) => {
+  if (!orderId) {
+    return null;
+  }
+
+  return OrderModel.findById(orderId).populate('customerId', CUSTOMER_PROJECTION);
+};
 
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 
@@ -204,7 +213,9 @@ router.post(
       status: 'draft',
     });
 
-    res.status(201).json({ data: order, error: null });
+    const populatedOrder = (await reloadOrderWithCustomer(order._id as Types.ObjectId)) ?? order;
+
+    res.status(201).json({ data: populatedOrder, error: null });
   })
 );
 
@@ -219,7 +230,7 @@ router.post(
       return;
     }
 
-    const order = await OrderModel.findById(id);
+    const order = await OrderModel.findById(id).populate('customerId', CUSTOMER_PROJECTION);
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });
@@ -285,7 +296,9 @@ router.post(
 
     await order.save();
 
-    res.json({ data: order, error: null });
+    const populatedOrder = (await reloadOrderWithCustomer(order._id as Types.ObjectId)) ?? order;
+
+    res.json({ data: populatedOrder, error: null });
   })
 );
 
@@ -365,7 +378,9 @@ router.post(
       }
     }
 
-    res.json({ data: order, error: null });
+    const populatedOrder = (await reloadOrderWithCustomer(order._id as Types.ObjectId)) ?? order;
+
+    res.json({ data: populatedOrder, error: null });
   })
 );
 
@@ -395,7 +410,9 @@ router.post(
     order.status = 'completed';
     await order.save();
 
-    res.json({ data: order, error: null });
+    const populatedOrder = (await reloadOrderWithCustomer(order._id as Types.ObjectId)) ?? order;
+
+    res.json({ data: populatedOrder, error: null });
   })
 );
 
@@ -420,7 +437,9 @@ router.get(
       filter.registerId = registerId;
     }
 
-    const orders = await OrderModel.find(filter).sort({ updatedAt: -1 });
+    const orders = await OrderModel.find(filter)
+      .sort({ updatedAt: -1 })
+      .populate('customerId', CUSTOMER_PROJECTION);
 
     res.json({ data: orders, error: null });
   })
@@ -454,7 +473,9 @@ router.get(
       filter.cashierId = new Types.ObjectId(req.user.id);
     }
 
-    const orders = await OrderModel.find(filter).sort({ createdAt: -1 });
+    const orders = await OrderModel.find(filter)
+      .sort({ createdAt: -1 })
+      .populate('customerId', CUSTOMER_PROJECTION);
 
     res.json({ data: orders, error: null });
   })
@@ -530,7 +551,9 @@ router.get(
       filter.createdAt = { ...(filter.createdAt as Record<string, unknown>), $lte: toDate };
     }
 
-    const orders = await OrderModel.find(filter).sort({ createdAt: -1 });
+    const orders = await OrderModel.find(filter)
+      .sort({ createdAt: -1 })
+      .populate('customerId', CUSTOMER_PROJECTION);
 
     res.json({ data: orders, error: null });
   })

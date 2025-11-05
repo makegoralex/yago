@@ -6,8 +6,9 @@ import ProductCard from '../components/ui/ProductCard';
 import OrderPanel from '../components/ui/OrderPanel';
 import PaymentModal from '../components/ui/PaymentModal';
 import LoyaltyModal from '../components/ui/LoyaltyModal';
+import RedeemPointsModal from '../components/ui/RedeemPointsModal';
 import { useCatalogStore } from '../store/catalog';
-import { useOrderStore, type PaymentMethod } from '../store/order';
+import { useOrderStore, type PaymentMethod, type CustomerSummary } from '../store/order';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useToast } from '../providers/ToastProvider';
 
@@ -26,6 +27,8 @@ const POSPage: React.FC = () => {
   const discount = useOrderStore((state) => state.discount);
   const total = useOrderStore((state) => state.total);
   const status = useOrderStore((state) => state.status);
+  const orderId = useOrderStore((state) => state.orderId);
+  const customer = useOrderStore((state) => state.customer);
   const addProduct = useOrderStore((state) => state.addProduct);
   const updateItemQty = useOrderStore((state) => state.updateItemQty);
   const removeItem = useOrderStore((state) => state.removeItem);
@@ -35,6 +38,9 @@ const POSPage: React.FC = () => {
   const attachCustomer = useOrderStore((state) => state.attachCustomer);
   const fetchActiveOrders = useOrderStore((state) => state.fetchActiveOrders);
   const activeOrders = useOrderStore((state) => state.activeOrders);
+  const loadOrder = useOrderStore((state) => state.loadOrder);
+  const redeemPoints = useOrderStore((state) => state.redeemPoints);
+  const clearDiscount = useOrderStore((state) => state.clearDiscount);
 
   const { notify } = useToast();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -44,6 +50,8 @@ const POSPage: React.FC = () => {
   const [isPaying, setPaying] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [activeSection, setActiveSection] = useState<'products' | 'customers' | 'reports'>('products');
+  const [isRedeemOpen, setRedeemOpen] = useState(false);
+  const [isRedeeming, setRedeeming] = useState(false);
 
   useEffect(() => {
     void fetchCatalog();
@@ -98,9 +106,9 @@ const POSPage: React.FC = () => {
     }
   };
 
-  const handleAttachCustomer = async (customerId: string) => {
+  const handleAttachCustomer = async (customerToAttach: CustomerSummary | null) => {
     try {
-      await attachCustomer(customerId);
+      await attachCustomer(customerToAttach);
     } catch (error) {
       notify({ title: 'Не удалось привязать клиента', type: 'error' });
     } finally {
@@ -110,12 +118,32 @@ const POSPage: React.FC = () => {
 
   const handleRemoveCustomer = async () => {
     try {
+      await clearDiscount();
       await attachCustomer(null);
       notify({ title: 'Клиент отвязан', type: 'info' });
     } catch (error) {
       notify({ title: 'Не удалось отвязать клиента', type: 'error' });
     }
     setLoyaltyOpen(false);
+  };
+
+  const handleRedeemConfirm = async (pointsValue: number) => {
+    setRedeeming(true);
+    try {
+      if (!customer) {
+        setRedeeming(false);
+        setRedeemOpen(false);
+        return;
+      }
+      await redeemPoints(pointsValue);
+      notify({ title: 'Баллы списаны', type: 'success' });
+      setRedeemOpen(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Не удалось списать баллы';
+      notify({ title: 'Ошибка списания', description: message, type: 'error' });
+    } finally {
+      setRedeeming(false);
+    }
   };
 
   const handleAddProduct = (product: typeof products[number]) => {
@@ -167,18 +195,27 @@ const POSPage: React.FC = () => {
             <div className="mb-4 overflow-x-auto rounded-2xl bg-white p-4 shadow-soft">
               <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
               <div className="mt-2 flex gap-3">
-                {activeOrders.map((order) => (
-                  <div
-                    key={order._id}
-                    className="min-w-[160px] rounded-2xl border border-slate-100 px-4 py-3 text-sm text-slate-600"
-                  >
-                    <p className="font-semibold text-slate-900">#{order._id.slice(-5)}</p>
-                    <p className="text-xs uppercase text-slate-400">
-                      {order.status === 'draft' ? 'в работе' : 'оплачен'}
-                    </p>
-                    <p className="mt-2 text-base font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
-                  </div>
-                ))}
+                {activeOrders.map((order) => {
+                  const isActive = orderId === order._id;
+                  return (
+                    <button
+                      type="button"
+                      key={order._id}
+                      onClick={() => void loadOrder(order._id)}
+                      className={`min-w-[160px] rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                        isActive
+                          ? 'border-secondary bg-secondary/10 text-secondary'
+                          : 'border-slate-100 text-slate-600 hover:border-secondary/60'
+                      }`}
+                    >
+                      <p className="font-semibold text-slate-900">#{order._id.slice(-5)}</p>
+                      <p className="text-xs uppercase text-slate-400">
+                        {order.status === 'draft' ? 'в работе' : 'оплачен'}
+                      </p>
+                      <p className="mt-2 text-base font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -297,6 +334,19 @@ const POSPage: React.FC = () => {
             onClearCustomer={handleRemoveCustomer}
             isProcessing={isPaying}
             earnedPoints={earnedPoints}
+            customer={customer}
+            onRedeemLoyalty={() => {
+              if (!customer || customer.points <= 0) {
+                notify({ title: 'Нет доступных баллов', type: 'info' });
+                return;
+              }
+              setRedeemOpen(true);
+            }}
+            onClearDiscount={() =>
+              void clearDiscount().catch(() =>
+                notify({ title: 'Не удалось сбросить скидку', type: 'error' })
+              )
+            }
             visible
           />
         </div>
@@ -309,7 +359,19 @@ const POSPage: React.FC = () => {
         onConfirm={handlePayConfirm}
         isProcessing={isPaying}
       />
-      <LoyaltyModal open={isLoyaltyOpen} onClose={() => setLoyaltyOpen(false)} onAttach={(customerId) => void handleAttachCustomer(customerId)} />
+      <LoyaltyModal
+        open={isLoyaltyOpen}
+        onClose={() => setLoyaltyOpen(false)}
+        onAttach={(selectedCustomer) => void handleAttachCustomer(selectedCustomer)}
+      />
+      <RedeemPointsModal
+        open={isRedeemOpen}
+        onClose={() => setRedeemOpen(false)}
+        maxPoints={customer?.points ?? 0}
+        maxAmount={Math.max(subtotal - discount, 0)}
+        onSubmit={(value) => handleRedeemConfirm(value)}
+        isProcessing={isRedeeming}
+      />
       {!isTablet ? (
         <div className="fixed inset-x-0 bottom-20 z-40 bg-white">
           <div className="flex items-center justify-around border-b border-slate-200 bg-white py-2">
@@ -367,6 +429,19 @@ const POSPage: React.FC = () => {
                 onClearCustomer={handleRemoveCustomer}
                 isProcessing={isPaying}
                 earnedPoints={earnedPoints}
+                customer={customer}
+                onRedeemLoyalty={() => {
+                  if (!customer || customer.points <= 0) {
+                    notify({ title: 'Нет доступных баллов', type: 'info' });
+                    return;
+                  }
+                  setRedeemOpen(true);
+                }}
+                onClearDiscount={() =>
+                  void clearDiscount().catch(() =>
+                    notify({ title: 'Не удалось сбросить скидку', type: 'error' })
+                  )
+                }
                 visible={isOrderDrawerOpen}
               />
             </div>

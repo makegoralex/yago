@@ -4,6 +4,13 @@ import api from '../lib/api';
 import type { Product } from './catalog';
 import { useAuthStore } from './auth';
 
+export type CustomerSummary = {
+  _id: string;
+  name: string;
+  phone?: string;
+  points: number;
+};
+
 export type PaymentMethod = 'cash' | 'card';
 
 export type OrderItem = {
@@ -30,18 +37,22 @@ type OrderState = {
   total: number;
   status: 'draft' | 'paid' | 'completed' | null;
   customerId: string | null;
+  customer: CustomerSummary | null;
   loading: boolean;
   activeOrders: ActiveOrder[];
   createDraft: () => Promise<void>;
   addProduct: (product: Product) => Promise<void>;
   updateItemQty: (productId: string, qty: number) => Promise<void>;
   removeItem: (productId: string) => Promise<void>;
-  attachCustomer: (customerId: string | null) => Promise<void>;
+  attachCustomer: (customer: CustomerSummary | null) => Promise<void>;
   payOrder: (payload: { method: PaymentMethod; amountTendered: number; change?: number }) => Promise<void>;
   completeOrder: () => Promise<void>;
   reset: () => void;
-  syncItems: (items: OrderItem[], discount?: number) => Promise<void>;
+  syncItems: (items: OrderItem[], discount?: number, customerOverride?: string | null) => Promise<void>;
   fetchActiveOrders: () => Promise<void>;
+  loadOrder: (orderId: string) => Promise<void>;
+  redeemPoints: (points: number) => Promise<void>;
+  clearDiscount: () => Promise<void>;
 };
 
 const DEFAULT_CONTEXT = {
@@ -71,6 +82,65 @@ const mapOrderItems = (items: any[] | undefined): OrderItem[] => {
   }));
 };
 
+const parseStatus = (status: unknown): OrderState['status'] => {
+  if (status === 'draft' || status === 'paid' || status === 'completed') {
+    return status;
+  }
+
+  return null;
+};
+
+const mapCustomer = (customer: any): CustomerSummary | null => {
+  if (!customer) {
+    return null;
+  }
+
+  if (typeof customer === 'string') {
+    return { _id: customer, name: 'Гость', points: 0 };
+  }
+
+  const id = customer._id ?? customer.id;
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    _id: String(id),
+    name: customer.name ?? 'Гость',
+    phone: customer.phone ? String(customer.phone) : undefined,
+    points: typeof customer.points === 'number' ? customer.points : 0,
+  };
+};
+
+const buildOrderState = (order: any): Partial<OrderState> => {
+  if (!order) {
+    return {
+      orderId: null,
+      items: [],
+      subtotal: 0,
+      discount: 0,
+      total: 0,
+      status: null,
+      customerId: null,
+      customer: null,
+    };
+  }
+
+  const customer = mapCustomer(order.customerId);
+
+  return {
+    orderId: order._id ? String(order._id) : null,
+    items: mapOrderItems(order.items),
+    subtotal: typeof order.subtotal === 'number' ? order.subtotal : 0,
+    discount: typeof order.discount === 'number' ? order.discount : 0,
+    total: typeof order.total === 'number' ? order.total : 0,
+    status: parseStatus(order.status),
+    customerId: customer?._id ?? null,
+    customer,
+  };
+};
+
 export const useOrderStore = create<OrderState>((set, get) => ({
   orderId: null,
   items: [],
@@ -79,6 +149,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   total: 0,
   status: null,
   customerId: null,
+  customer: null,
   loading: false,
   activeOrders: [],
   async createDraft() {
@@ -95,15 +166,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       const response = await api.post('/api/orders/start', {
         ...DEFAULT_CONTEXT,
       });
-      const order = response.data.data;
-      set({
-        orderId: order._id,
-        status: order.status,
-        items: mapOrderItems(order.items),
-        subtotal: order.subtotal ?? 0,
-        discount: order.discount ?? 0,
-        total: order.total ?? 0,
-      });
+      set(buildOrderState(response.data.data));
     } finally {
       set({ loading: false });
     }
@@ -154,12 +217,20 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     const updatedItems = get().items.filter((item) => item.productId !== productId);
     await get().syncItems(updatedItems, get().discount);
   },
-  async attachCustomer(customerId) {
-    set({ customerId });
+  async attachCustomer(customer) {
+    const customerId = customer?._id ?? null;
+    const discount = customer ? get().discount : 0;
+
+    set({ customerId, customer: customer ?? null });
+
     if (!get().orderId) {
+      if (!customer) {
+        set({ discount: 0 });
+      }
       return;
     }
-    await get().syncItems(get().items, get().discount);
+
+    await get().syncItems(get().items, discount, customerId);
   },
   async payOrder({ method, amountTendered, change }) {
     const { orderId, total } = get();
@@ -176,13 +247,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         amount: amountTendered,
         change: normalizedChange,
       });
-      const order = response.data.data;
-      set({
-        status: order.status,
-        subtotal: order.subtotal,
-        discount: order.discount,
-        total: order.total,
-      });
+      set(buildOrderState(response.data.data));
     } finally {
       set({ loading: false });
     }
@@ -211,12 +276,20 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       total: 0,
       status: null,
       customerId: null,
+      customer: null,
       loading: false,
     });
   },
-  async syncItems(updatedItems: OrderItem[], discountValue = 0) {
-    const { orderId, customerId } = get();
+  async syncItems(updatedItems: OrderItem[], discountValue, customerOverride) {
+    const { orderId } = get();
     if (!orderId) return;
+
+    const effectiveDiscount =
+      typeof discountValue === 'number' && !Number.isNaN(discountValue)
+        ? discountValue
+        : get().discount;
+    const customerId =
+      customerOverride !== undefined ? customerOverride : get().customerId;
 
     const payload = {
       items: updatedItems.map((item) => ({
@@ -224,41 +297,92 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         qty: item.qty,
         modifiersApplied: item.modifiersApplied,
       })),
-      discount: discountValue,
+      discount: effectiveDiscount,
       customerId,
     };
 
     set({ loading: true });
     try {
       const response = await api.post(`/api/orders/${orderId}/items`, payload);
-      const order = response.data.data;
-      set({
-        items: mapOrderItems(order.items),
-        subtotal: order.subtotal,
-        discount: order.discount,
-        total: order.total,
-        status: order.status,
-        customerId: order.customerId ? String(order.customerId) : null,
-      });
+      set(buildOrderState(response.data.data));
     } finally {
       set({ loading: false });
     }
   },
   async fetchActiveOrders() {
+    const response = await api.get('/api/orders/active');
+    const orders = Array.isArray(response.data.data)
+      ? response.data.data.map((order: any) => ({
+          _id: order._id,
+          total: order.total ?? 0,
+          status: order.status,
+          updatedAt: order.updatedAt,
+        }))
+      : [];
+    set({ activeOrders: orders });
+  },
+  async loadOrder(orderId) {
+    if (!orderId) {
+      return;
+    }
+
     set({ loading: true });
     try {
-      const response = await api.get('/api/orders/active');
-      const orders = Array.isArray(response.data.data)
-        ? response.data.data.map((order: any) => ({
-            _id: order._id,
-            total: order.total ?? 0,
-            status: order.status,
-            updatedAt: order.updatedAt,
-          }))
-        : [];
-      set({ activeOrders: orders });
+      const response = await api.get(`/api/orders/${orderId}`);
+      set(buildOrderState(response.data.data));
     } finally {
       set({ loading: false });
     }
+  },
+  async redeemPoints(points) {
+    const { customer, customerId, orderId, subtotal, discount } = get();
+
+    if (!orderId || !customerId || !customer) {
+      throw new Error('Нет клиента для списания баллов');
+    }
+
+    if (typeof points !== 'number' || Number.isNaN(points) || points <= 0) {
+      throw new Error('Укажите количество баллов для списания');
+    }
+
+    const remainingTotal = Math.max(subtotal - discount, 0);
+    if (points > remainingTotal) {
+      throw new Error('Баллы превышают сумму заказа');
+    }
+
+    if (points > customer.points) {
+      throw new Error('Недостаточно баллов у клиента');
+    }
+
+    set({ loading: true });
+    try {
+      const response = await api.post('/api/loyalty/redeem', { customerId, points });
+      const updatedCustomer = mapCustomer(response.data.data?.customer) ?? {
+        ...customer,
+        points: customer.points - points,
+      };
+
+      set({ customer: updatedCustomer });
+
+      const newDiscount = roundCurrency(discount + points);
+      await get().syncItems(get().items, newDiscount, customerId);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  async clearDiscount() {
+    const { orderId, discount } = get();
+
+    if (!orderId) {
+      set({ discount: 0 });
+      return;
+    }
+
+    if (discount <= 0) {
+      set({ discount: 0 });
+      return;
+    }
+
+    await get().syncItems(get().items, 0);
   },
 }));
