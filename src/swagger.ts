@@ -43,6 +43,14 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           refreshToken: { type: 'string' },
         },
       },
+      AuthSession: {
+        type: 'object',
+        properties: {
+          user: { $ref: '#/components/schemas/User' },
+          accessToken: { type: 'string' },
+          refreshToken: { type: 'string' },
+        },
+      },
       LoginRequest: {
         type: 'object',
         required: ['email', 'password'],
@@ -376,8 +384,8 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
                 schema: {
                   type: 'object',
                   properties: {
-                    user: { $ref: '#/components/schemas/User' },
-                    tokens: { $ref: '#/components/schemas/AuthTokens' },
+                    data: { $ref: '#/components/schemas/AuthSession' },
+                    error: { type: 'string', nullable: true, example: null },
                   },
                 },
               },
@@ -409,8 +417,8 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
                 schema: {
                   type: 'object',
                   properties: {
-                    user: { $ref: '#/components/schemas/User' },
-                    tokens: { $ref: '#/components/schemas/AuthTokens' },
+                    data: { $ref: '#/components/schemas/AuthSession' },
+                    error: { type: 'string', nullable: true, example: null },
                   },
                 },
               },
@@ -442,7 +450,8 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
                 schema: {
                   type: 'object',
                   properties: {
-                    tokens: { $ref: '#/components/schemas/AuthTokens' },
+                    data: { $ref: '#/components/schemas/AuthTokens' },
+                    error: { type: 'string', nullable: true, example: null },
                   },
                 },
               },
@@ -467,7 +476,8 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
                 schema: {
                   type: 'object',
                   properties: {
-                    user: { $ref: '#/components/schemas/User' },
+                    data: { $ref: '#/components/schemas/User' },
+                    error: { type: 'string', nullable: true, example: null },
                   },
                 },
               },
