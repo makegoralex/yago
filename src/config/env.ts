@@ -17,6 +17,7 @@ export const appConfig = {
   jwtAccessSecret: process.env.JWT_ACCESS_SECRET ?? '',
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET ?? '',
   bcryptSaltRounds: parseNumber(process.env.BCRYPT_SALT_ROUNDS, 10),
+  frontendDistPath: process.env.FRONTEND_DIST_PATH,
 };
 
 export const validateConfig = (): void => {

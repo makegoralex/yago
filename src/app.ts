@@ -11,6 +11,7 @@ import orderRouter from './modules/orders/order.router';
 import customersRouter from './modules/customers/customer.router';
 import loyaltyRouter from './modules/loyalty/loyalty.router';
 import reportsRouter from './routes/reports';
+import { appConfig } from './config/env';
 
 const app = express();
 
@@ -42,9 +43,38 @@ app.get('/api/protected', authMiddleware, (req, res) => {
 const swaggerDocument = buildSwaggerDocument();
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-const frontendDistPath = path.resolve(__dirname, '..', 'frontend', 'dist');
+const frontendCandidates = [
+  appConfig.frontendDistPath,
+  path.resolve(__dirname, '..', 'frontend', 'dist'),
+  path.resolve(__dirname, '..', 'frontend-dist'),
+  path.resolve(__dirname, 'public'),
+].filter(Boolean) as string[];
 
-if (fs.existsSync(frontendDistPath)) {
+const resolveExistingBundle = (candidates: string[]): string | undefined => {
+  for (const candidate of candidates) {
+    try {
+      const stats = fs.statSync(candidate);
+      if (!stats.isDirectory()) {
+        continue;
+      }
+
+      const htmlPath = path.join(candidate, 'index.html');
+      if (fs.existsSync(htmlPath)) {
+        return candidate;
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.warn('Failed to inspect frontend bundle path:', candidate, error);
+      }
+    }
+  }
+
+  return undefined;
+};
+
+const frontendDistPath = resolveExistingBundle(frontendCandidates);
+
+if (frontendDistPath) {
   app.use(express.static(frontendDistPath));
 
   app.get('*', (req: Request, res: Response, next: NextFunction) => {
@@ -58,6 +88,10 @@ if (fs.existsSync(frontendDistPath)) {
 
     return res.sendFile(path.join(frontendDistPath, 'index.html'));
   });
+} else {
+  console.warn(
+    'PWA bundle was not found. Build the frontend (npm run build inside frontend/) and copy the dist folder next to the API or provide FRONTEND_DIST_PATH.'
+  );
 }
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
