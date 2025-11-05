@@ -43,7 +43,7 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
 
   const categoryIdMap = new Map<string, Types.ObjectId>();
   createdCategories.forEach((category) => {
-    categoryIdMap.set(category.name, category._id);
+    categoryIdMap.set(category.name, category._id as Types.ObjectId);
   });
 
   const productsToInsert = demoCatalog.flatMap(({ name, products }) => {

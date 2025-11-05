@@ -188,7 +188,7 @@ router.post(
         return;
       }
 
-      normalizedCustomerId = customer._id;
+      normalizedCustomerId = customer._id as Types.ObjectId;
     }
 
     const order = await OrderModel.create({
@@ -271,7 +271,7 @@ router.post(
           return;
         }
 
-        order.customerId = customer._id;
+        order.customerId = customer._id as Types.ObjectId;
       } else {
         res.status(400).json({ data: null, error: 'customerId must be a valid identifier or null' });
         return;

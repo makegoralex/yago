@@ -121,7 +121,7 @@ const POSPage: React.FC = () => {
   const handleAddProduct = (product: typeof products[number]) => {
     void addProduct(product)
       .then(() => {
-        notify({ title: product.name, description: 'Добавлено в заказ', type: 'success', duration: 1500 });
+        notify({ title: product.name, description: 'Добавлено в заказ', type: 'success' });
       })
       .catch(() => {
         notify({ title: 'Не удалось добавить товар', type: 'error' });
