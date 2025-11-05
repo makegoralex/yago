@@ -18,7 +18,16 @@ const LoginPage: React.FC = () => {
     setLoading(true);
     try {
       const response = await api.post('/api/auth/login', { email, password });
-      const { accessToken, refreshToken, user: payloadUser } = response.data.data;
+      const rawPayload = response.data?.data ?? response.data;
+
+      const accessToken = rawPayload?.accessToken ?? rawPayload?.tokens?.accessToken;
+      const refreshToken = rawPayload?.refreshToken ?? rawPayload?.tokens?.refreshToken;
+      const payloadUser = rawPayload?.user ?? rawPayload?.userInfo;
+
+      if (!accessToken || !refreshToken || !payloadUser) {
+        throw new Error('Invalid login response payload');
+      }
+
       setSession({ user: payloadUser, accessToken, refreshToken, remember });
       notify({ title: 'Добро пожаловать!', description: `Привет, ${payloadUser.name}`, type: 'success' });
       navigate('/pos');

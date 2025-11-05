@@ -19,7 +19,7 @@ export const authMiddleware = async (
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ message: 'Authorization header missing or invalid' });
+      res.status(401).json({ data: null, error: 'Authorization header missing or invalid' });
       return;
     }
 
@@ -29,7 +29,7 @@ export const authMiddleware = async (
     const user = await UserModel.findById(payload.sub).select('name email role');
 
     if (!user) {
-      res.status(401).json({ message: 'User not found' });
+      res.status(401).json({ data: null, error: 'User not found' });
       return;
     }
 
@@ -43,7 +43,7 @@ export const authMiddleware = async (
     next();
   } catch (error) {
     console.error('Authentication error:', error);
-    res.status(401).json({ message: 'Invalid or expired token' });
+    res.status(401).json({ data: null, error: 'Invalid or expired token' });
   }
 };
 
@@ -54,12 +54,12 @@ export const requireRole = (roles: string | string[]) => {
     const userRole = req.user?.role;
 
     if (!userRole) {
-      res.status(403).json({ message: 'Forbidden' });
+      res.status(403).json({ data: null, error: 'Forbidden' });
       return;
     }
 
     if (!allowedRoles.includes(userRole)) {
-      res.status(403).json({ message: 'Insufficient permissions' });
+      res.status(403).json({ data: null, error: 'Insufficient permissions' });
       return;
     }
 
