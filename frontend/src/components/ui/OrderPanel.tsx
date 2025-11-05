@@ -21,10 +21,11 @@ type OrderPanelProps = {
   customer?: CustomerSummary | null;
   onRedeemLoyalty?: () => void;
   onClearDiscount?: () => void;
+  onCancel?: () => void;
 };
 
 const statusLabels: Record<NonNullable<OrderPanelProps['status']>, string> = {
-  draft: 'Черновик',
+  draft: 'В работе',
   paid: 'Оплачен',
   completed: 'Завершён',
 };
@@ -48,10 +49,13 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   customer,
   onRedeemLoyalty,
   onClearDiscount,
+  onCancel,
 }) => {
   const hasItems = items.length > 0;
   const canPay = status === null || status === 'draft';
   const canComplete = status === 'paid';
+  const canCancel = status === null || status === 'draft';
+  const customerPoints = Number(customer?.points ?? 0);
 
   return (
     <aside
@@ -65,7 +69,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           <p className="text-sm text-slate-500">{items.length} позиций</p>
         </div>
         <div className="flex items-center gap-2">
-          {status ? (
+          {status && status !== 'draft' ? (
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase text-slate-500">
               {statusLabels[status]}
             </span>
@@ -93,11 +97,11 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-base font-semibold text-slate-900">{customer.name}</p>
-              <p className="text-sm text-slate-500">{customer.phone}</p>
+              <p className="text-sm text-slate-500">{customer.phone ?? '—'}</p>
             </div>
             <div className="text-right">
               <p className="text-xs uppercase text-slate-400">Баллы</p>
-              <p className="text-lg font-semibold text-emerald-600">{customer.points.toFixed(0)}</p>
+              <p className="text-lg font-semibold text-emerald-600">{customerPoints.toFixed(0)}</p>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -211,6 +215,16 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
         >
           Завершить заказ
         </button>
+        {onCancel && canCancel ? (
+          <button
+            type="button"
+            disabled={isProcessing}
+            onClick={onCancel}
+            className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-slate-200 text-sm font-semibold text-slate-600 transition hover:border-red-300 hover:text-red-500 disabled:opacity-50"
+          >
+            Отменить заказ
+          </button>
+        ) : null}
       </div>
     </aside>
   );

@@ -188,7 +188,13 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           locationId: { type: 'string', example: 'store-1' },
           registerId: { type: 'string', example: 'reg-1' },
           cashierId: { type: 'string', example: '665c2ba2d6f42e4a3c8fa300' },
-          customerId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9900' },
+          customerId: {
+            oneOf: [
+              { type: 'string', example: '665c2ba2d6f42e4a3c8f9900' },
+              { $ref: '#/components/schemas/CustomerSummary' },
+            ],
+            description: 'Идентификатор клиента или краткая информация, если заказ привязан к гостю',
+          },
           items: {
             type: 'array',
             items: { $ref: '#/components/schemas/OrderItem' },
@@ -240,6 +246,15 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           method: { type: 'string', enum: ['cash', 'card'], example: 'card' },
           amount: { type: 'number', example: 500 },
           change: { type: 'number', example: 50 },
+        },
+      },
+      CustomerSummary: {
+        type: 'object',
+        properties: {
+          _id: { type: 'string', example: '665c2ba2d6f42e4a3c8fb321' },
+          name: { type: 'string', example: 'Иван Иванов' },
+          phone: { type: 'string', example: '+79991234567' },
+          points: { type: 'number', example: 120 },
         },
       },
       Customer: {
@@ -975,6 +990,45 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           },
           '400': { description: 'Invalid identifier supplied' },
           '404': { description: 'Order not found' },
+        },
+      },
+      delete: {
+        summary: 'Cancel draft order',
+        description: 'Удаляет черновой заказ, если он ещё не оплачен',
+        tags: ['Orders'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Order cancelled',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        cancelled: { type: 'boolean', example: true },
+                      },
+                    },
+                    error: { type: 'string', nullable: true, example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid identifier supplied' },
+          '403': { description: 'Forbidden — cashier mismatch' },
+          '404': { description: 'Order not found' },
+          '409': { description: 'Only draft orders can be cancelled' },
         },
       },
     },

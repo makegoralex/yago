@@ -416,6 +416,41 @@ router.post(
   })
 );
 
+router.delete(
+  '/:id',
+  requireRole(CASHIER_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({ data: null, error: 'Invalid order id' });
+      return;
+    }
+
+    const order = await OrderModel.findById(id);
+
+    if (!order) {
+      res.status(404).json({ data: null, error: 'Order not found' });
+      return;
+    }
+
+    const isAdmin = req.user?.role === 'admin';
+    if (!isAdmin && (!req.user?.id || order.cashierId.toString() !== req.user.id)) {
+      res.status(403).json({ data: null, error: 'Forbidden' });
+      return;
+    }
+
+    if (order.status !== 'draft') {
+      res.status(409).json({ data: null, error: 'Only draft orders can be cancelled' });
+      return;
+    }
+
+    await order.deleteOne();
+
+    res.json({ data: { cancelled: true }, error: null });
+  })
+);
+
 router.get(
   '/active',
   requireRole(CASHIER_ROLES),
@@ -491,7 +526,7 @@ router.get(
       return;
     }
 
-    const order = await OrderModel.findById(id);
+    const order = await OrderModel.findById(id).populate('customerId', CUSTOMER_PROJECTION);
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });

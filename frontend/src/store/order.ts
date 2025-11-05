@@ -47,6 +47,7 @@ type OrderState = {
   attachCustomer: (customer: CustomerSummary | null) => Promise<void>;
   payOrder: (payload: { method: PaymentMethod; amountTendered: number; change?: number }) => Promise<void>;
   completeOrder: () => Promise<void>;
+  cancelOrder: () => Promise<void>;
   reset: () => void;
   syncItems: (items: OrderItem[], discount?: number, customerOverride?: string | null) => Promise<void>;
   fetchActiveOrders: () => Promise<void>;
@@ -167,6 +168,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         ...DEFAULT_CONTEXT,
       });
       set(buildOrderState(response.data.data));
+      void get().fetchActiveOrders();
     } finally {
       set({ loading: false });
     }
@@ -221,7 +223,10 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     const customerId = customer?._id ?? null;
     const discount = customer ? get().discount : 0;
 
-    set({ customerId, customer: customer ?? null });
+    set({
+      customerId,
+      customer: customer ? { ...customer, points: Number(customer.points ?? 0) } : null,
+    });
 
     if (!get().orderId) {
       if (!customer) {
@@ -248,6 +253,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         change: normalizedChange,
       });
       set(buildOrderState(response.data.data));
+      void get().fetchActiveOrders();
     } finally {
       set({ loading: false });
     }
@@ -261,6 +267,21 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set({ loading: true });
     try {
       await api.post(`/api/orders/${orderId}/complete`);
+      get().reset();
+      void get().fetchActiveOrders();
+    } finally {
+      set({ loading: false });
+    }
+  },
+  async cancelOrder() {
+    const { orderId } = get();
+    if (!orderId) {
+      return;
+    }
+
+    set({ loading: true });
+    try {
+      await api.delete(`/api/orders/${orderId}`);
       get().reset();
       void get().fetchActiveOrders();
     } finally {
@@ -305,6 +326,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     try {
       const response = await api.post(`/api/orders/${orderId}/items`, payload);
       set(buildOrderState(response.data.data));
+      void get().fetchActiveOrders();
     } finally {
       set({ loading: false });
     }

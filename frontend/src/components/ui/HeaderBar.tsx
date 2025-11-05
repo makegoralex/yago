@@ -13,7 +13,7 @@ const HeaderBar: React.FC<{ onToggleSidebar: () => void; isSidebarCollapsed: boo
   onToggleSidebar,
   isSidebarCollapsed,
 }) => {
-  const { user, clearSession } = useAuthStore();
+  const { user } = useAuthStore();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [now, setNow] = useState(() => formatTime(new Date()));
@@ -62,13 +62,10 @@ const HeaderBar: React.FC<{ onToggleSidebar: () => void; isSidebarCollapsed: boo
         </button>
         <button
           type="button"
-          onClick={() => {
-            clearSession();
-            navigate('/login');
-          }}
-          className="flex h-12 items-center rounded-2xl bg-red-50 px-4 text-sm font-semibold text-red-500 transition hover:bg-red-100"
+          onClick={() => navigate('/settings')}
+          className="flex h-12 items-center rounded-2xl bg-slate-100 px-4 text-sm font-semibold text-slate-600 transition hover:bg-slate-200 md:hidden"
         >
-          Выход
+          Настройки
         </button>
       </div>
     </header>

@@ -41,6 +41,7 @@ const POSPage: React.FC = () => {
   const loadOrder = useOrderStore((state) => state.loadOrder);
   const redeemPoints = useOrderStore((state) => state.redeemPoints);
   const clearDiscount = useOrderStore((state) => state.clearDiscount);
+  const cancelOrder = useOrderStore((state) => state.cancelOrder);
 
   const { notify } = useToast();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -192,9 +193,9 @@ const POSPage: React.FC = () => {
             </div>
           </div>
           {activeOrders.length > 0 ? (
-            <div className="mb-4 overflow-x-auto rounded-2xl bg-white p-4 shadow-soft">
+            <div className="mb-4 rounded-2xl bg-white p-4 shadow-soft">
               <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
-              <div className="mt-2 flex gap-3">
+              <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {activeOrders.map((order) => {
                   const isActive = orderId === order._id;
                   return (
@@ -202,7 +203,7 @@ const POSPage: React.FC = () => {
                       type="button"
                       key={order._id}
                       onClick={() => void loadOrder(order._id)}
-                      className={`min-w-[160px] rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                      className={`w-full rounded-2xl border px-4 py-3 text-left text-sm transition ${
                         isActive
                           ? 'border-secondary bg-secondary/10 text-secondary'
                           : 'border-slate-100 text-slate-600 hover:border-secondary/60'
@@ -347,6 +348,14 @@ const POSPage: React.FC = () => {
                 notify({ title: 'Не удалось сбросить скидку', type: 'error' })
               )
             }
+            onCancel={() =>
+              void cancelOrder()
+                .then(() => {
+                  setOrderDrawerOpen(false);
+                  notify({ title: 'Заказ отменён', type: 'info' });
+                })
+                .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
+            }
             visible
           />
         </div>
@@ -441,6 +450,14 @@ const POSPage: React.FC = () => {
                   void clearDiscount().catch(() =>
                     notify({ title: 'Не удалось сбросить скидку', type: 'error' })
                   )
+                }
+                onCancel={() =>
+                  void cancelOrder()
+                    .then(() => {
+                      setOrderDrawerOpen(false);
+                      notify({ title: 'Заказ отменён', type: 'info' });
+                    })
+                    .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
                 }
                 visible={isOrderDrawerOpen}
               />
