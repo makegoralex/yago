@@ -1,4 +1,6 @@
 import express, { NextFunction, Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import swaggerUi from 'swagger-ui-express';
 
 import { authMiddleware } from './middleware/auth';
@@ -10,14 +12,7 @@ import customersRouter from './modules/customers/customer.router';
 import loyaltyRouter from './modules/loyalty/loyalty.router';
 import reportsRouter from './routes/reports';
 
-import path from 'path';
-import { fileURLToPath } from 'url';
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 const app = express();
-
-app.use('/pos', express.static(path.join(__dirname, '../frontend/dist')));
-
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -28,10 +23,6 @@ app.get('/', (_req, res) => {
 
 app.get('/healthz', (_req, res) => {
   res.json({ status: 'ok' });
-});
-
-app.get('/pos/*', (_req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
 app.use('/api/auth', authRouter);
@@ -50,6 +41,24 @@ app.get('/api/protected', authMiddleware, (req, res) => {
 
 const swaggerDocument = buildSwaggerDocument();
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+const frontendDistPath = path.resolve(__dirname, '..', 'frontend', 'dist');
+
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+
+  app.get('*', (req: Request, res: Response, next: NextFunction) => {
+    if (
+      req.path.startsWith('/api') ||
+      req.path.startsWith('/docs') ||
+      req.path.startsWith('/healthz')
+    ) {
+      return next();
+    }
+
+    return res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+}
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);

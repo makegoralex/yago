@@ -1,6 +1,10 @@
 node_modules
 .env
 dist
+frontend/dist
+**/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
 
 # Editor directories and files
 .vscode
