@@ -10,7 +10,14 @@ import customersRouter from './modules/customers/customer.router';
 import loyaltyRouter from './modules/loyalty/loyalty.router';
 import reportsRouter from './routes/reports';
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const app = express();
+
+app.use('/pos', express.static(path.join(__dirname, '../frontend/dist')));
+
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -21,6 +28,10 @@ app.get('/', (_req, res) => {
 
 app.get('/healthz', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/pos/*', (_req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
 app.use('/api/auth', authRouter);
