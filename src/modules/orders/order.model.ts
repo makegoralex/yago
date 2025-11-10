@@ -24,6 +24,7 @@ export interface Order {
   locationId: string;
   registerId: string;
   cashierId: Types.ObjectId;
+  warehouseId?: Types.ObjectId;
   customerId?: Types.ObjectId;
   items: OrderItem[];
   subtotal: number;
@@ -72,6 +73,7 @@ const orderSchema = new Schema<OrderDocument>(
     locationId: { type: String, required: true, trim: true },
     registerId: { type: String, required: true, trim: true },
     cashierId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    warehouseId: { type: Schema.Types.ObjectId, ref: 'Warehouse' },
     customerId: { type: Schema.Types.ObjectId, ref: 'Customer' },
     items: { type: [orderItemSchema], default: [] },
     subtotal: { type: Number, required: true, min: 0, default: 0 },
@@ -92,5 +94,6 @@ orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ 'items.productId': 1 });
 orderSchema.index({ customerId: 1 });
 orderSchema.index({ cashierId: 1, status: 1 });
+orderSchema.index({ warehouseId: 1 });
 
 export const OrderModel = model<OrderDocument>('Order', orderSchema);

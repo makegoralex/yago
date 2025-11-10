@@ -12,6 +12,8 @@ import {
   type OrderStatus,
   type PaymentMethod,
 } from './order.model';
+import { WarehouseModel } from '../inventory/warehouse.model';
+import { adjustInventoryQuantity } from '../inventory/inventoryCost.service';
 
 const router = Router();
 
@@ -21,6 +23,39 @@ const ORDER_STATUSES: OrderStatus[] = ['draft', 'paid', 'completed'];
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['draft', 'paid'];
 const FULFILLED_ORDER_STATUSES: OrderStatus[] = ['paid', 'completed'];
 const CUSTOMER_PROJECTION = 'name phone points';
+
+let cachedDefaultWarehouseId: Types.ObjectId | null | undefined;
+
+const findDefaultWarehouse = async (): Promise<Types.ObjectId | null> => {
+  if (cachedDefaultWarehouseId !== undefined) {
+    return cachedDefaultWarehouseId ?? null;
+  }
+
+  const warehouse = await WarehouseModel.findOne().sort({ createdAt: 1 }).select('_id');
+  cachedDefaultWarehouseId = warehouse?._id ? (warehouse._id as Types.ObjectId) : null;
+  return cachedDefaultWarehouseId ?? null;
+};
+
+const resolveWarehouseId = async (candidate?: unknown): Promise<Types.ObjectId | null> => {
+  if (candidate instanceof Types.ObjectId) {
+    return candidate;
+  }
+
+  if (typeof candidate === 'string') {
+    if (!isValidObjectId(candidate)) {
+      throw new Error('warehouseId must be a valid identifier');
+    }
+
+    const exists = await WarehouseModel.exists({ _id: candidate });
+    if (!exists) {
+      throw new Error('Склад не найден');
+    }
+
+    return new Types.ObjectId(candidate);
+  }
+
+  return findDefaultWarehouse();
+};
 
 const reloadOrderWithCustomer = async (orderId: Types.ObjectId | string | null | undefined) => {
   if (!orderId) {
@@ -40,6 +75,61 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
       next(error);
     }
   }) as RequestHandler;
+};
+
+const deductInventoryForOrder = async (order: OrderDocument): Promise<void> => {
+  const warehouseId = await resolveWarehouseId(order.warehouseId);
+
+  if (!warehouseId) {
+    return;
+  }
+
+  if (!Array.isArray(order.items) || order.items.length === 0) {
+    return;
+  }
+
+  const productIds = order.items.map((item) => item.productId);
+  const products = await ProductModel.find({ _id: { $in: productIds } })
+    .select('ingredients')
+    .lean();
+
+  if (!products.length) {
+    return;
+  }
+
+  const productMap = new Map<string, typeof products[number]>();
+  for (const product of products) {
+    productMap.set(product._id.toString(), product);
+  }
+
+  for (const item of order.items) {
+    const product = productMap.get(item.productId.toString());
+    if (!product) {
+      continue;
+    }
+
+    if (Array.isArray(product.ingredients) && product.ingredients.length > 0) {
+      for (const ingredientEntry of product.ingredients) {
+        const consumeQty = ingredientEntry.quantity * item.qty;
+        if (consumeQty <= 0) {
+          continue;
+        }
+
+        await adjustInventoryQuantity(
+          warehouseId,
+          'ingredient',
+          new Types.ObjectId(ingredientEntry.ingredientId),
+          -consumeQty
+        );
+      }
+    } else {
+      if (item.qty <= 0) {
+        continue;
+      }
+
+      await adjustInventoryQuantity(warehouseId, 'product', item.productId, -item.qty);
+    }
+  }
 };
 
 router.use(authMiddleware);
@@ -111,15 +201,21 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
     });
   }
 
-  const products = await ProductModel.find({ _id: { $in: [...uniqueIds] } }).select('name price');
+  const products = await ProductModel.find({ _id: { $in: [...uniqueIds] } })
+    .select('name price isActive')
+    .lean();
 
   if (products.length !== uniqueIds.size) {
     throw new Error('One or more products could not be found');
   }
 
-  const productMap = new Map<string, { name: string; price: number }>();
+  const productMap = new Map<string, { name: string; price: number; isActive?: boolean }>();
   for (const product of products) {
-    productMap.set(product.id, { name: product.name, price: product.price });
+    productMap.set(product._id.toString(), {
+      name: product.name,
+      price: product.price,
+      isActive: product.isActive,
+    });
   }
 
   return sanitizedItems
@@ -128,6 +224,10 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
       const product = productMap.get(item.productId);
       if (!product) {
         throw new Error('Product lookup failed');
+      }
+
+      if (product.isActive === false) {
+        throw new Error(`${product.name} недоступен для продажи`);
       }
 
       const price = roundCurrency(product.price);
@@ -169,7 +269,7 @@ router.post(
   '/start',
   requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
-    const { orgId, locationId, registerId, customerId } = req.body ?? {};
+    const { orgId, locationId, registerId, customerId, warehouseId } = req.body ?? {};
     const cashierId = req.user?.id;
 
     if (!cashierId) {
@@ -185,6 +285,7 @@ router.post(
     }
 
     let normalizedCustomerId: Types.ObjectId | undefined;
+    let normalizedWarehouseId: Types.ObjectId | null = null;
     if (customerId) {
       if (typeof customerId !== 'string' || !isValidObjectId(customerId)) {
         res.status(400).json({ data: null, error: 'customerId must be a valid identifier' });
@@ -200,11 +301,19 @@ router.post(
       normalizedCustomerId = customer._id as Types.ObjectId;
     }
 
+    try {
+      normalizedWarehouseId = await resolveWarehouseId(warehouseId);
+    } catch (error) {
+      res.status(400).json({ data: null, error: error instanceof Error ? error.message : 'Invalid warehouseId' });
+      return;
+    }
+
     const order = await OrderModel.create({
       orgId: String(orgId).trim(),
       locationId: String(locationId).trim(),
       registerId: String(registerId).trim(),
       cashierId: new Types.ObjectId(cashierId),
+      warehouseId: normalizedWarehouseId ?? undefined,
       customerId: normalizedCustomerId,
       items: [],
       subtotal: 0,
@@ -369,6 +478,8 @@ router.post(
     order.status = 'paid';
 
     await order.save();
+
+    await deductInventoryForOrder(order);
 
     if (order.customerId) {
       try {

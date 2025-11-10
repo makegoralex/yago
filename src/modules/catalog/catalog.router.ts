@@ -4,6 +4,7 @@ import { isValidObjectId, Types } from 'mongoose';
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { CategoryModel, ProductModel, type ProductIngredient } from './catalog.model';
 import { IngredientModel } from './ingredient.model';
+import { recalculateProductCost, recalculateProductsForIngredient } from './productCost.service';
 
 const router = Router();
 
@@ -215,7 +216,7 @@ router.delete(
 router.get(
   '/products',
   asyncHandler(async (req, res) => {
-    const { categoryId } = req.query;
+    const { categoryId, includeInactive } = req.query;
 
     const filter: Record<string, unknown> = {};
 
@@ -226,6 +227,10 @@ router.get(
       }
 
       filter.categoryId = categoryId;
+    }
+
+    if (includeInactive !== 'true') {
+      filter.isActive = { $ne: false };
     }
 
     const products = await ProductModel.find(filter).sort({ name: 1 });
@@ -320,6 +325,8 @@ router.post(
     });
 
     await product.save();
+
+    await recalculateProductCost(product._id as Types.ObjectId);
 
     res.status(201).json({ data: product, error: null });
   })
@@ -445,6 +452,8 @@ router.put(
       return;
     }
 
+    await recalculateProductCost(product._id as Types.ObjectId);
+
     res.json({ data: product, error: null });
   })
 );
@@ -514,6 +523,8 @@ router.post(
 
     await ingredient.save();
 
+    await recalculateProductsForIngredient(ingredient._id as Types.ObjectId);
+
     res.status(201).json({ data: ingredient, error: null });
   })
 );
@@ -580,6 +591,8 @@ router.put(
       res.status(404).json({ data: null, error: 'Ingredient not found' });
       return;
     }
+
+    await recalculateProductsForIngredient(ingredient._id as Types.ObjectId);
 
     res.json({ data: ingredient, error: null });
   })

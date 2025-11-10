@@ -111,6 +111,11 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           imageUrl: { type: 'string', example: 'https://cdn.yago.coffee/menu/flat-white.jpg' },
           basePrice: { type: 'number', example: 280 },
           price: { type: 'number', example: 260 },
+          costPrice: {
+            type: 'number',
+            example: 145,
+            description: 'Средневзвешенная себестоимость, рассчитывается автоматически',
+          },
           discountType: { type: 'string', enum: ['percentage', 'fixed'], example: 'percentage' },
           discountValue: { type: 'number', example: 10 },
           modifiers: {
@@ -186,6 +191,7 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           unit: { type: 'string', example: 'грамм' },
           costPerUnit: { type: 'number', example: 0.75 },
           supplierId: { type: 'string', nullable: true },
+          description: { type: 'string', example: 'Обжарка City Roast, фасовка 1 кг' },
           createdAt: { type: 'string', format: 'date-time' },
           updatedAt: { type: 'string', format: 'date-time' },
         },
@@ -318,6 +324,47 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           stockValue: { type: 'number', example: 124500 },
         },
       },
+      StockReceiptItemInput: {
+        type: 'object',
+        required: ['itemType', 'itemId', 'quantity', 'unitCost'],
+        properties: {
+          itemType: {
+            type: 'string',
+            enum: ['ingredient', 'product'],
+            example: 'ingredient',
+          },
+          itemId: { type: 'string', example: '665c2ba2d6f42e4a3c8fb101' },
+          quantity: { type: 'number', example: 5000 },
+          unitCost: { type: 'number', example: 0.8 },
+        },
+      },
+      StockReceiptInput: {
+        type: 'object',
+        required: ['warehouseId', 'items'],
+        properties: {
+          warehouseId: { type: 'string', example: '665c2ba2d6f42e4a3c8fd200' },
+          supplierId: { type: 'string', nullable: true, example: '665c2ba2d6f42e4a3c8fc210' },
+          items: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/StockReceiptItemInput' },
+          },
+        },
+      },
+      StockReceipt: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: '665c2ba2d6f42e4a3c8ff001' },
+          warehouseId: { type: 'string', example: '665c2ba2d6f42e4a3c8fd200' },
+          supplierId: { type: 'string', nullable: true, example: '665c2ba2d6f42e4a3c8fc210' },
+          createdBy: { type: 'string', example: '665c2ba2d6f42e4a3c8fa300' },
+          items: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/StockReceiptItemInput' },
+          },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
       AdminCatalogOverview: {
         type: 'object',
         properties: {
@@ -411,6 +458,12 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           locationId: { type: 'string', example: 'store-1' },
           registerId: { type: 'string', example: 'reg-1' },
           cashierId: { type: 'string', example: '665c2ba2d6f42e4a3c8fa300' },
+          warehouseId: {
+            type: 'string',
+            nullable: true,
+            example: '665c2ba2d6f42e4a3c8fd200',
+            description: 'Склад, с которого списываются ингредиенты и товары',
+          },
           customerId: {
             oneOf: [
               { type: 'string', example: '665c2ba2d6f42e4a3c8f9900' },
@@ -443,6 +496,12 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           locationId: { type: 'string', example: 'store-1' },
           registerId: { type: 'string', example: 'main-register' },
           customerId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9900' },
+          warehouseId: {
+            type: 'string',
+            nullable: true,
+            example: '665c2ba2d6f42e4a3c8fd200',
+            description: 'Укажите, чтобы привязать заказ к конкретному складу',
+          },
         },
       },
       OrderItemsUpdateRequest: {
@@ -1604,6 +1663,40 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           '400': { description: 'Invalid identifier or payload' },
           '404': { description: 'Inventory item not found' },
           '403': { description: 'Forbidden — admin role required' },
+        },
+      },
+    },
+    '/api/inventory/receipts': {
+      post: {
+        summary: 'Create stock receipt and update balances',
+        tags: ['Inventory'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/StockReceiptInput' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Receipt created',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/StockReceipt' },
+                    error: { type: 'string', nullable: true, example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error' },
+          '403': { description: 'Forbidden — admin role required' },
+          '404': { description: 'Warehouse or supplier not found' },
         },
       },
     },

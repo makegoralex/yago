@@ -39,6 +39,7 @@ export interface Product {
   description?: string;
   price: number;
   basePrice?: number;
+  costPrice?: number;
   discountType?: 'percentage' | 'fixed';
   discountValue?: number;
   imageUrl?: string;
@@ -74,6 +75,11 @@ const productSchema = new Schema<ProductDocument>(
       min: 0,
     },
     basePrice: {
+      type: Number,
+      required: false,
+      min: 0,
+    },
+    costPrice: {
       type: Number,
       required: false,
       min: 0,

@@ -14,6 +14,7 @@ export type Product = {
   description?: string;
   imageUrl?: string;
   basePrice?: number;
+  costPrice?: number;
   price: number;
   discountType?: 'percentage' | 'fixed';
   discountValue?: number;
@@ -46,7 +47,7 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
       ]);
       set({
         categories: categoriesRes.data.data || [],
-        products: productsRes.data.data || [],
+        products: (productsRes.data.data || []).filter((product: Product) => product.isActive !== false),
       });
     } finally {
       set({ loading: false });
