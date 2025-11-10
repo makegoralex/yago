@@ -318,6 +318,55 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           stockValue: { type: 'number', example: 124500 },
         },
       },
+      AdminCatalogOverview: {
+        type: 'object',
+        properties: {
+          categories: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/CatalogCategory' },
+          },
+          products: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/CatalogProduct' },
+          },
+          ingredients: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/CatalogIngredient' },
+          },
+        },
+      },
+      AdminInventoryOverview: {
+        type: 'object',
+        properties: {
+          warehouses: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/Warehouse' },
+          },
+          items: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/InventoryItem' },
+          },
+          summary: { $ref: '#/components/schemas/InventorySummary' },
+        },
+      },
+      AdminSuppliersOverview: {
+        type: 'object',
+        properties: {
+          suppliers: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/Supplier' },
+          },
+        },
+      },
+      AdminLowStockItems: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/InventoryItem' },
+          },
+        },
+      },
       OrderItem: {
         type: 'object',
         properties: {
@@ -1572,6 +1621,102 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
                   type: 'object',
                   properties: {
                     data: { $ref: '#/components/schemas/InventorySummary' },
+                    error: { type: 'string', nullable: true, example: null },
+                  },
+                },
+              },
+            },
+          },
+          '403': { description: 'Forbidden — admin role required' },
+        },
+      },
+    },
+    '/api/admin/catalog': {
+      get: {
+        summary: 'Admin catalog snapshot',
+        tags: ['Admin'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Catalog overview returned',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/AdminCatalogOverview' },
+                    error: { type: 'string', nullable: true, example: null },
+                  },
+                },
+              },
+            },
+          },
+          '403': { description: 'Forbidden — admin role required' },
+        },
+      },
+    },
+    '/api/admin/inventory': {
+      get: {
+        summary: 'Admin inventory snapshot',
+        tags: ['Admin'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Inventory overview returned',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/AdminInventoryOverview' },
+                    error: { type: 'string', nullable: true, example: null },
+                  },
+                },
+              },
+            },
+          },
+          '403': { description: 'Forbidden — admin role required' },
+        },
+      },
+    },
+    '/api/admin/inventory/low-stock': {
+      get: {
+        summary: 'Low stock warning list',
+        tags: ['Admin'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Items requiring replenishment',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/AdminLowStockItems' },
+                    error: { type: 'string', nullable: true, example: null },
+                  },
+                },
+              },
+            },
+          },
+          '403': { description: 'Forbidden — admin role required' },
+        },
+      },
+    },
+    '/api/admin/suppliers': {
+      get: {
+        summary: 'Admin supplier directory',
+        tags: ['Admin'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Suppliers overview returned',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/AdminSuppliersOverview' },
                     error: { type: 'string', nullable: true, example: null },
                   },
                 },

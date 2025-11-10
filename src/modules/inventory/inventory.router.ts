@@ -6,6 +6,10 @@ import { ProductModel } from '../catalog/catalog.model';
 import { IngredientModel } from '../catalog/ingredient.model';
 import { InventoryItemModel } from './inventoryItem.model';
 import { WarehouseModel } from './warehouse.model';
+import {
+  fetchInventoryItemsWithReferences,
+  getInventorySummary,
+} from './inventory.service';
 
 const router = Router();
 
@@ -144,41 +148,7 @@ router.get(
       filter.itemType = itemType;
     }
 
-    const items = await InventoryItemModel.find(filter).lean();
-
-    const warehouseIds = new Set<string>();
-    const ingredientIds = new Set<string>();
-    const productIds = new Set<string>();
-
-    for (const item of items) {
-      warehouseIds.add(item.warehouseId.toString());
-      if (item.itemType === 'ingredient') {
-        ingredientIds.add(item.itemId.toString());
-      } else {
-        productIds.add(item.itemId.toString());
-      }
-    }
-
-    const [warehouses, ingredients, products] = await Promise.all([
-      WarehouseModel.find({ _id: { $in: Array.from(warehouseIds) } }).lean(),
-      ingredientIds.size
-        ? IngredientModel.find({ _id: { $in: Array.from(ingredientIds) } }).lean()
-        : Promise.resolve([]),
-      productIds.size
-        ? ProductModel.find({ _id: { $in: Array.from(productIds) } }).lean()
-        : Promise.resolve([]),
-    ]);
-
-    const warehouseMap = new Map(warehouses.map((warehouse) => [warehouse._id.toString(), warehouse]));
-    const ingredientMap = new Map(ingredients.map((ingredient) => [ingredient._id.toString(), ingredient]));
-    const productMap = new Map(products.map((product) => [product._id.toString(), product]));
-
-    const enriched = items.map((item) => ({
-      ...item,
-      warehouse: warehouseMap.get(item.warehouseId.toString()) ?? null,
-      ingredient: item.itemType === 'ingredient' ? ingredientMap.get(item.itemId.toString()) ?? null : null,
-      product: item.itemType === 'product' ? productMap.get(item.itemId.toString()) ?? null : null,
-    }));
+    const enriched = await fetchInventoryItemsWithReferences(filter);
 
     res.json({ data: enriched, error: null });
   })
@@ -293,31 +263,7 @@ router.post(
 router.get(
   '/summary',
   asyncHandler(async (_req, res) => {
-    const [totalProducts, totalIngredients, totalStockValue] = await Promise.all([
-      InventoryItemModel.countDocuments({ itemType: 'product' }),
-      InventoryItemModel.countDocuments({ itemType: 'ingredient' }),
-      InventoryItemModel.aggregate<{ _id: unknown; total: number }>([
-        {
-          $addFields: {
-            totalValue: {
-              $multiply: ['$quantity', { $ifNull: ['$unitCost', 0] }],
-            },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            total: { $sum: '$totalValue' },
-          },
-        },
-      ]),
-    ]);
-
-    const summary = {
-      productsTracked: totalProducts,
-      ingredientsTracked: totalIngredients,
-      stockValue: totalStockValue[0]?.total ?? 0,
-    };
+    const summary = await getInventorySummary();
 
     res.json({ data: summary, error: null });
   })

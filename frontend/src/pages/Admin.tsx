@@ -140,14 +140,11 @@ type LoyaltyPointSummary = {
   const loadMenuData = useCallback(async () => {
     try {
       setMenuLoading(true);
-      const [categoriesRes, productsRes, ingredientsRes] = await Promise.all([
-        api.get('/api/catalog/categories'),
-        api.get('/api/catalog/products'),
-        api.get('/api/catalog/ingredients'),
-      ]);
-      setCategories(categoriesRes.data.data || []);
-      setProducts(productsRes.data.data || []);
-      setIngredients(ingredientsRes.data.data || []);
+      const response = await api.get('/api/admin/catalog');
+      const payload = response.data?.data;
+      setCategories(payload?.categories ?? []);
+      setProducts(payload?.products ?? []);
+      setIngredients(payload?.ingredients ?? []);
     } catch (error) {
       notify({ title: 'Не удалось загрузить меню', type: 'error' });
     } finally {
@@ -158,14 +155,11 @@ type LoyaltyPointSummary = {
   const loadInventoryData = useCallback(async () => {
     try {
       setInventoryLoading(true);
-      const [warehousesRes, itemsRes, summaryRes] = await Promise.all([
-        api.get('/api/inventory/warehouses'),
-        api.get('/api/inventory/items'),
-        api.get('/api/inventory/summary'),
-      ]);
-      setWarehouses(warehousesRes.data.data || []);
-      setInventoryItems(itemsRes.data.data || []);
-      setInventorySummary(summaryRes.data.data || null);
+      const response = await api.get('/api/admin/inventory');
+      const payload = response.data?.data;
+      setWarehouses(payload?.warehouses ?? []);
+      setInventoryItems(payload?.items ?? []);
+      setInventorySummary(payload?.summary ?? null);
     } catch (error) {
       notify({ title: 'Не удалось загрузить склад', type: 'error' });
     } finally {
@@ -176,8 +170,8 @@ type LoyaltyPointSummary = {
   const loadSuppliersData = useCallback(async () => {
     try {
       setSuppliersLoading(true);
-      const res = await api.get('/api/suppliers');
-      setSuppliers(res.data.data || []);
+      const res = await api.get('/api/admin/suppliers');
+      setSuppliers(res.data?.data?.suppliers ?? []);
     } catch (error) {
       notify({ title: 'Не удалось загрузить поставщиков', type: 'error' });
     } finally {
