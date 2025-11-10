@@ -195,7 +195,7 @@ const POSPage: React.FC = () => {
           {activeOrders.length > 0 ? (
             <div className="mb-4 rounded-2xl bg-white p-4 shadow-soft">
               <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
-              <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {activeOrders.map((order) => {
                   const isActive = orderId === order._id;
                   return (
@@ -210,9 +210,9 @@ const POSPage: React.FC = () => {
                       }`}
                     >
                       <p className="font-semibold text-slate-900">#{order._id.slice(-5)}</p>
-                      <p className="text-xs uppercase text-slate-400">
-                        {order.status === 'draft' ? 'в работе' : 'оплачен'}
-                      </p>
+                      {order.status === 'paid' ? (
+                        <p className="text-xs uppercase text-slate-400">оплачен</p>
+                      ) : null}
                       <p className="mt-2 text-base font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
                     </button>
                   );

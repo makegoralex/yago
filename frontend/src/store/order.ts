@@ -276,6 +276,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   async cancelOrder() {
     const { orderId } = get();
     if (!orderId) {
+      await get().createDraft();
       return;
     }
 
@@ -284,6 +285,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       await api.delete(`/api/orders/${orderId}`);
       get().reset();
       void get().fetchActiveOrders();
+      await get().createDraft();
     } finally {
       set({ loading: false });
     }

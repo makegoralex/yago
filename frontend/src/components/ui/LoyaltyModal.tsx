@@ -81,6 +81,14 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
     setSuggestions(filtered.slice(0, 5));
   }, [customers, phone, open]);
 
+  const displayResults = useMemo(() => {
+    if (results.length > 0) {
+      return results;
+    }
+
+    return suggestions;
+  }, [results, suggestions]);
+
   const attachAndClose = (customer: CustomerSummary) => {
     onAttach(customer);
     notify({ title: 'Клиент выбран', description: customer.name, type: 'success' });
@@ -131,13 +139,6 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
       setLoading(false);
     }
   };
-
-  const displayResults = useMemo(() => {
-    if (results.length > 0) {
-      return results;
-    }
-    return suggestions;
-  }, [results, suggestions]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
