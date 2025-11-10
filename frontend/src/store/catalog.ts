@@ -11,9 +11,15 @@ export type Product = {
   _id: string;
   name: string;
   categoryId: string;
+  description?: string;
+  imageUrl?: string;
+  basePrice?: number;
   price: number;
+  discountType?: 'percentage' | 'fixed';
+  discountValue?: number;
   modifiers?: string[];
   isActive?: boolean;
+  ingredients?: Array<{ ingredientId: string; quantity: number }>;
 };
 
 type CatalogState = {

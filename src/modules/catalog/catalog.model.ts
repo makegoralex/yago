@@ -1,5 +1,10 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
+export interface ProductIngredient {
+  ingredientId: Types.ObjectId;
+  quantity: number;
+}
+
 export interface Category {
   name: string;
   sortOrder?: number;
@@ -31,8 +36,14 @@ export const CategoryModel = model<CategoryDocument>('Category', categorySchema)
 export interface Product {
   name: string;
   categoryId: Types.ObjectId;
+  description?: string;
   price: number;
+  basePrice?: number;
+  discountType?: 'percentage' | 'fixed';
+  discountValue?: number;
+  imageUrl?: string;
   modifiers?: string[];
+  ingredients?: ProductIngredient[];
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -52,13 +63,56 @@ const productSchema = new Schema<ProductDocument>(
       ref: 'Category',
       required: true,
     },
+    description: {
+      type: String,
+      required: false,
+      trim: true,
+    },
     price: {
       type: Number,
       required: true,
       min: 0,
     },
+    basePrice: {
+      type: Number,
+      required: false,
+      min: 0,
+    },
+    discountType: {
+      type: String,
+      enum: ['percentage', 'fixed'],
+      required: false,
+    },
+    discountValue: {
+      type: Number,
+      required: false,
+      min: 0,
+    },
+    imageUrl: {
+      type: String,
+      required: false,
+      trim: true,
+    },
     modifiers: {
       type: [String],
+      required: false,
+      default: undefined,
+    },
+    ingredients: {
+      type: [
+        {
+          ingredientId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Ingredient',
+            required: true,
+          },
+          quantity: {
+            type: Number,
+            required: true,
+            min: 0,
+          },
+        },
+      ],
       required: false,
       default: undefined,
     },

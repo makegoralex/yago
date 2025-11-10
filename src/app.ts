@@ -11,6 +11,8 @@ import orderRouter from './modules/orders/order.router';
 import customersRouter from './modules/customers/customer.router';
 import loyaltyRouter from './modules/loyalty/loyalty.router';
 import reportsRouter from './routes/reports';
+import suppliersRouter from './modules/suppliers/supplier.router';
+import inventoryRouter from './modules/inventory/inventory.router';
 import { appConfig } from './config/env';
 
 const app = express();
@@ -32,6 +34,8 @@ app.use('/api/orders', orderRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/loyalty', loyaltyRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/suppliers', suppliersRouter);
+app.use('/api/inventory', inventoryRouter);
 
 app.get('/api/protected', authMiddleware, (req, res) => {
   res.json({
