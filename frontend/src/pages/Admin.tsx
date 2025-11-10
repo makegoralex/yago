@@ -12,6 +12,20 @@ import api from '../lib/api';
 import { useToast } from '../providers/ToastProvider';
 import type { Category, Product } from '../store/catalog';
 
+const getResponseData = <T,>(response: { data?: unknown }): T | undefined => {
+  if (!response || typeof response !== 'object') {
+    return undefined;
+  }
+
+  const payload = (response as { data?: unknown }).data;
+
+  if (payload && typeof payload === 'object' && 'data' in payload) {
+    return (payload as { data?: T }).data;
+  }
+
+  return payload as T | undefined;
+};
+
 type Ingredient = {
   _id: string;
   name: string;
@@ -59,7 +73,7 @@ type LoyaltyPointSummary = {
   totalPointsRedeemed: number;
 };
 
- const AdminPage: React.FC = () => {
+const AdminPage: React.FC = () => {
   const { notify } = useToast();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'menu' | 'inventory' | 'suppliers'>('dashboard');
   const [loadingDashboard, setLoadingDashboard] = useState(true);
@@ -138,14 +152,34 @@ type LoyaltyPointSummary = {
   }, [notify]);
 
   const loadMenuData = useCallback(async () => {
+    setMenuLoading(true);
     try {
-      setMenuLoading(true);
-      const response = await api.get('/api/admin/catalog');
-      const payload = response.data?.data;
-      setCategories(payload?.categories ?? []);
-      setProducts(payload?.products ?? []);
-      setIngredients(payload?.ingredients ?? []);
+      try {
+        const response = await api.get('/api/admin/catalog');
+        const payload = getResponseData<{
+          categories?: Category[];
+          products?: Product[];
+          ingredients?: Ingredient[];
+        }>(response);
+
+        setCategories(payload?.categories ?? []);
+        setProducts(payload?.products ?? []);
+        setIngredients(payload?.ingredients ?? []);
+        return;
+      } catch (primaryError) {
+        console.warn('Админский агрегированный каталог недоступен, выполняем поэлементную загрузку', primaryError);
+        const [categoriesRes, productsRes, ingredientsRes] = await Promise.all([
+          api.get('/api/catalog/categories'),
+          api.get('/api/catalog/products'),
+          api.get('/api/catalog/ingredients'),
+        ]);
+
+        setCategories(getResponseData<Category[]>(categoriesRes) ?? []);
+        setProducts(getResponseData<Product[]>(productsRes) ?? []);
+        setIngredients(getResponseData<Ingredient[]>(ingredientsRes) ?? []);
+      }
     } catch (error) {
+      console.error('Не удалось загрузить меню', error);
       notify({ title: 'Не удалось загрузить меню', type: 'error' });
     } finally {
       setMenuLoading(false);
@@ -153,14 +187,34 @@ type LoyaltyPointSummary = {
   }, [notify]);
 
   const loadInventoryData = useCallback(async () => {
+    setInventoryLoading(true);
     try {
-      setInventoryLoading(true);
-      const response = await api.get('/api/admin/inventory');
-      const payload = response.data?.data;
-      setWarehouses(payload?.warehouses ?? []);
-      setInventoryItems(payload?.items ?? []);
-      setInventorySummary(payload?.summary ?? null);
+      try {
+        const response = await api.get('/api/admin/inventory');
+        const payload = getResponseData<{
+          warehouses?: Warehouse[];
+          items?: InventoryItem[];
+          summary?: InventorySummary | null;
+        }>(response);
+
+        setWarehouses(payload?.warehouses ?? []);
+        setInventoryItems(payload?.items ?? []);
+        setInventorySummary(payload?.summary ?? null);
+        return;
+      } catch (primaryError) {
+        console.warn('Агрегированный склад недоступен, выполняем загрузку по эндпоинтам', primaryError);
+        const [warehousesRes, itemsRes, summaryRes] = await Promise.all([
+          api.get('/api/inventory/warehouses'),
+          api.get('/api/inventory/items'),
+          api.get('/api/inventory/summary'),
+        ]);
+
+        setWarehouses(getResponseData<Warehouse[]>(warehousesRes) ?? []);
+        setInventoryItems(getResponseData<InventoryItem[]>(itemsRes) ?? []);
+        setInventorySummary(getResponseData<InventorySummary | null>(summaryRes) ?? null);
+      }
     } catch (error) {
+      console.error('Не удалось загрузить складские данные', error);
       notify({ title: 'Не удалось загрузить склад', type: 'error' });
     } finally {
       setInventoryLoading(false);
@@ -168,11 +222,20 @@ type LoyaltyPointSummary = {
   }, [notify]);
 
   const loadSuppliersData = useCallback(async () => {
+    setSuppliersLoading(true);
     try {
-      setSuppliersLoading(true);
-      const res = await api.get('/api/admin/suppliers');
-      setSuppliers(res.data?.data?.suppliers ?? []);
+      try {
+        const response = await api.get('/api/admin/suppliers');
+        const payload = getResponseData<{ suppliers?: Supplier[] }>(response);
+        setSuppliers(payload?.suppliers ?? []);
+        return;
+      } catch (primaryError) {
+        console.warn('Агрегированный список поставщиков недоступен, выполняем прямой запрос', primaryError);
+        const fallbackResponse = await api.get('/api/suppliers');
+        setSuppliers(getResponseData<Supplier[]>(fallbackResponse) ?? []);
+      }
     } catch (error) {
+      console.error('Не удалось загрузить поставщиков', error);
       notify({ title: 'Не удалось загрузить поставщиков', type: 'error' });
     } finally {
       setSuppliersLoading(false);
