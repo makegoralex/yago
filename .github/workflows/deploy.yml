@@ -13,6 +13,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install backend dependencies
+        run: npm install
+
+      - name: Build backend
+        run: npm run build
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
       - name: Deploy via SFTP
         uses: wlixcc/SFTP-Deploy-Action@v1.2.4
         with:
@@ -27,4 +46,4 @@ jobs:
       - name: Restart PM2 on server
         run: |
           sudo apt-get install -y sshpass
-          sshpass -p "${{ secrets.SERVER_PASS }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd /root/yago && pm2 restart yago || pm2 start server.js --name yago && pm2 save"
+          sshpass -p "${{ secrets.SERVER_PASS }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd /root/yago && npm install && npm run build && cd frontend && npm install && npm run build && cd .. && (pm2 describe yago >/dev/null 2>&1 && pm2 restart yago || pm2 start dist/index.js --name yago) && pm2 save"
