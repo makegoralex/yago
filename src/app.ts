@@ -78,31 +78,98 @@ const resolveExistingBundle = (candidates: string[]): string | undefined => {
   return undefined;
 };
 
-const frontendDistPath = resolveExistingBundle(frontendCandidates);
+let frontendDistPath = resolveExistingBundle(frontendCandidates);
+let frontendStaticMiddleware: express.RequestHandler | null = frontendDistPath
+  ? express.static(frontendDistPath)
+  : null;
 
-if (frontendDistPath) {
-  app.use(express.static(frontendDistPath));
-
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    if (
-      req.path.startsWith('/api') ||
-      req.path.startsWith('/docs') ||
-      req.path.startsWith('/healthz')
-    ) {
-      return next();
+const refreshFrontendBundle = (): void => {
+  const maybeBundle = resolveExistingBundle(frontendCandidates);
+  if (!maybeBundle) {
+    if (frontendDistPath) {
+      console.warn(
+        'Frontend bundle became unavailable. Requests to /pos or /admin will return 404 until the bundle is rebuilt.'
+      );
     }
 
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      return next();
+    frontendDistPath = undefined;
+    frontendStaticMiddleware = null;
+    return;
+  }
+
+  if (maybeBundle !== frontendDistPath || !frontendStaticMiddleware) {
+    frontendDistPath = maybeBundle;
+    frontendStaticMiddleware = express.static(frontendDistPath);
+  }
+};
+
+const serveFrontendStatic: express.RequestHandler = (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/docs') || req.path.startsWith('/healthz')) {
+    return next();
+  }
+
+  if (!frontendStaticMiddleware) {
+    refreshFrontendBundle();
+  }
+
+  if (!frontendStaticMiddleware) {
+    return next();
+  }
+
+  return frontendStaticMiddleware(req, res, (err) => {
+    if (err) {
+      return next(err);
     }
 
-    return res.sendFile(path.join(frontendDistPath, 'index.html'));
+    return next();
   });
-} else {
+};
+
+const serveSpaFallback = (req: Request, res: Response, next: NextFunction): void => {
+  if (
+    req.path.startsWith('/api') ||
+    req.path.startsWith('/docs') ||
+    req.path.startsWith('/healthz')
+  ) {
+    next();
+    return;
+  }
+
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    next();
+    return;
+  }
+
+  if (!frontendDistPath || !fs.existsSync(path.join(frontendDistPath, 'index.html'))) {
+    refreshFrontendBundle();
+  }
+
+  if (!frontendDistPath) {
+    next();
+    return;
+  }
+
+  res.sendFile(path.join(frontendDistPath, 'index.html'), (err) => {
+    if (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        frontendDistPath = undefined;
+        frontendStaticMiddleware = null;
+      }
+
+      next(err);
+      return;
+    }
+  });
+};
+
+if (!frontendDistPath) {
   console.warn(
     'PWA bundle was not found. Build the frontend (npm run build inside frontend/) and copy the dist folder next to the API or provide FRONTEND_DIST_PATH.'
   );
 }
+
+app.use(serveFrontendStatic);
+app.use(serveSpaFallback);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);
