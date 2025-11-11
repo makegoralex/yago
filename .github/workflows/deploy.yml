@@ -35,15 +35,23 @@ jobs:
       - name: Deploy via SFTP
         uses: wlixcc/SFTP-Deploy-Action@v1.2.4
         with:
-          server: ${{ secrets.SERVER_IP }}
-          port: 22
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASS }}
-          local_path: "./"
-          remote_path: "/root/yago"
-          delete_remote_files: false
+          node-version: '18'
 
-      - name: Restart PM2 on server
+      - name: Install backend dependencies
+        run: npm install
+
+      - name: Build backend
+        run: npm run build
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Deploy to VPS via SSH
         run: |
           sudo apt-get install -y sshpass
           sshpass -p "${{ secrets.SERVER_PASS }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd /root/yago && npm install && npm run build && cd frontend && npm install && npm run build && cd .. && (pm2 describe yago >/dev/null 2>&1 && pm2 restart yago || pm2 start dist/index.js --name yago) && pm2 save"
