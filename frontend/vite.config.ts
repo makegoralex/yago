@@ -9,12 +9,10 @@ export default defineConfig({
       targets: ['defaults', 'iOS >= 10', 'Safari >= 10'],
       additionalLegacyPolyfills: ['regenerator-runtime/runtime'],
       modernPolyfills: true,
+      renderLegacyChunks: true,
     }),
   ],
   server: {
     port: 5173,
-  },
-  build: {
-    target: 'es2015',
   },
 });
