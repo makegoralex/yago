@@ -83,12 +83,16 @@ const frontendDistPath = resolveExistingBundle(frontendCandidates);
 if (frontendDistPath) {
   app.use(express.static(frontendDistPath));
 
-  app.get('*', (req: Request, res: Response, next: NextFunction) => {
+  app.use((req: Request, res: Response, next: NextFunction) => {
     if (
       req.path.startsWith('/api') ||
       req.path.startsWith('/docs') ||
       req.path.startsWith('/healthz')
     ) {
+      return next();
+    }
+
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
       return next();
     }
 
