@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { isAxiosError } from 'axios';
 import {
   Bar,
   BarChart,
@@ -798,11 +799,31 @@ const AdminPage: React.FC = () => {
     }
 
     try {
-      await api.post('/api/inventory/receipts', {
-        warehouseId: receiptForm.warehouseId,
-        supplierId: receiptForm.supplierId || undefined,
-        items: payloadItems,
-      });
+      let lastError: unknown;
+
+      for (const endpoint of ['/api/admin/inventory/receipts', '/api/inventory/receipts']) {
+        try {
+          await api.post(endpoint, {
+            warehouseId: receiptForm.warehouseId,
+            supplierId: receiptForm.supplierId || undefined,
+            items: payloadItems,
+          });
+          lastError = undefined;
+          break;
+        } catch (error) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            lastError = error;
+            continue;
+          }
+
+          throw error;
+        }
+      }
+
+      if (lastError) {
+        throw lastError;
+      }
+
       notify({ title: 'Поставка сохранена', type: 'success' });
       setReceiptForm({
         warehouseId: receiptForm.warehouseId,

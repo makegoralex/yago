@@ -7,12 +7,12 @@ import { IngredientModel } from '../catalog/ingredient.model';
 import { InventoryItemModel } from './inventoryItem.model';
 import { WarehouseModel } from './warehouse.model';
 import {
+  createStockReceipt,
   fetchInventoryItemsWithReferences,
   getInventorySummary,
+  InventoryReceiptError,
 } from './inventory.service';
 import { recalculateAverageCostForItem } from './inventoryCost.service';
-import { StockReceiptModel } from './stockReceipt.model';
-import { SupplierModel } from '../suppliers/supplier.model';
 
 const router = Router();
 
@@ -270,125 +270,28 @@ router.post(
 router.post(
   '/receipts',
   asyncHandler(async (req, res) => {
-    const { warehouseId, supplierId, items } = req.body ?? {};
-
-    if (!warehouseId || !isValidObjectId(warehouseId)) {
-      res.status(400).json({ data: null, error: 'warehouseId обязателен' });
-      return;
-    }
-
-    if (!Array.isArray(items) || items.length === 0) {
-      res.status(400).json({ data: null, error: 'Добавьте хотя бы одну позицию' });
-      return;
-    }
-
-    const warehouseExists = await WarehouseModel.exists({ _id: warehouseId });
-    if (!warehouseExists) {
-      res.status(404).json({ data: null, error: 'Склад не найден' });
-      return;
-    }
-
-    if (supplierId) {
-      if (!isValidObjectId(supplierId)) {
-        res.status(400).json({ data: null, error: 'Некорректный поставщик' });
-        return;
-      }
-
-      const supplierExists = await SupplierModel.exists({ _id: supplierId });
-      if (!supplierExists) {
-        res.status(404).json({ data: null, error: 'Поставщик не найден' });
-        return;
-      }
-    }
-
-    const normalizedItems: Array<{
-      itemType: 'ingredient' | 'product';
-      itemId: Types.ObjectId;
-      quantity: number;
-      unitCost: number;
-    }> = [];
-
-    for (const entry of items) {
-      if (!entry || typeof entry !== 'object') {
-        res.status(400).json({ data: null, error: 'Неверный формат позиции' });
-        return;
-      }
-
-      const { itemType, itemId, quantity, unitCost } = entry;
-
-      if (itemType !== 'ingredient' && itemType !== 'product') {
-        res.status(400).json({ data: null, error: 'itemType должен быть ingredient или product' });
-        return;
-      }
-
-      if (!itemId || !isValidObjectId(itemId)) {
-        res.status(400).json({ data: null, error: 'itemId обязателен' });
-        return;
-      }
-
-      const numericQty = Number(quantity);
-      const numericCost = Number(unitCost);
-
-      if (Number.isNaN(numericQty) || numericQty <= 0) {
-        res.status(400).json({ data: null, error: 'Количество должно быть больше нуля' });
-        return;
-      }
-
-      if (Number.isNaN(numericCost) || numericCost < 0) {
-        res.status(400).json({ data: null, error: 'Цена должна быть неотрицательной' });
-        return;
-      }
-
-      if (itemType === 'ingredient') {
-        const exists = await IngredientModel.exists({ _id: itemId });
-        if (!exists) {
-          res.status(404).json({ data: null, error: 'Ингредиент не найден' });
-          return;
-        }
-      } else {
-        const product = await ProductModel.findById(itemId).select('_id');
-        if (!product) {
-          res.status(404).json({ data: null, error: 'Товар не найден' });
-          return;
-        }
-      }
-
-      normalizedItems.push({
-        itemType,
-        itemId: new Types.ObjectId(itemId),
-        quantity: numericQty,
-        unitCost: numericCost,
-      });
-    }
-
     if (!req.user?.id) {
       res.status(403).json({ data: null, error: 'Не удалось определить пользователя' });
       return;
     }
 
-    const receipt = await StockReceiptModel.create({
-      warehouseId,
-      supplierId: supplierId ? new Types.ObjectId(supplierId) : undefined,
-      createdBy: new Types.ObjectId(req.user.id),
-      items: normalizedItems,
-    });
+    try {
+      const receipt = await createStockReceipt({
+        warehouseId: req.body?.warehouseId,
+        supplierId: req.body?.supplierId,
+        items: req.body?.items,
+        createdBy: req.user.id,
+      });
 
-    for (const entry of normalizedItems) {
-      const item = await InventoryItemModel.findOneAndUpdate(
-        { warehouseId, itemType: entry.itemType, itemId: entry.itemId },
-        {
-          $set: { unitCost: entry.unitCost },
-          $inc: { quantity: entry.quantity },
-        },
-        { new: true, upsert: true, setDefaultsOnInsert: true }
-      );
-
-      if (item) {
-        await recalculateAverageCostForItem(entry.itemType, entry.itemId);
+      res.status(201).json({ data: receipt, error: null });
+    } catch (error) {
+      if (error instanceof InventoryReceiptError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
       }
-    }
 
-    res.status(201).json({ data: receipt, error: null });
+      throw error;
+    }
   })
 );
 
