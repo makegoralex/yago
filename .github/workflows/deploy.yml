@@ -32,18 +32,36 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: Deploy via SFTP
-        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
-        with:
-          server: ${{ secrets.SERVER_IP }}
-          port: 22
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASS }}
-          local_path: "./"
-          remote_path: "/root/yago"
-          delete_remote_files: false
-
-      - name: Restart PM2 on server
+      - name: Deploy to VPS via SSH
         run: |
           sudo apt-get install -y sshpass
-          sshpass -p "${{ secrets.SERVER_PASS }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd /root/yago && npm install && npm run build && cd frontend && npm install && npm run build && cd .. && (pm2 describe yago >/dev/null 2>&1 && pm2 restart yago || pm2 start dist/index.js --name yago) && pm2 save"
+          echo "Connecting to server and updating code..."
+          sshpass -p "${{ secrets.SERVER_PASS }}" ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "
+            set -e
+            cd /root/yago || exit 1
+            echo 'Pulling latest changes...'
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo 'Installing backend dependencies...'
+            npm install --omit=dev
+
+            echo 'Building backend...'
+            npm run build
+
+            echo 'Installing frontend dependencies...'
+            cd frontend
+            npm install --omit=dev
+            npm run build
+            cd ..
+
+            echo 'Restarting PM2...'
+            if pm2 describe yago >/dev/null 2>&1; then
+              pm2 restart yago
+            else
+              pm2 start dist/index.js --name yago
+            fi
+            pm2 save
+
+            echo '✅ Deployment completed successfully.'
+          "
