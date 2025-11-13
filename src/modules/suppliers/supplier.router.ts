@@ -1,4 +1,4 @@
-import { Router, type RequestHandler } from 'express';
+import { Router, type Request, type RequestHandler, type Response } from 'express';
 import { isValidObjectId } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
@@ -10,18 +10,14 @@ router.use(authMiddleware);
 router.use(requireRole('admin'));
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
-  return (async (req, res, next) => {
-    try {
-      await handler(req, res, next);
-    } catch (error) {
-      next(error);
-    }
-  }) as RequestHandler;
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch(next);
+  };
 };
 
 router.get(
   '/',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (_req: Request, res: Response) => {
     const suppliers = await SupplierModel.find().sort({ name: 1 });
 
     res.json({ data: suppliers, error: null });
@@ -30,7 +26,7 @@ router.get(
 
 router.post(
   '/',
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { name, contactName, phone, email, address, notes } = req.body;
 
     if (!name?.trim()) {
@@ -55,7 +51,7 @@ router.post(
 
 router.put(
   '/:id',
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!isValidObjectId(id)) {
@@ -111,7 +107,7 @@ router.put(
 
 router.delete(
   '/:id',
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!isValidObjectId(id)) {

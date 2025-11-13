@@ -1,4 +1,4 @@
-import { Router, type RequestHandler } from 'express';
+import { Router, type Request, type RequestHandler, type Response } from 'express';
 
 import { authMiddleware, requireRole } from '../middleware/auth';
 import {
@@ -12,13 +12,9 @@ const router = Router();
 const ADMIN_ROLE = ['admin'];
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
-  return (async (req, res, next) => {
-    try {
-      await handler(req, res, next);
-    } catch (error) {
-      next(error);
-    }
-  }) as RequestHandler;
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch(next);
+  };
 };
 
 const parseDateOnly = (value: unknown): Date | undefined => {
@@ -52,7 +48,7 @@ router.use(requireRole(ADMIN_ROLE));
 
 router.get(
   '/summary',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (_req: Request, res: Response) => {
     const summary = await getSummaryReport();
 
     res.json({ data: summary, error: null });
@@ -61,7 +57,7 @@ router.get(
 
 router.get(
   '/daily',
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const fromParam = parseDateOnly(req.query.from);
     const toParam = parseDateOnly(req.query.to);
 
@@ -92,7 +88,7 @@ router.get(
 
 router.get(
   '/top-products',
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const limit = parseLimit(req.query.limit);
 
     if (req.query.limit !== undefined && !limit) {
@@ -108,7 +104,7 @@ router.get(
 
 router.get(
   '/top-customers',
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const limit = parseLimit(req.query.limit);
 
     if (req.query.limit !== undefined && !limit) {

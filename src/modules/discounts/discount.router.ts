@@ -245,7 +245,7 @@ const handleGetAvailableDiscounts = async (_req: RouterRequest, res: RouterRespo
 };
 
 const handleListDiscounts = async (_req: RouterRequest, res: RouterResponse): Promise<void> => {
-  const discounts = await DiscountModel.find().sort({ createdAt: -1 }).lean<DiscountRecord[]>();
+  const discounts = (await DiscountModel.find().sort({ createdAt: -1 }).lean()) as DiscountRecord[];
   const mapped = await mapDiscountResponse(discounts);
   res.json({ data: mapped, error: null });
 };
@@ -354,7 +354,7 @@ const handleCreateDiscount = async (req: RouterRequest, res: RouterResponse): Pr
     isActive: parsed.isActive,
   });
 
-  const discount = await DiscountModel.findById(created._id).lean<DiscountRecord>();
+  const discount = (await DiscountModel.findById(created._id).lean()) as DiscountRecord | null;
   if (!discount) {
     throw new Error('Не удалось загрузить созданную скидку');
   }
@@ -392,7 +392,9 @@ const handleUpdateDiscount = async (req: RouterRequest, res: RouterResponse): Pr
     update.autoApplyEnd = undefined;
   }
 
-  const discount = await DiscountModel.findByIdAndUpdate(id, update, { new: true }).lean<DiscountRecord>();
+  const discount = (await DiscountModel.findByIdAndUpdate(id, update, { new: true }).lean()) as
+    | DiscountRecord
+    | null;
   if (!discount) {
     res.status(404).json({ data: null, error: 'Скидка не найдена' });
     return;

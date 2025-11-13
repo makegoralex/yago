@@ -34,7 +34,7 @@ export const authMiddleware = async (
     }
 
     req.user = {
-      id: user.id,
+      id: typeof user.id === 'string' && user.id ? user.id : String(user._id),
       email: user.email,
       name: user.name,
       role: user.role,

@@ -117,7 +117,11 @@ export const getDailyReport = async (
     matchStage.createdAt = createdAtMatch;
   }
 
-  const daily = await OrderModel.aggregate<{
+  const daily: Array<{
+    _id: string;
+    revenue: number;
+    orders: number;
+  }> = await OrderModel.aggregate<{
     _id: string;
     revenue: number;
     orders: number;
@@ -150,7 +154,12 @@ export const getTopProducts = async (
 ): Promise<TopProductEntry[]> => {
   const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
 
-  const products = await OrderModel.aggregate<{
+  const products: Array<{
+    _id: Types.ObjectId | null;
+    name: string;
+    totalQuantity: number;
+    totalRevenue: number;
+  }> = await OrderModel.aggregate<{
     _id: Types.ObjectId | null;
     name: string;
     totalQuantity: number;
@@ -183,7 +192,14 @@ export const getTopCustomers = async (
 ): Promise<TopCustomerEntry[]> => {
   const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
 
-  const customers = await CustomerModel.aggregate<{
+  const customers: Array<{
+    _id: Types.ObjectId;
+    name: string;
+    phone: string;
+    email?: string;
+    totalSpent: number;
+    points: number;
+  }> = await CustomerModel.aggregate<{
     _id: Types.ObjectId;
     name: string;
     phone: string;
