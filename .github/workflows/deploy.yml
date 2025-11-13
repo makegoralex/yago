@@ -10,11 +10,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       # ------------------------------------
-      # FRONTEND: Install + Build (on GitHub)
+      # INSTALL FRONTEND + BUILD (on GitHub)
       # ------------------------------------
       - name: Install frontend deps
         working-directory: ./frontend
@@ -25,39 +25,39 @@ jobs:
         run: npm run build
 
       # ------------------------------------
-      # UPLOAD FRONTEND DIST ONLY
+      # Install sshpass + rsync
       # ------------------------------------
-      - name: Upload frontend dist to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          source: "./frontend/dist"
-          target: "${{ secrets.APP_DIR }}/frontend"
-          overwrite: true
-          strip_components: 0
+      - name: Install sshpass and rsync
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass rsync
 
       # ------------------------------------
-      # UPLOAD BACKEND (src, dist, package.json, etc)
+      # UPLOAD FRONTEND DIST VIA RSYNC
       # ------------------------------------
-      - name: Upload backend files
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          source: "./"
-          target: "${{ secrets.APP_DIR }}/"
-          overwrite: true
-          rm: false
+      - name: Upload frontend dist (rsync)
+        run: |
+          sshpass -p "${{ secrets.SSH_PASSWORD }}" \
+          rsync -avz --delete \
+          -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.SSH_PORT }}" \
+          ./frontend/dist/ \
+          ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.APP_DIR }}/frontend/dist/
+
+      # ------------------------------------
+      # UPLOAD BACKEND via RSYNC
+      # ------------------------------------
+      - name: Upload backend files (rsync)
+        run: |
+          sshpass -p "${{ secrets.SSH_PASSWORD }}" \
+          rsync -avz --delete \
+          -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.SSH_PORT }}" \
+          ./src ./package.json ./package-lock.json ./tsconfig.json \
+          ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.APP_DIR }}/
 
       # ------------------------------------
       # RUN BACKEND BUILD + PM2 RELOAD
       # ------------------------------------
-      - name: Execute commands on server
+      - name: Build backend + PM2
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -66,12 +66,6 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd ${{ secrets.APP_DIR }}
-
-            echo "=== Install backend deps ==="
-            npm install || true
-
-            echo "=== Build backend ==="
+            npm install --legacy-peer-deps || true
             npm run build || true
-
-            echo "=== PM2 reload ==="
             pm2 reload ${{ secrets.PM2_APP_NAME }} --update-env || pm2 start dist/app.js --name ${{ secrets.PM2_APP_NAME }}
