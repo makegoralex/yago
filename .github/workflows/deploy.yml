@@ -13,18 +13,50 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Copy files to server (password auth)
+      # -------------------------------
+      # Build FRONTEND in GitHub Actions
+      # -------------------------------
+      - name: Install frontend deps
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+
+      # -------------------------------
+      # Upload frontend DIST only
+      # -------------------------------
+      - name: Upload frontend dist to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           port: ${{ secrets.SSH_PORT }}
           password: ${{ secrets.SSH_PASSWORD }}
-          source: "."
-          target: ${{ secrets.APP_DIR }}
+          source: "./frontend/dist/*"
+          target: "${{ secrets.APP_DIR }}/frontend/dist"
           overwrite: true
 
-      - name: Execute commands on server (password auth)
+      # -------------------------------
+      # Upload backend code
+      # -------------------------------
+      - name: Upload backend files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          source: "./"
+          target: "${{ secrets.APP_DIR }}/"
+          overwrite: true
+          rm: false
+
+      # -------------------------------
+      # RUN BACKEND BUILD + PM2
+      # -------------------------------
+      - name: Execute commands on server
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -33,13 +65,7 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd ${{ secrets.APP_DIR }}
-
             npm install || true
             npm run build || true
-
-            cd frontend
-            npm install || true
-            npm run build || true
-            cd ..
 
             pm2 reload ${{ secrets.PM2_APP_NAME }} --update-env || pm2 start dist/app.js --name ${{ secrets.PM2_APP_NAME }}
