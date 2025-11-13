@@ -1,0 +1,13 @@
+name: Test Key Format
+on: workflow_dispatch
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Save key to file
+        run: |
+          echo "${{ secrets.SSH_KEY }}" > key.txt
+          sed -n '1,10p' key.txt
+          echo "--- LINE COUNT ---"
+          wc -l key.txt
