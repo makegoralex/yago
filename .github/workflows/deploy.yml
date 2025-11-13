@@ -13,28 +13,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # (опционально) Собрать фронтенд локально и отправить уже собранный код
-      # Если хочешь собирать всё на сервере — этот шаг можно удалить.
-      - name: Build frontend
-        working-directory: ./frontend
-        run: |
-          npm ci
-          npm run build
-
-      - name: Copy files to server via SCP
+      - name: Upload project to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          # что отправляем
-          source: |
-            .
-          # куда на сервере
+          source: .
           target: ${{ secrets.APP_DIR }}
           overwrite: true
-          rm: false
 
       - name: Run deploy commands on server
         uses: appleboy/ssh-action@v0.1.10
@@ -45,14 +33,18 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             cd ${{ secrets.APP_DIR }}
-            # backend
+
+            echo "=== Backend install ==="
             npm install
-            npm run build || echo "no backend build script, skipping"
-            # frontend (если собираем уже на сервере — раскомментируй)
+
+            echo "=== Backend build ==="
+            npm run build || echo "No backend build script"
+
+            echo "=== Frontend build ==="
             cd frontend
             npm install
             npm run build
             cd ..
-            # перезапуск pm2
-            pm2 list || pm2 install pm2 -g
+
+            echo "=== Restart PM2 ==="
             pm2 reload ${{ secrets.PM2_APP_NAME }} --update-env || pm2 start dist/app.js --name ${{ secrets.PM2_APP_NAME }}
