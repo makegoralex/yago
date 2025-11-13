@@ -16,6 +16,8 @@ export type PaymentMethod = 'cash' | 'card';
 export type OrderItem = {
   productId: string;
   name: string;
+  categoryId?: string;
+  categoryName?: string;
   qty: number;
   price: number;
   total: number;
@@ -29,17 +31,49 @@ export type ActiveOrder = {
   updatedAt: string;
 };
 
+export type DiscountApplication = 'manual' | 'auto' | 'selected';
+
+export type AppliedDiscount = {
+  discountId?: string;
+  name: string;
+  type: 'fixed' | 'percentage';
+  scope: 'order' | 'category' | 'product';
+  value: number;
+  amount: number;
+  targetId?: string;
+  targetName?: string;
+  application: DiscountApplication;
+};
+
+export type DiscountSummary = {
+  _id: string;
+  name: string;
+  description?: string;
+  type: 'fixed' | 'percentage';
+  scope: 'order' | 'category' | 'product';
+  value: number;
+  targetName?: string;
+  autoApply: boolean;
+  autoApplyDays?: number[];
+  autoApplyStart?: string;
+  autoApplyEnd?: string;
+};
+
 type OrderState = {
   orderId: string | null;
   items: OrderItem[];
   subtotal: number;
   discount: number;
+  manualDiscount: number;
   total: number;
   status: 'draft' | 'paid' | 'completed' | null;
   customerId: string | null;
   customer: CustomerSummary | null;
   loading: boolean;
   activeOrders: ActiveOrder[];
+  appliedDiscounts: AppliedDiscount[];
+  availableDiscounts: DiscountSummary[];
+  selectedDiscountIds: string[];
   createDraft: () => Promise<void>;
   addProduct: (product: Product) => Promise<void>;
   updateItemQty: (productId: string, qty: number) => Promise<void>;
@@ -49,11 +83,13 @@ type OrderState = {
   completeOrder: () => Promise<void>;
   cancelOrder: () => Promise<void>;
   reset: () => void;
-  syncItems: (items: OrderItem[], discount?: number, customerOverride?: string | null) => Promise<void>;
+  syncItems: (items: OrderItem[], options?: { manualDiscount?: number; customerId?: string | null; discountIds?: string[] }) => Promise<void>;
   fetchActiveOrders: () => Promise<void>;
   loadOrder: (orderId: string) => Promise<void>;
   redeemPoints: (points: number) => Promise<void>;
   clearDiscount: () => Promise<void>;
+  fetchAvailableDiscounts: () => Promise<void>;
+  toggleDiscount: (discountId: string) => Promise<void>;
 };
 
 const DEFAULT_CONTEXT = {
@@ -76,11 +112,191 @@ const mapOrderItems = (items: any[] | undefined): OrderItem[] => {
         : item.productId ?? item._id ?? ''
     ),
     name: item.name,
+    categoryId: item.categoryId
+      ? String(
+          typeof item.categoryId === 'object' && item.categoryId
+            ? item.categoryId._id ?? item.categoryId
+            : item.categoryId
+        )
+      : undefined,
+    categoryName: typeof item.categoryName === 'string' ? item.categoryName : undefined,
     price: item.price,
     qty: item.qty,
     total: item.total,
     modifiersApplied: item.modifiersApplied,
   }));
+};
+
+const mapAppliedDiscounts = (discounts: any): AppliedDiscount[] => {
+  if (!Array.isArray(discounts)) {
+    return [];
+  }
+
+  const allowedTypes = new Set(['fixed', 'percentage']);
+  const allowedScopes = new Set(['order', 'category', 'product']);
+  const allowedApplications = new Set<DiscountApplication>(['manual', 'auto', 'selected']);
+
+  const result: AppliedDiscount[] = [];
+
+  for (const discount of discounts) {
+    if (!discount || typeof discount !== 'object') {
+      continue;
+    }
+
+    const type =
+      typeof discount.type === 'string' && allowedTypes.has(discount.type)
+        ? (discount.type as AppliedDiscount['type'])
+        : null;
+    const scope =
+      typeof discount.scope === 'string' && allowedScopes.has(discount.scope)
+        ? (discount.scope as AppliedDiscount['scope'])
+        : null;
+    const application =
+      typeof discount.application === 'string' && allowedApplications.has(discount.application)
+        ? (discount.application as DiscountApplication)
+        : null;
+
+    if (!type || !scope || !application) {
+      continue;
+    }
+
+    const amount = typeof discount.amount === 'number' ? discount.amount : 0;
+    const value = typeof discount.value === 'number' ? discount.value : 0;
+
+    const discountIdRaw = discount.discountId ?? discount._id;
+    const discountId = discountIdRaw
+      ? String(
+          typeof discountIdRaw === 'object' && discountIdRaw ? discountIdRaw._id ?? discountIdRaw : discountIdRaw
+        )
+      : undefined;
+
+    const targetIdRaw = discount.targetId;
+    const targetId = targetIdRaw
+      ? String(typeof targetIdRaw === 'object' && targetIdRaw ? targetIdRaw._id ?? targetIdRaw : targetIdRaw)
+      : undefined;
+
+    const mapped: AppliedDiscount = {
+      name: typeof discount.name === 'string' ? discount.name : 'Скидка',
+      type,
+      scope,
+      value,
+      amount,
+      application,
+    };
+
+    if (discountId) {
+      mapped.discountId = discountId;
+    }
+
+    if (targetId) {
+      mapped.targetId = targetId;
+    }
+
+    if (typeof discount.targetName === 'string') {
+      mapped.targetName = discount.targetName;
+    }
+
+    result.push(mapped);
+  }
+
+  return result;
+};
+
+const extractSelectedDiscountIds = (discounts: AppliedDiscount[]): string[] => {
+  return discounts
+    .filter((discount) => discount.application === 'selected' && discount.discountId)
+    .map((discount) => discount.discountId!)
+    .filter((value, index, array) => array.indexOf(value) === index);
+};
+
+const mapDiscountSummaries = (discounts: any): DiscountSummary[] => {
+  if (!Array.isArray(discounts)) {
+    return [];
+  }
+
+  const allowedTypes = new Set(['fixed', 'percentage']);
+  const allowedScopes = new Set(['order', 'category', 'product']);
+
+  const result: DiscountSummary[] = [];
+
+  for (const discount of discounts) {
+    if (!discount || typeof discount !== 'object') {
+      continue;
+    }
+
+    const type =
+      typeof discount.type === 'string' && allowedTypes.has(discount.type)
+        ? (discount.type as DiscountSummary['type'])
+        : null;
+    const scope =
+      typeof discount.scope === 'string' && allowedScopes.has(discount.scope)
+        ? (discount.scope as DiscountSummary['scope'])
+        : null;
+
+    if (!type || !scope) {
+      continue;
+    }
+
+    const value = typeof discount.value === 'number' ? discount.value : 0;
+    const autoApply = Boolean(discount.autoApply);
+
+    const autoApplyDays = Array.isArray(discount.autoApplyDays)
+      ? discount.autoApplyDays
+          .map((day: unknown) => Number(day))
+          .filter((day: number) => Number.isInteger(day) && day >= 0 && day <= 6)
+      : undefined;
+
+    const normalizeTime = (time: unknown): string | undefined => {
+      if (typeof time !== 'string') {
+        return undefined;
+      }
+      return time;
+    };
+
+    const idRaw = discount._id ?? discount.id;
+    const id = idRaw
+      ? String(typeof idRaw === 'object' && idRaw ? idRaw._id ?? idRaw : idRaw)
+      : undefined;
+
+    if (!id) {
+      continue;
+    }
+
+    const mapped: DiscountSummary = {
+      _id: id,
+      name: typeof discount.name === 'string' ? discount.name : 'Скидка',
+      type,
+      scope,
+      value,
+      autoApply,
+    };
+
+    if (typeof discount.description === 'string') {
+      mapped.description = discount.description;
+    }
+
+    if (typeof discount.targetName === 'string') {
+      mapped.targetName = discount.targetName;
+    }
+
+    if (autoApplyDays && autoApplyDays.length) {
+      mapped.autoApplyDays = autoApplyDays;
+    }
+
+    const autoApplyStart = normalizeTime(discount.autoApplyStart);
+    if (autoApplyStart) {
+      mapped.autoApplyStart = autoApplyStart;
+    }
+
+    const autoApplyEnd = normalizeTime(discount.autoApplyEnd);
+    if (autoApplyEnd) {
+      mapped.autoApplyEnd = autoApplyEnd;
+    }
+
+    result.push(mapped);
+  }
+
+  return result;
 };
 
 const parseStatus = (status: unknown): OrderState['status'] => {
@@ -121,24 +337,29 @@ const buildOrderState = (order: any): Partial<OrderState> => {
       items: [],
       subtotal: 0,
       discount: 0,
+      manualDiscount: 0,
       total: 0,
       status: null,
       customerId: null,
       customer: null,
+      appliedDiscounts: [],
     };
   }
 
   const customer = mapCustomer(order.customerId);
+  const appliedDiscounts = mapAppliedDiscounts(order.appliedDiscounts);
 
   return {
     orderId: order._id ? String(order._id) : null,
     items: mapOrderItems(order.items),
     subtotal: typeof order.subtotal === 'number' ? order.subtotal : 0,
     discount: typeof order.discount === 'number' ? order.discount : 0,
+    manualDiscount: typeof order.manualDiscount === 'number' ? order.manualDiscount : 0,
     total: typeof order.total === 'number' ? order.total : 0,
     status: parseStatus(order.status),
     customerId: customer?._id ?? null,
     customer,
+    appliedDiscounts,
   };
 };
 
@@ -147,12 +368,16 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   items: [],
   subtotal: 0,
   discount: 0,
+  manualDiscount: 0,
   total: 0,
   status: null,
   customerId: null,
   customer: null,
   loading: false,
   activeOrders: [],
+  appliedDiscounts: [],
+  availableDiscounts: [],
+  selectedDiscountIds: [],
   async createDraft() {
     const state = get();
     if (state.orderId) return;
@@ -167,7 +392,13 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       const response = await api.post('/api/orders/start', {
         ...DEFAULT_CONTEXT,
       });
-      set(buildOrderState(response.data.data));
+      const nextState = buildOrderState(response.data.data);
+      const selectedDiscountIds = extractSelectedDiscountIds(nextState.appliedDiscounts ?? []);
+      set((prev) => ({
+        ...prev,
+        ...nextState,
+        selectedDiscountIds,
+      }));
       void get().fetchActiveOrders();
     } finally {
       set({ loading: false });
@@ -202,7 +433,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
           },
         ];
 
-    await get().syncItems(updatedItems, get().discount);
+    await get().syncItems(updatedItems);
   },
   async updateItemQty(productId, qty) {
     const updatedItems = get()
@@ -213,15 +444,14 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       )
       .filter((item) => item.qty > 0);
 
-    await get().syncItems(updatedItems, get().discount);
+    await get().syncItems(updatedItems);
   },
   async removeItem(productId) {
     const updatedItems = get().items.filter((item) => item.productId !== productId);
-    await get().syncItems(updatedItems, get().discount);
+    await get().syncItems(updatedItems);
   },
   async attachCustomer(customer) {
     const customerId = customer?._id ?? null;
-    const discount = customer ? get().discount : 0;
 
     set({
       customerId,
@@ -230,12 +460,17 @@ export const useOrderStore = create<OrderState>((set, get) => ({
 
     if (!get().orderId) {
       if (!customer) {
-        set({ discount: 0 });
+        set({ discount: 0, manualDiscount: 0, appliedDiscounts: [], selectedDiscountIds: [] });
       }
       return;
     }
 
-    await get().syncItems(get().items, discount, customerId);
+    const manualOverride = customer ? get().manualDiscount : 0;
+    if (!customer) {
+      set({ manualDiscount: 0 });
+    }
+
+    await get().syncItems(get().items, { manualDiscount: manualOverride, customerId });
   },
   async payOrder({ method, amountTendered, change }) {
     const { orderId, total } = get();
@@ -252,7 +487,13 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         amount: amountTendered,
         change: normalizedChange,
       });
-      set(buildOrderState(response.data.data));
+      const nextState = buildOrderState(response.data.data);
+      const selectedDiscountIds = extractSelectedDiscountIds(nextState.appliedDiscounts ?? []);
+      set((prev) => ({
+        ...prev,
+        ...nextState,
+        selectedDiscountIds,
+      }));
       void get().fetchActiveOrders();
     } finally {
       set({ loading: false });
@@ -276,7 +517,6 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   async cancelOrder() {
     const { orderId } = get();
     if (!orderId) {
-      await get().createDraft();
       return;
     }
 
@@ -285,7 +525,6 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       await api.delete(`/api/orders/${orderId}`);
       get().reset();
       void get().fetchActiveOrders();
-      await get().createDraft();
     } finally {
       set({ loading: false });
     }
@@ -296,23 +535,28 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       items: [],
       subtotal: 0,
       discount: 0,
+      manualDiscount: 0,
       total: 0,
       status: null,
       customerId: null,
       customer: null,
       loading: false,
+      appliedDiscounts: [],
+      selectedDiscountIds: [],
     });
   },
-  async syncItems(updatedItems: OrderItem[], discountValue, customerOverride) {
+  async syncItems(updatedItems: OrderItem[], options: { manualDiscount?: number; customerId?: string | null; discountIds?: string[] } = {}) {
     const { orderId } = get();
     if (!orderId) return;
 
-    const effectiveDiscount =
-      typeof discountValue === 'number' && !Number.isNaN(discountValue)
-        ? discountValue
-        : get().discount;
-    const customerId =
-      customerOverride !== undefined ? customerOverride : get().customerId;
+    const manualDiscountOverride =
+      options && typeof options.manualDiscount === 'number' && !Number.isNaN(options.manualDiscount)
+        ? options.manualDiscount
+        : get().manualDiscount;
+    const customerId = options && options.customerId !== undefined ? options.customerId : get().customerId;
+    const discountIds = options && Array.isArray(options.discountIds)
+      ? options.discountIds
+      : get().selectedDiscountIds;
 
     const payload = {
       items: updatedItems.map((item) => ({
@@ -320,14 +564,21 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         qty: item.qty,
         modifiersApplied: item.modifiersApplied,
       })),
-      discount: effectiveDiscount,
+      manualDiscount: manualDiscountOverride,
+      discountIds,
       customerId,
     };
 
     set({ loading: true });
     try {
       const response = await api.post(`/api/orders/${orderId}/items`, payload);
-      set(buildOrderState(response.data.data));
+      const nextState = buildOrderState(response.data.data);
+      const selectedDiscountIds = extractSelectedDiscountIds(nextState.appliedDiscounts ?? []);
+      set((prev) => ({
+        ...prev,
+        ...nextState,
+        selectedDiscountIds,
+      }));
       void get().fetchActiveOrders();
     } finally {
       set({ loading: false });
@@ -353,13 +604,19 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set({ loading: true });
     try {
       const response = await api.get(`/api/orders/${orderId}`);
-      set(buildOrderState(response.data.data));
+      const nextState = buildOrderState(response.data.data);
+      const selectedDiscountIds = extractSelectedDiscountIds(nextState.appliedDiscounts ?? []);
+      set((prev) => ({
+        ...prev,
+        ...nextState,
+        selectedDiscountIds,
+      }));
     } finally {
       set({ loading: false });
     }
   },
   async redeemPoints(points) {
-    const { customer, customerId, orderId, subtotal, discount } = get();
+    const { customer, customerId, orderId, subtotal, discount, manualDiscount } = get();
 
     if (!orderId || !customerId || !customer) {
       throw new Error('Нет клиента для списания баллов');
@@ -386,27 +643,55 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         points: customer.points - points,
       };
 
-      set({ customer: updatedCustomer });
+      const newManualDiscount = roundCurrency(manualDiscount + points);
 
-      const newDiscount = roundCurrency(discount + points);
-      await get().syncItems(get().items, newDiscount, customerId);
+      set({ customer: updatedCustomer, manualDiscount: newManualDiscount });
+
+      await get().syncItems(get().items, { manualDiscount: newManualDiscount, customerId });
     } finally {
       set({ loading: false });
     }
   },
   async clearDiscount() {
-    const { orderId, discount } = get();
+    const { orderId } = get();
 
     if (!orderId) {
-      set({ discount: 0 });
+      set({ discount: 0, manualDiscount: 0, selectedDiscountIds: [], appliedDiscounts: [] });
       return;
     }
 
-    if (discount <= 0) {
-      set({ discount: 0 });
+    set({ manualDiscount: 0, selectedDiscountIds: [] });
+    await get().syncItems(get().items, { manualDiscount: 0, discountIds: [] });
+  },
+  async fetchAvailableDiscounts() {
+    try {
+      const response = await api.get('/api/discounts/available');
+      const discounts = mapDiscountSummaries(response.data?.data);
+      set({ availableDiscounts: discounts });
+    } catch (error) {
+      console.error('Не удалось загрузить скидки', error);
+      set({ availableDiscounts: [] });
+    }
+  },
+  async toggleDiscount(discountId) {
+    if (!discountId) {
       return;
     }
 
-    await get().syncItems(get().items, 0);
+    const state = get();
+    const current = state.selectedDiscountIds;
+    const hasDiscount = current.includes(discountId);
+    const nextSelection = hasDiscount
+      ? current.filter((id) => id !== discountId)
+      : [...current, discountId];
+
+    set({ selectedDiscountIds: nextSelection });
+
+    try {
+      await state.syncItems(state.items, { discountIds: nextSelection });
+    } catch (error) {
+      set({ selectedDiscountIds: current });
+      throw error;
+    }
   },
 }));
