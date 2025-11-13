@@ -27,16 +27,18 @@ jobs:
       # -------------------------------
       # Upload frontend DIST only
       # -------------------------------
-      - name: Upload frontend dist to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          source: "./frontend/dist/*"
-          target: "${{ secrets.APP_DIR }}/frontend/dist"
-          overwrite: true
+     - name: Upload frontend dist to server
+  uses: appleboy/scp-action@v0.1.7
+  with:
+    host: ${{ secrets.SSH_HOST }}
+    username: ${{ secrets.SSH_USER }}
+    port: ${{ secrets.SSH_PORT }}
+    password: ${{ secrets.SSH_PASSWORD }}
+    source: "./frontend/dist"
+    target: "${{ secrets.APP_DIR }}/frontend"
+    overwrite: true
+    strip_components: 0
+
 
       # -------------------------------
       # Upload backend code
