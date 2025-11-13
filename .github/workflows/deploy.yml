@@ -45,14 +45,15 @@ jobs:
 
           REMOTE="${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
           REMOTE_DIR="${{ secrets.APP_DIR }}/frontend/dist"
+          REMOTE_DIR_ESCAPED=$(printf '%q' "$REMOTE_DIR")
           SSH_CMD="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${{ secrets.SSH_PORT }}"
 
           sshpass -p "${{ secrets.SSH_PASSWORD }}" \
           rsync -avz --delete \
           -e "$SSH_CMD" \
-          --rsync-path="mkdir -p \"${REMOTE_DIR}\" && rsync" \
+          --rsync-path="mkdir -p ${REMOTE_DIR_ESCAPED} && rsync" \
           ./frontend/dist/ \
-          "$REMOTE:\"${REMOTE_DIR}/\""
+          "$REMOTE:${REMOTE_DIR_ESCAPED}/"
 
       # ------------------------------------
       # UPLOAD BACKEND via RSYNC
@@ -67,14 +68,15 @@ jobs:
 
           REMOTE="${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
           REMOTE_DIR="${{ secrets.APP_DIR }}"
+          REMOTE_DIR_ESCAPED=$(printf '%q' "$REMOTE_DIR")
           SSH_CMD="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${{ secrets.SSH_PORT }}"
 
           sshpass -p "${{ secrets.SSH_PASSWORD }}" \
           rsync -avz --delete \
           -e "$SSH_CMD" \
-          --rsync-path="mkdir -p \"${REMOTE_DIR}\" && rsync" \
+          --rsync-path="mkdir -p ${REMOTE_DIR_ESCAPED} && rsync" \
           "${FILES[@]}" \
-          "$REMOTE:\"${REMOTE_DIR}/\""
+          "$REMOTE:${REMOTE_DIR_ESCAPED}/"
 
       # ------------------------------------
       # RUN BACKEND BUILD + PM2 RELOAD
