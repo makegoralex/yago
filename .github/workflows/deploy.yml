@@ -48,10 +48,15 @@ jobs:
       # ------------------------------------
       - name: Upload backend files (rsync)
         run: |
+          set -euo pipefail
+          FILES=(./src ./package.json ./tsconfig.json)
+          if [ -f ./package-lock.json ]; then
+            FILES+=(./package-lock.json)
+          fi
           sshpass -p "${{ secrets.SSH_PASSWORD }}" \
           rsync -avz --delete \
           -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.SSH_PORT }}" \
-          ./src ./package.json ./package-lock.json ./tsconfig.json \
+          "${FILES[@]}" \
           ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.APP_DIR }}/
 
       # ------------------------------------
