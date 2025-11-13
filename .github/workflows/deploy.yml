@@ -20,11 +20,41 @@ jobs:
           port: 22
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASS }}
+          ssh_private_key: ${{ secrets.SERVER_SSH_KEY }}
+          ssh_passphrase: ${{ secrets.SERVER_SSH_PASSPHRASE }}
           local_path: "./"
           remote_path: "/root/yago"
           delete_remote_files: false
 
       - name: Restart PM2 on server
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PASS: ${{ secrets.SERVER_PASS }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_SSH_PASSPHRASE: ${{ secrets.SERVER_SSH_PASSPHRASE }}
         run: |
-          sudo apt-get install -y sshpass
-          sshpass -p "${{ secrets.SERVER_PASS }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd /root/yago && pm2 restart yago || pm2 start server.js --name yago && pm2 save"
+          REMOTE_CMD='cd /root/yago && npm install && npm run build && cd frontend && npm install && npm run build && cd .. && (pm2 describe yago >/dev/null 2>&1 && pm2 restart yago || pm2 start dist/index.js --name yago) && pm2 save'
+
+          if [ -n "$SERVER_PASS" ]; then
+            sudo apt-get update
+            sudo apt-get install -y sshpass
+            sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no "$SERVER_USER@$SERVER_IP" "$REMOTE_CMD"
+          elif [ -n "$SERVER_SSH_KEY" ]; then
+            KEY_PATH=$(mktemp)
+            echo "$SERVER_SSH_KEY" > "$KEY_PATH"
+            chmod 600 "$KEY_PATH"
+
+            if [ -n "$SERVER_SSH_PASSPHRASE" ]; then
+              sudo apt-get update
+              sudo apt-get install -y sshpass
+              sshpass -p "$SERVER_SSH_PASSPHRASE" ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=publickey -o PubkeyAuthentication=yes -i "$KEY_PATH" "$SERVER_USER@$SERVER_IP" "$REMOTE_CMD"
+            else
+              ssh -o StrictHostKeyChecking=no -i "$KEY_PATH" "$SERVER_USER@$SERVER_IP" "$REMOTE_CMD"
+            fi
+
+            rm -f "$KEY_PATH"
+          else
+            echo "No SSH credentials provided (SERVER_PASS or SERVER_SSH_KEY)" >&2
+            exit 1
+          fi
