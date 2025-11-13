@@ -7,10 +7,26 @@ export type PaymentMethod = 'cash' | 'card';
 export interface OrderItem {
   productId: Types.ObjectId;
   name: string;
+  categoryId?: Types.ObjectId;
+  categoryName?: string;
   qty: number;
   price: number;
   modifiersApplied?: string[];
   total: number;
+}
+
+export type DiscountApplication = 'manual' | 'auto' | 'selected';
+
+export interface AppliedDiscount {
+  discountId?: Types.ObjectId;
+  name: string;
+  type: 'fixed' | 'percentage';
+  scope: 'order' | 'category' | 'product';
+  value: number;
+  amount: number;
+  targetId?: Types.ObjectId;
+  targetName?: string;
+  application: DiscountApplication;
 }
 
 export interface OrderPayment {
@@ -29,6 +45,8 @@ export interface Order {
   items: OrderItem[];
   subtotal: number;
   discount: number;
+  manualDiscount: number;
+  appliedDiscounts: AppliedDiscount[];
   total: number;
   payment?: OrderPayment;
   status: OrderStatus;
@@ -42,6 +60,8 @@ const orderItemSchema = new Schema<OrderItem>(
   {
     productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
     name: { type: String, required: true, trim: true },
+    categoryId: { type: Schema.Types.ObjectId, ref: 'Category', required: false },
+    categoryName: { type: String, required: false, trim: true },
     qty: { type: Number, required: true, min: 0 },
     price: { type: Number, required: true, min: 0 },
     modifiersApplied: {
@@ -50,6 +70,21 @@ const orderItemSchema = new Schema<OrderItem>(
       default: undefined,
     },
     total: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
+
+const appliedDiscountSchema = new Schema<AppliedDiscount>(
+  {
+    discountId: { type: Schema.Types.ObjectId, ref: 'Discount' },
+    name: { type: String, required: true, trim: true },
+    type: { type: String, enum: ['fixed', 'percentage'], required: true },
+    scope: { type: String, enum: ['order', 'category', 'product'], required: true },
+    value: { type: Number, required: true, min: 0 },
+    amount: { type: Number, required: true, min: 0 },
+    targetId: { type: Schema.Types.ObjectId, required: false },
+    targetName: { type: String, required: false, trim: true },
+    application: { type: String, enum: ['manual', 'auto', 'selected'], required: true },
   },
   { _id: false }
 );
@@ -78,6 +113,8 @@ const orderSchema = new Schema<OrderDocument>(
     items: { type: [orderItemSchema], default: [] },
     subtotal: { type: Number, required: true, min: 0, default: 0 },
     discount: { type: Number, required: true, min: 0, default: 0 },
+    manualDiscount: { type: Number, required: true, min: 0, default: 0 },
+    appliedDiscounts: { type: [appliedDiscountSchema], default: [] },
     total: { type: Number, required: true, min: 0, default: 0 },
     payment: { type: paymentSchema, required: false },
     status: {

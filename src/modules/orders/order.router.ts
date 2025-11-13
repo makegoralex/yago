@@ -2,7 +2,7 @@ import { Router, type RequestHandler } from 'express';
 import { isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
-import { ProductModel } from '../catalog/catalog.model';
+import { CategoryModel, ProductModel } from '../catalog/catalog.model';
 import { CustomerModel } from '../customers/customer.model';
 import { earnLoyaltyPoints } from '../loyalty/loyalty.service';
 import {
@@ -14,10 +14,11 @@ import {
 } from './order.model';
 import { WarehouseModel } from '../inventory/warehouse.model';
 import { adjustInventoryQuantity } from '../inventory/inventoryCost.service';
+import { calculateOrderTotals } from '../discounts/discount.service';
 
 const router = Router();
 
-const CASHIER_ROLES = ['admin', 'cashier'];
+const CASHIER_ROLES = ['admin', 'cashier', 'barista'];
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'card'];
 const ORDER_STATUSES: OrderStatus[] = ['draft', 'paid', 'completed'];
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['draft', 'paid'];
@@ -142,22 +143,11 @@ type ItemPayload = {
 
 type ItemsRequestPayload = {
   items: ItemPayload[];
-  discount?: number;
+  manualDiscount?: number;
+  discountIds?: string[];
   customerId?: string | null;
 };
-
-const normalizeDiscount = (discount?: number): number => {
-  if (discount === undefined) {
-    return 0;
-  }
-
-  if (typeof discount !== 'number' || Number.isNaN(discount) || discount < 0) {
-    throw new Error('Discount must be a positive number');
-  }
-
-  return roundCurrency(discount);
-};
-
+ 
 const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
   if (!Array.isArray(items)) {
     throw new Error('Items payload must be an array');
@@ -202,20 +192,41 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
   }
 
   const products = await ProductModel.find({ _id: { $in: [...uniqueIds] } })
-    .select('name price isActive')
+    .select('name price isActive categoryId')
     .lean();
 
   if (products.length !== uniqueIds.size) {
     throw new Error('One or more products could not be found');
   }
 
-  const productMap = new Map<string, { name: string; price: number; isActive?: boolean }>();
+  const productMap = new Map<
+    string,
+    { name: string; price: number; isActive?: boolean; categoryId?: Types.ObjectId | null }
+  >();
+  const categoryIds = new Set<string>();
   for (const product of products) {
+    const productCategoryId = product.categoryId ? new Types.ObjectId(product.categoryId) : null;
+    if (productCategoryId) {
+      categoryIds.add(productCategoryId.toString());
+    }
+
     productMap.set(product._id.toString(), {
       name: product.name,
       price: product.price,
       isActive: product.isActive,
+      categoryId: productCategoryId,
     });
+  }
+
+  let categoryMap: Map<string, string> = new Map();
+  if (categoryIds.size) {
+    const categories = await CategoryModel.find({
+      _id: { $in: Array.from(categoryIds, (id) => new Types.ObjectId(id)) },
+    })
+      .select('name')
+      .lean();
+
+    categoryMap = new Map(categories.map((category) => [category._id.toString(), category.name ?? '']));
   }
 
   return sanitizedItems
@@ -234,29 +245,20 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
       const total = roundCurrency(price * item.qty);
 
       const modifiers = item.modifiersApplied?.length ? item.modifiersApplied : undefined;
+      const categoryId = product.categoryId ?? undefined;
+      const categoryName = categoryId ? categoryMap.get(categoryId.toString()) : undefined;
 
       return {
         productId: new Types.ObjectId(item.productId),
         name: product.name,
+        categoryId: categoryId ?? undefined,
+        categoryName,
         qty: item.qty,
         price,
         modifiersApplied: modifiers,
         total,
       } satisfies OrderItem;
     });
-};
-
-const recalculateTotals = (items: OrderItem[], discount?: number): { subtotal: number; discount: number; total: number } => {
-  const subtotal = roundCurrency(items.reduce((acc, item) => acc + item.total, 0));
-  const normalizedDiscount = normalizeDiscount(discount);
-
-  if (normalizedDiscount > subtotal) {
-    throw new Error('Discount cannot exceed subtotal');
-  }
-
-  const total = roundCurrency(subtotal - normalizedDiscount);
-
-  return { subtotal, discount: normalizedDiscount, total };
 };
 
 const ensureDraftOrder = (order: OrderDocument): void => {
@@ -308,16 +310,37 @@ router.post(
       return;
     }
 
+    const normalizedOrgId = String(orgId).trim();
+    const normalizedLocationId = String(locationId).trim();
+    const normalizedRegisterId = String(registerId).trim();
+
+    const existingDraft = await OrderModel.findOne({
+      orgId: normalizedOrgId,
+      locationId: normalizedLocationId,
+      registerId: normalizedRegisterId,
+      cashierId: new Types.ObjectId(cashierId),
+      status: 'draft',
+    })
+      .sort({ updatedAt: -1 })
+      .populate('customerId', CUSTOMER_PROJECTION);
+
+    if (existingDraft) {
+      res.status(200).json({ data: existingDraft, error: null });
+      return;
+    }
+
     const order = await OrderModel.create({
-      orgId: String(orgId).trim(),
-      locationId: String(locationId).trim(),
-      registerId: String(registerId).trim(),
+      orgId: normalizedOrgId,
+      locationId: normalizedLocationId,
+      registerId: normalizedRegisterId,
       cashierId: new Types.ObjectId(cashierId),
       warehouseId: normalizedWarehouseId ?? undefined,
       customerId: normalizedCustomerId,
       items: [],
       subtotal: 0,
       discount: 0,
+      manualDiscount: 0,
+      appliedDiscounts: [],
       total: 0,
       status: 'draft',
     });
@@ -365,9 +388,13 @@ router.post(
       return;
     }
 
-    let totals: { subtotal: number; discount: number; total: number };
+    let calculation: Awaited<ReturnType<typeof calculateOrderTotals>>;
     try {
-      totals = recalculateTotals(items, payload.discount);
+      calculation = await calculateOrderTotals({
+        items,
+        selectedDiscountIds: payload.discountIds,
+        manualDiscount: payload.manualDiscount,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to calculate totals';
       res.status(400).json({ data: null, error: message });
@@ -399,9 +426,11 @@ router.post(
     }
 
     order.items = items;
-    order.subtotal = totals.subtotal;
-    order.discount = totals.discount;
-    order.total = totals.total;
+    order.subtotal = calculation.subtotal;
+    order.discount = calculation.totalDiscount;
+    order.manualDiscount = calculation.manualDiscount;
+    order.appliedDiscounts = calculation.appliedDiscounts;
+    order.total = calculation.total;
 
     await order.save();
 

@@ -14,6 +14,7 @@ import reportsRouter from './routes/reports';
 import adminManagementRouter from './routes/adminManagement';
 import suppliersRouter from './modules/suppliers/supplier.router';
 import inventoryRouter from './modules/inventory/inventory.router';
+import discountRouter from './modules/discounts/discount.router';
 import { appConfig } from './config/env';
 
 const app = express();
@@ -34,6 +35,7 @@ app.use('/api/catalog', catalogRouter);
 app.use('/api/orders', orderRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/loyalty', loyaltyRouter);
+app.use('/api/discounts', discountRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/suppliers', suppliersRouter);
 app.use('/api/inventory', inventoryRouter);
