@@ -13,9 +13,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # -------------------------------
-      # Build FRONTEND in GitHub Actions
-      # -------------------------------
+      # ------------------------------------
+      # FRONTEND: Install + Build (on GitHub)
+      # ------------------------------------
       - name: Install frontend deps
         working-directory: ./frontend
         run: npm install
@@ -24,25 +24,24 @@ jobs:
         working-directory: ./frontend
         run: npm run build
 
-      # -------------------------------
-      # Upload frontend DIST only
-      # -------------------------------
-     - name: Upload frontend dist to server
-  uses: appleboy/scp-action@v0.1.7
-  with:
-    host: ${{ secrets.SSH_HOST }}
-    username: ${{ secrets.SSH_USER }}
-    port: ${{ secrets.SSH_PORT }}
-    password: ${{ secrets.SSH_PASSWORD }}
-    source: "./frontend/dist"
-    target: "${{ secrets.APP_DIR }}/frontend"
-    overwrite: true
-    strip_components: 0
+      # ------------------------------------
+      # UPLOAD FRONTEND DIST ONLY
+      # ------------------------------------
+      - name: Upload frontend dist to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          source: "./frontend/dist"
+          target: "${{ secrets.APP_DIR }}/frontend"
+          overwrite: true
+          strip_components: 0
 
-
-      # -------------------------------
-      # Upload backend code
-      # -------------------------------
+      # ------------------------------------
+      # UPLOAD BACKEND (src, dist, package.json, etc)
+      # ------------------------------------
       - name: Upload backend files
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -55,9 +54,9 @@ jobs:
           overwrite: true
           rm: false
 
-      # -------------------------------
-      # RUN BACKEND BUILD + PM2
-      # -------------------------------
+      # ------------------------------------
+      # RUN BACKEND BUILD + PM2 RELOAD
+      # ------------------------------------
       - name: Execute commands on server
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -67,7 +66,12 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd ${{ secrets.APP_DIR }}
+
+            echo "=== Install backend deps ==="
             npm install || true
+
+            echo "=== Build backend ==="
             npm run build || true
 
+            echo "=== PM2 reload ==="
             pm2 reload ${{ secrets.PM2_APP_NAME }} --update-env || pm2 start dist/app.js --name ${{ secrets.PM2_APP_NAME }}
