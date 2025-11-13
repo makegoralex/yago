@@ -51,12 +51,12 @@ shiftSchema.index({ locationId: 1, openedAt: -1 });
 shiftSchema.index({ cashierId: 1, openedAt: -1 });
 shiftSchema.index({ status: 1 });
 
-shiftSchema.pre('save', function updateStatus(next) {
+shiftSchema.pre('save', function updateStatus(this: ShiftDocument, next: () => void) {
   this.status = this.closedAt ? 'closed' : 'open';
   next();
 });
 
-shiftSchema.pre('findOneAndUpdate', function adjustStatus(next) {
+shiftSchema.pre('findOneAndUpdate', function adjustStatus(this: any, next: () => void) {
   const update = this.getUpdate() as Partial<ShiftDocument> & { $set?: Partial<ShiftDocument> };
   const closedAt = update?.closedAt ?? update?.$set?.closedAt;
 

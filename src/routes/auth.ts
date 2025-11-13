@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { UserModel, UserRole } from '../models/User';
 import {
@@ -10,7 +10,21 @@ import {
 
 export const authRouter = Router();
 
-authRouter.post('/register', async (req, res) => {
+const resolveUserId = (user: { id?: string; _id?: unknown } | { id?: string } | { _id?: unknown }): string => {
+  const maybeId = (user as { id?: string }).id;
+  if (typeof maybeId === 'string' && maybeId) {
+    return maybeId;
+  }
+
+  const maybeObjectId = (user as { _id?: unknown })._id;
+  if (maybeObjectId) {
+    return String(maybeObjectId);
+  }
+
+  throw new Error('User identifier is not available');
+};
+
+authRouter.post('/register', async (req: Request, res: Response) => {
   try {
     const { name, email, password, role } = req.body ?? {};
 
@@ -38,7 +52,7 @@ authRouter.post('/register', async (req, res) => {
     res.status(201).json({
       data: {
         user: {
-          id: user.id,
+          id: resolveUserId(user),
           name: user.name,
           email: user.email,
           role: user.role,
@@ -55,7 +69,7 @@ authRouter.post('/register', async (req, res) => {
   }
 });
 
-authRouter.post('/login', async (req, res) => {
+authRouter.post('/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body ?? {};
 
@@ -69,7 +83,7 @@ authRouter.post('/login', async (req, res) => {
     res.json({
       data: {
         user: {
-          id: user.id,
+          id: resolveUserId(user),
           name: user.name,
           email: user.email,
           role: user.role,
@@ -85,7 +99,7 @@ authRouter.post('/login', async (req, res) => {
   }
 });
 
-authRouter.post('/refresh', async (req, res) => {
+authRouter.post('/refresh', async (req: Request, res: Response) => {
   try {
     const { refreshToken } = req.body ?? {};
 
@@ -117,7 +131,7 @@ authRouter.post('/refresh', async (req, res) => {
   }
 });
 
-authRouter.get('/me', authMiddleware, async (req, res) => {
+authRouter.get('/me', authMiddleware, async (req: Request, res: Response) => {
   if (!req.user) {
     res.status(401).json({ data: null, error: 'Unauthorized' });
     return;

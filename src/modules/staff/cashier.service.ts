@@ -27,8 +27,22 @@ export class CashierServiceError extends Error {
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
+const resolveId = (user: IUser): string => {
+  const maybeId = (user as { id?: string }).id;
+  if (typeof maybeId === 'string' && maybeId) {
+    return maybeId;
+  }
+
+  const maybeObjectId = (user as { _id?: unknown })._id;
+  if (maybeObjectId) {
+    return String(maybeObjectId);
+  }
+
+  throw new CashierServiceError('Не удалось определить идентификатор пользователя');
+};
+
 const sanitizeUser = (user: IUser): CashierSummary => ({
-  id: user.id,
+  id: resolveId(user),
   name: user.name,
   email: user.email,
   role: user.role,
@@ -41,9 +55,9 @@ export const listCashiers = async (
 ): Promise<CashierSummary[]> => {
   const query: FilterQuery<IUser> = { ...filter, role: 'cashier' };
 
-  const cashiers = await UserModel.find(query)
-    .sort({ name: 1 })
-    .lean();
+  const cashiers = (await UserModel.find(query).sort({ name: 1 }).lean()) as Array<
+    IUser & { _id: { toString(): string } }
+  >;
 
   return cashiers.map((cashier) => ({
     id: cashier._id.toString(),
@@ -58,9 +72,9 @@ export const listCashiers = async (
 export const createCashierAccount = async (
   params: CreateCashierParams
 ): Promise<CashierSummary> => {
-  const trimmedName = params.name?.trim();
+  const trimmedName = params.name.trim();
   const normalizedEmail = normalizeEmail(params.email);
-  const password = params.password?.trim();
+  const password = params.password.trim();
 
   if (!trimmedName) {
     throw new CashierServiceError('Имя кассира обязательно');

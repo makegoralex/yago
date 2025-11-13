@@ -69,13 +69,9 @@ const reloadOrderWithCustomer = async (orderId: Types.ObjectId | string | null |
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
-  return (async (req, res, next) => {
-    try {
-      await handler(req, res, next);
-    } catch (error) {
-      next(error);
-    }
-  }) as RequestHandler;
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch(next);
+  };
 };
 
 const deductInventoryForOrder = async (order: OrderDocument): Promise<void> => {

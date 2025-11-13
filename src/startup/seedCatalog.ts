@@ -145,11 +145,14 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
     await SupplierModel.insertMany(demoSuppliers);
   }
 
-  const suppliers = await SupplierModel.find().lean();
+  const suppliers = (await SupplierModel.find().lean()) as Array<{
+    _id: Types.ObjectId;
+    name: string;
+  }>;
   const supplierMap = new Map<string, Types.ObjectId>();
-  suppliers.forEach((supplier) => {
+  for (const supplier of suppliers) {
     supplierMap.set(supplier.name, supplier._id as Types.ObjectId);
-  });
+  }
 
   if (ingredientCount === 0) {
     await IngredientModel.insertMany(
@@ -162,21 +165,24 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
     );
   }
 
-  const ingredients = await IngredientModel.find().lean();
+  const ingredients = (await IngredientModel.find().lean()) as Array<{
+    _id: Types.ObjectId;
+    name: string;
+  }>;
   const ingredientMap = new Map<string, Types.ObjectId>();
-  ingredients.forEach((ingredient) => {
+  for (const ingredient of ingredients) {
     ingredientMap.set(ingredient.name, ingredient._id as Types.ObjectId);
-  });
+  }
 
   if (categoryCount === 0 && productCount === 0) {
-    const createdCategories = await CategoryModel.insertMany(
+    const createdCategories = (await CategoryModel.insertMany(
       demoCatalog.map(({ name, sortOrder }) => ({ name, sortOrder }))
-    );
+    )) as Array<{ _id: Types.ObjectId; name: string }>;
 
     const categoryIdMap = new Map<string, Types.ObjectId>();
-    createdCategories.forEach((category) => {
+    for (const category of createdCategories) {
       categoryIdMap.set(category.name, category._id as Types.ObjectId);
-    });
+    }
 
     const productsToInsert = demoCatalog.flatMap(({ name, products }) => {
       const categoryId = categoryIdMap.get(name);
@@ -223,9 +229,14 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
   }
 
   if (warehouseCount === 0) {
-    const warehouses = await WarehouseModel.insertMany(demoWarehouses);
+    const warehouses = (await WarehouseModel.insertMany(
+      demoWarehouses
+    )) as Array<{ _id: Types.ObjectId }>;
 
     const firstWarehouse = warehouses[0];
+    if (!firstWarehouse) {
+      return;
+    }
     const espressoBeans = ingredientMap.get('Кофе арабика');
     const milk = ingredientMap.get('Молоко 3.2%');
     const matcha = ingredientMap.get('Матча порошок');

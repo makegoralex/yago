@@ -15,8 +15,22 @@ interface TokenPayload {
   role: string;
 }
 
+const resolveUserId = (user: IUser): string => {
+  const maybeId = (user as { id?: string }).id;
+  if (typeof maybeId === 'string' && maybeId) {
+    return maybeId;
+  }
+
+  const maybeObjectId = (user as { _id?: unknown })._id;
+  if (maybeObjectId) {
+    return String(maybeObjectId);
+  }
+
+  throw new Error('Unable to resolve user identifier');
+};
+
 const buildTokenPayload = (user: IUser): TokenPayload => ({
-  sub: user.id,
+  sub: resolveUserId(user),
   email: user.email,
   role: user.role,
 });
