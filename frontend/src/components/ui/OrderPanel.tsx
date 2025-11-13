@@ -1,6 +1,12 @@
 import React from 'react';
 
-import type { CustomerSummary, OrderItem, PaymentMethod } from '../../store/order';
+import type {
+  AppliedDiscount,
+  CustomerSummary,
+  DiscountSummary,
+  OrderItem,
+  PaymentMethod,
+} from '../../store/order';
 
 type OrderPanelProps = {
   items: OrderItem[];
@@ -22,6 +28,10 @@ type OrderPanelProps = {
   onRedeemLoyalty?: () => void;
   onClearDiscount?: () => void;
   onCancel?: () => void;
+  availableDiscounts?: DiscountSummary[];
+  appliedDiscounts?: AppliedDiscount[];
+  selectedDiscountIds?: string[];
+  onToggleDiscount?: (discountId: string) => void;
 };
 
 const statusLabels: Record<NonNullable<OrderPanelProps['status']>, string> = {
@@ -50,12 +60,41 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   onRedeemLoyalty,
   onClearDiscount,
   onCancel,
+  availableDiscounts = [],
+  appliedDiscounts = [],
+  selectedDiscountIds = [],
+  onToggleDiscount,
 }) => {
   const hasItems = items.length > 0;
   const canPay = status === null || status === 'draft';
   const canComplete = status === 'paid';
   const canCancel = status === null || status === 'draft';
   const customerPoints = Number(customer?.points ?? 0);
+  const selectableDiscounts = availableDiscounts.filter((discount) => !discount.autoApply);
+  const autoAppliedDiscounts = availableDiscounts.filter((discount) => discount.autoApply);
+  const hasManualDiscount = appliedDiscounts.some((discount) => discount.application === 'manual');
+  const hasResettableDiscounts = hasManualDiscount || selectedDiscountIds.length > 0;
+
+  const formatDiscountLabel = (discount: AppliedDiscount): string => {
+    const parts: string[] = [discount.name];
+    if (discount.targetName) {
+      parts.push(`(${discount.targetName})`);
+    }
+    if (discount.application === 'auto') {
+      parts.push('[авто]');
+    } else if (discount.application === 'manual') {
+      parts.push('[ручная]');
+    }
+    return parts.join(' ');
+  };
+
+  const formatDiscountValue = (discount: DiscountSummary): string => {
+    if (discount.type === 'percentage') {
+      return `−${discount.value}%`;
+    }
+
+    return `−${discount.value.toFixed(2)} ₽`;
+  };
 
   return (
     <aside
@@ -112,7 +151,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
             >
               Списать баллы
             </button>
-            {discount > 0 ? (
+            {hasResettableDiscounts ? (
               <button
                 type="button"
                 onClick={onClearDiscount}
@@ -122,6 +161,50 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
               </button>
             ) : null}
           </div>
+        </div>
+      ) : null}
+      {selectableDiscounts.length > 0 ? (
+        <div className="mx-4 mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-amber-800">Доступные скидки</p>
+            {onClearDiscount && hasResettableDiscounts ? (
+              <button
+                type="button"
+                onClick={onClearDiscount}
+                className="text-xs font-semibold text-amber-700 hover:underline"
+              >
+                Сбросить все
+              </button>
+            ) : null}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {selectableDiscounts.map((discountOption) => {
+              const isSelected = selectedDiscountIds.includes(discountOption._id);
+              return (
+                <button
+                  key={discountOption._id}
+                  type="button"
+                  onClick={() => onToggleDiscount?.(discountOption._id)}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                    isSelected
+                      ? 'border-amber-500 bg-amber-500 text-white'
+                      : 'border-amber-200 bg-white text-amber-700 hover:border-amber-400'
+                  }`}
+                >
+                  <span>{discountOption.name}</span>
+                  <span className="ml-2 text-[10px] uppercase text-amber-200">
+                    {formatDiscountValue(discountOption)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {autoAppliedDiscounts.length > 0 ? (
+            <p className="mt-3 text-xs text-amber-700">
+              Автоматические скидки активны для категорий:{' '}
+              {autoAppliedDiscounts.map((discount) => discount.targetName ?? discount.name).join(', ')}
+            </p>
+          ) : null}
         </div>
       ) : null}
       <div className="flex-1 overflow-y-auto px-4">
@@ -189,6 +272,19 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           <span>К оплате</span>
           <span className="text-xl font-semibold text-slate-900">{total.toFixed(2)} ₽</span>
         </div>
+        {appliedDiscounts.length > 0 ? (
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+            <p className="font-semibold">Применённые скидки</p>
+            <ul className="mt-2 space-y-1">
+              {appliedDiscounts.map((discountEntry) => (
+                <li key={`${discountEntry.discountId ?? discountEntry.name}-${discountEntry.application}`} className="flex items-center justify-between gap-2">
+                  <span className="truncate">{formatDiscountLabel(discountEntry)}</span>
+                  <span className="font-semibold">−{discountEntry.amount.toFixed(2)} ₽</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {earnedPoints > 0 ? (
           <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-600">
             <span>Будет начислено</span>
