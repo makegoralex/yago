@@ -11,69 +11,48 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Install backend dependencies
-        run: npm install
-
-      - name: Build backend
-        run: npm run build
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm install
-
+      # (опционально) Собрать фронтенд локально и отправить уже собранный код
+      # Если хочешь собирать всё на сервере — этот шаг можно удалить.
       - name: Build frontend
-        working-directory: frontend
-        run: npm run build
-
-      - name: Deploy via SFTP
-        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
-        with:
-          server: ${{ secrets.SERVER_IP }}
-          port: 22
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASS }}
-          ssh_private_key: ${{ secrets.SERVER_SSH_KEY }}
-          ssh_passphrase: ${{ secrets.SERVER_SSH_PASSPHRASE }}
-          local_path: "./"
-          remote_path: "/root/yago"
-          delete_remote_files: false
-
-      - name: Restart PM2 on server
-        env:
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-          SERVER_PASS: ${{ secrets.SERVER_PASS }}
-          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
-          SERVER_SSH_PASSPHRASE: ${{ secrets.SERVER_SSH_PASSPHRASE }}
+        working-directory: ./frontend
         run: |
-          REMOTE_CMD='cd /root/yago && npm install && npm run build && cd frontend && npm install && npm run build && cd .. && (pm2 describe yago >/dev/null 2>&1 && pm2 restart yago || pm2 start dist/index.js --name yago) && pm2 save'
+          npm ci
+          npm run build
 
-          if [ -n "$SERVER_PASS" ]; then
-            sudo apt-get update
-            sudo apt-get install -y sshpass
-            sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no "$SERVER_USER@$SERVER_IP" "$REMOTE_CMD"
-          elif [ -n "$SERVER_SSH_KEY" ]; then
-            KEY_PATH=$(mktemp)
-            echo "$SERVER_SSH_KEY" > "$KEY_PATH"
-            chmod 600 "$KEY_PATH"
+      - name: Copy files to server via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          # что отправляем
+          source: |
+            .
+          # куда на сервере
+          target: ${{ secrets.APP_DIR }}
+          overwrite: true
+          rm: false
 
-            if [ -n "$SERVER_SSH_PASSPHRASE" ]; then
-              sudo apt-get update
-              sudo apt-get install -y sshpass
-              sshpass -p "$SERVER_SSH_PASSPHRASE" ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=publickey -o PubkeyAuthentication=yes -i "$KEY_PATH" "$SERVER_USER@$SERVER_IP" "$REMOTE_CMD"
-            else
-              ssh -o StrictHostKeyChecking=no -i "$KEY_PATH" "$SERVER_USER@$SERVER_IP" "$REMOTE_CMD"
-            fi
-
-            rm -f "$KEY_PATH"
-          else
-            echo "No SSH credentials provided (SERVER_PASS or SERVER_SSH_KEY)" >&2
-            exit 1
-          fi
+      - name: Run deploy commands on server
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            cd ${{ secrets.APP_DIR }}
+            # backend
+            npm install
+            npm run build || echo "no backend build script, skipping"
+            # frontend (если собираем уже на сервере — раскомментируй)
+            cd frontend
+            npm install
+            npm run build
+            cd ..
+            # перезапуск pm2
+            pm2 list || pm2 install pm2 -g
+            pm2 reload ${{ secrets.PM2_APP_NAME }} --update-env || pm2 start dist/app.js --name ${{ secrets.PM2_APP_NAME }}
