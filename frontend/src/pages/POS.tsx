@@ -42,6 +42,11 @@ const POSPage: React.FC = () => {
   const redeemPoints = useOrderStore((state) => state.redeemPoints);
   const clearDiscount = useOrderStore((state) => state.clearDiscount);
   const cancelOrder = useOrderStore((state) => state.cancelOrder);
+  const availableDiscounts = useOrderStore((state) => state.availableDiscounts);
+  const appliedDiscounts = useOrderStore((state) => state.appliedDiscounts);
+  const selectedDiscountIds = useOrderStore((state) => state.selectedDiscountIds);
+  const fetchAvailableDiscounts = useOrderStore((state) => state.fetchAvailableDiscounts);
+  const toggleDiscount = useOrderStore((state) => state.toggleDiscount);
 
   const { notify } = useToast();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -60,7 +65,8 @@ const POSPage: React.FC = () => {
       notify({ title: 'Ошибка заказа', description: 'Не удалось создать черновик заказа', type: 'error' });
     });
     void fetchActiveOrders();
-  }, [fetchCatalog, createDraft, fetchActiveOrders, notify]);
+    void fetchAvailableDiscounts();
+  }, [fetchCatalog, createDraft, fetchActiveOrders, fetchAvailableDiscounts, notify]);
 
   useEffect(() => {
     if (!activeCategoryId && categories.length > 0) {
@@ -356,6 +362,14 @@ const POSPage: React.FC = () => {
                 })
                 .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
             }
+            availableDiscounts={availableDiscounts}
+            appliedDiscounts={appliedDiscounts}
+            selectedDiscountIds={selectedDiscountIds}
+            onToggleDiscount={(discountId) =>
+              void toggleDiscount(discountId).catch(() =>
+                notify({ title: 'Не удалось применить скидку', type: 'error' })
+              )
+            }
             visible
           />
         </div>
@@ -457,10 +471,18 @@ const POSPage: React.FC = () => {
                       setOrderDrawerOpen(false);
                       notify({ title: 'Заказ отменён', type: 'info' });
                     })
-                    .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
-                }
-                visible={isOrderDrawerOpen}
-              />
+                .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
+            }
+            availableDiscounts={availableDiscounts}
+            appliedDiscounts={appliedDiscounts}
+            selectedDiscountIds={selectedDiscountIds}
+            onToggleDiscount={(discountId) =>
+              void toggleDiscount(discountId).catch(() =>
+                notify({ title: 'Не удалось применить скидку', type: 'error' })
+              )
+            }
+            visible={isOrderDrawerOpen}
+          />
             </div>
           </div>
         </div>
