@@ -71,6 +71,28 @@ type InventorySummary = {
   stockValue: number;
 };
 
+type CashierSummary = {
+  id: string;
+  name: string;
+  email: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type SalesAndShiftStats = {
+  totalRevenue: number;
+  orderCount: number;
+  averageOrderValue: number;
+  openShiftCount: number;
+  closedShiftCount: number;
+  currentOpenShiftCount: number;
+  averageRevenuePerClosedShift: number;
+  period?: {
+    from?: string;
+    to?: string;
+  };
+};
+
 type LoyaltyPointSummary = {
   totalPointsIssued: number;
   totalPointsRedeemed: number;
@@ -114,7 +136,9 @@ const DAY_OPTIONS: Array<{ value: number; label: string }> = [
 
 const AdminPage: React.FC = () => {
   const { notify } = useToast();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'menu' | 'inventory' | 'suppliers' | 'discounts'>('dashboard');
+  const [activeTab, setActiveTab] = useState<
+    'dashboard' | 'menu' | 'inventory' | 'suppliers' | 'discounts' | 'staff'
+  >('dashboard');
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [summary, setSummary] = useState({
     totalOrders: 0,
@@ -127,6 +151,11 @@ const AdminPage: React.FC = () => {
   const [daily, setDaily] = useState<{ date: string; revenue: number; orders: number }[]>([]);
   const [topProducts, setTopProducts] = useState<{ name: string; qty: number }[]>([]);
   const [topCustomers, setTopCustomers] = useState<{ name: string; totalSpent: number }[]>([]);
+  const [salesShiftStats, setSalesShiftStats] = useState<SalesAndShiftStats | null>(null);
+  const [salesStatsLoading, setSalesStatsLoading] = useState(false);
+  const [salesStatsError, setSalesStatsError] = useState<string | null>(null);
+  const [salesStatsFilters, setSalesStatsFilters] = useState({ from: '', to: '' });
+  const [salesStatsLoaded, setSalesStatsLoaded] = useState(false);
 
   const [menuLoading, setMenuLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -213,6 +242,12 @@ const AdminPage: React.FC = () => {
     address: '',
     notes: '',
   });
+  const [cashiers, setCashiers] = useState<CashierSummary[]>([]);
+  const [cashiersLoading, setCashiersLoading] = useState(false);
+  const [cashiersLoaded, setCashiersLoaded] = useState(false);
+  const [cashiersError, setCashiersError] = useState<string | null>(null);
+  const [cashierForm, setCashierForm] = useState({ name: '', email: '', password: '' });
+  const [creatingCashier, setCreatingCashier] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerEditForm, setCustomerEditForm] = useState({
     name: '',
@@ -260,6 +295,42 @@ const AdminPage: React.FC = () => {
       setLoadingDashboard(false);
     }
   }, [notify]);
+
+  const loadSalesAndShiftStats = useCallback(
+    async (params?: { from?: string; to?: string }) => {
+      setSalesStatsLoading(true);
+      setSalesStatsError(null);
+      try {
+        const response = await api.get('/api/admin/stats/sales-and-shifts', {
+          params: {
+            ...(params?.from ? { from: params.from } : {}),
+            ...(params?.to ? { to: params.to } : {}),
+          },
+        });
+
+        const payload = getResponseData<SalesAndShiftStats>(response);
+        setSalesShiftStats(payload ?? null);
+      } catch (error) {
+        console.error('Не удалось загрузить статистику смен', error);
+        let message = 'Не удалось загрузить статистику смен';
+        if (isAxiosError(error)) {
+          const responseError =
+            typeof error.response?.data === 'object' && error.response?.data !== null
+              ? (error.response?.data as { error?: unknown }).error
+              : undefined;
+          if (typeof responseError === 'string' && responseError.trim()) {
+            message = responseError.trim();
+          }
+        }
+        setSalesStatsError(message);
+        notify({ title: message, type: 'error' });
+      } finally {
+        setSalesStatsLoading(false);
+        setSalesStatsLoaded(true);
+      }
+    },
+    [notify]
+  );
 
   const loadMenuData = useCallback(async () => {
     setMenuLoading(true);
@@ -352,6 +423,33 @@ const AdminPage: React.FC = () => {
     }
   }, [notify]);
 
+  const loadCashiersData = useCallback(async () => {
+    setCashiersLoading(true);
+    setCashiersError(null);
+    try {
+      const response = await api.get('/api/admin/cashiers');
+      const payload = getResponseData<{ cashiers?: CashierSummary[] }>(response);
+      setCashiers(payload?.cashiers ?? []);
+    } catch (error) {
+      console.error('Не удалось загрузить кассиров', error);
+      let message = 'Не удалось загрузить кассиров';
+      if (isAxiosError(error)) {
+        const responseError =
+          typeof error.response?.data === 'object' && error.response?.data !== null
+            ? (error.response?.data as { error?: unknown }).error
+            : undefined;
+        if (typeof responseError === 'string' && responseError.trim()) {
+          message = responseError.trim();
+        }
+      }
+      setCashiersError(message);
+      notify({ title: message, type: 'error' });
+    } finally {
+      setCashiersLoading(false);
+      setCashiersLoaded(true);
+    }
+  }, [notify]);
+
   const loadDiscounts = useCallback(async () => {
     try {
       setDiscountsLoading(true);
@@ -384,6 +482,89 @@ const AdminPage: React.FC = () => {
     setDiscountsError(null);
   };
 
+  const handleApplySalesStats = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (salesStatsFilters.from && salesStatsFilters.to) {
+      const from = new Date(`${salesStatsFilters.from}T00:00:00`);
+      const to = new Date(`${salesStatsFilters.to}T00:00:00`);
+      if (from > to) {
+        notify({
+          title: 'Дата начала должна быть меньше или равна дате окончания',
+          type: 'info',
+        });
+        return;
+      }
+    }
+
+    void loadSalesAndShiftStats({
+      from: salesStatsFilters.from || undefined,
+      to: salesStatsFilters.to || undefined,
+    });
+  };
+
+  const handleResetSalesStats = () => {
+    setSalesStatsFilters({ from: '', to: '' });
+    setSalesStatsError(null);
+    setSalesStatsLoaded(false);
+    void loadSalesAndShiftStats();
+  };
+
+  const handleCashierFieldChange = (field: 'name' | 'email' | 'password', value: string) => {
+    setCashierForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCreateCashier = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = cashierForm.name.trim();
+    const email = cashierForm.email.trim();
+    const password = cashierForm.password;
+
+    if (!name || !email || !password) {
+      notify({ title: 'Заполните имя, email и пароль', type: 'info' });
+      return;
+    }
+
+    if (password.length < 6) {
+      notify({ title: 'Пароль должен содержать минимум 6 символов', type: 'info' });
+      return;
+    }
+
+    try {
+      setCreatingCashier(true);
+      const response = await api.post('/api/admin/cashiers', { name, email, password });
+      const payload = getResponseData<{ cashier?: CashierSummary }>(response);
+      const created = payload?.cashier;
+      if (created) {
+        setCashiers((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
+        setCashierForm({ name: '', email: '', password: '' });
+        setCashiersError(null);
+        notify({ title: 'Кассир создан', type: 'success' });
+      } else {
+        void loadCashiersData();
+      }
+    } catch (error) {
+      console.error('Не удалось создать кассира', error);
+      let message = 'Не удалось создать кассира';
+      if (isAxiosError(error)) {
+        const responseError =
+          typeof error.response?.data === 'object' && error.response?.data !== null
+            ? (error.response?.data as { error?: unknown }).error
+            : undefined;
+        if (typeof responseError === 'string' && responseError.trim()) {
+          message = responseError.trim();
+        }
+      }
+      notify({ title: message, type: 'error' });
+    } finally {
+      setCreatingCashier(false);
+    }
+  };
+
+  const handleReloadCashiers = () => {
+    setCashiersLoaded(false);
+    void loadCashiersData();
+  };
+
   const loadCustomers = useCallback(async () => {
     setCustomersLoading(true);
     try {
@@ -402,6 +583,12 @@ const AdminPage: React.FC = () => {
   }, [loadDashboard]);
 
   useEffect(() => {
+    if (activeTab === 'dashboard') {
+      if (!salesStatsLoading && !salesStatsLoaded) {
+        void loadSalesAndShiftStats();
+      }
+    }
+
     if (activeTab === 'menu') {
       if (!menuLoading && categories.length === 0 && products.length === 0) {
         void loadMenuData();
@@ -443,6 +630,12 @@ const AdminPage: React.FC = () => {
         void loadDiscounts();
       }
     }
+
+    if (activeTab === 'staff') {
+      if (!cashiersLoading && !cashiersLoaded) {
+        void loadCashiersData();
+      }
+    }
   }, [
     activeTab,
     categories.length,
@@ -462,12 +655,57 @@ const AdminPage: React.FC = () => {
     discountsLoading,
     discountsReady,
     loadDiscounts,
+    salesStatsLoading,
+    salesStatsLoaded,
+    loadSalesAndShiftStats,
+    cashiersLoading,
+    cashiersLoaded,
+    loadCashiersData,
   ]);
 
   const loyaltySummary = useMemo<LoyaltyPointSummary>(() => ({
     totalPointsIssued: summary.totalPointsIssued,
     totalPointsRedeemed: summary.totalPointsRedeemed,
   }), [summary.totalPointsIssued, summary.totalPointsRedeemed]);
+
+  const formatDateTime = (value?: string) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '—';
+    }
+
+    return date.toLocaleString('ru-RU', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  };
+
+  const formatPeriodLabel = (period?: { from?: string; to?: string }) => {
+    if (!period) {
+      return '';
+    }
+
+    const fromLabel = period.from ? new Date(period.from).toLocaleDateString('ru-RU') : '';
+    const toLabel = period.to ? new Date(period.to).toLocaleDateString('ru-RU') : '';
+
+    if (fromLabel && toLabel) {
+      return `${fromLabel} — ${toLabel}`;
+    }
+
+    if (fromLabel) {
+      return `с ${fromLabel}`;
+    }
+
+    if (toLabel) {
+      return `по ${toLabel}`;
+    }
+
+    return '';
+  };
+
+  const formatCurrency = (value: number) =>
+    value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const handleCreateCategory = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -1182,13 +1420,14 @@ const AdminPage: React.FC = () => {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Админ-панель</h1>
-          <p className="text-sm text-slate-500">Управление меню, запасами, скидками и поставщиками Yago Coffee</p>
+          <p className="text-sm text-slate-500">Управление персоналом, меню, запасами, скидками и поставщиками Yago Coffee</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {[ 
+          {[
             { id: 'dashboard', label: 'Дашборд' },
             { id: 'menu', label: 'Меню' },
             { id: 'inventory', label: 'Склады' },
+            { id: 'staff', label: 'Персонал' },
             { id: 'suppliers', label: 'Поставщики' },
             { id: 'discounts', label: 'Скидки' },
           ].map((tab) => (
@@ -1214,12 +1453,117 @@ const AdminPage: React.FC = () => {
             ))}
           </div>
         ) : (
-          <>
+          <> 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <SummaryCard title="Выручка" value={`${summary.totalRevenue.toFixed(2)} ₽`} />
               <SummaryCard title="Средний чек" value={`${summary.avgCheck.toFixed(2)} ₽`} />
               <SummaryCard title="Заказы" value={summary.totalOrders.toString()} />
               <SummaryCard title="Клиенты" value={summary.totalCustomers.toString()} />
+            </div>
+            <div className="mt-6">
+              <Card title="Продажи и смены">
+                <form onSubmit={handleApplySalesStats} className="mb-4 flex flex-wrap items-end gap-3 text-sm">
+                  <label className="flex flex-col text-slate-600">
+                    <span className="mb-1 text-xs uppercase text-slate-400">С даты</span>
+                    <input
+                      type="date"
+                      value={salesStatsFilters.from}
+                      onChange={(event) =>
+                        setSalesStatsFilters((prev) => ({ ...prev, from: event.target.value }))
+                      }
+                      className="rounded-2xl border border-slate-200 px-3 py-2"
+                    />
+                  </label>
+                  <label className="flex flex-col text-slate-600">
+                    <span className="mb-1 text-xs uppercase text-slate-400">По дату</span>
+                    <input
+                      type="date"
+                      value={salesStatsFilters.to}
+                      onChange={(event) =>
+                        setSalesStatsFilters((prev) => ({ ...prev, to: event.target.value }))
+                      }
+                      className="rounded-2xl border border-slate-200 px-3 py-2"
+                    />
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      disabled={salesStatsLoading}
+                    >
+                      Применить
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetSalesStats}
+                      className="rounded-2xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-60"
+                      disabled={salesStatsLoading}
+                    >
+                      Сбросить
+                    </button>
+                  </div>
+                </form>
+                {salesStatsError ? (
+                  <p className="mb-3 text-sm text-red-500">{salesStatsError}</p>
+                ) : null}
+                {salesStatsLoading ? (
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {Array.from({ length: 6 }).map((_, index) => (
+                      <div key={index} className="h-20 animate-pulse rounded-2xl bg-slate-200/70" />
+                    ))}
+                  </div>
+                ) : salesShiftStats ? (
+                  <>
+                    {formatPeriodLabel(salesShiftStats.period) ? (
+                      <p className="mb-3 text-xs uppercase text-slate-400">
+                        Период: {formatPeriodLabel(salesShiftStats.period)}
+                      </p>
+                    ) : null}
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {[
+                        {
+                          label: 'Выручка',
+                          value: `${formatCurrency(salesShiftStats.totalRevenue)} ₽`,
+                        },
+                        {
+                          label: 'Средний чек',
+                          value: `${formatCurrency(salesShiftStats.averageOrderValue)} ₽`,
+                        },
+                        {
+                          label: 'Заказы',
+                          value: salesShiftStats.orderCount.toLocaleString('ru-RU'),
+                        },
+                        {
+                          label: 'Открытых смен',
+                          value: salesShiftStats.openShiftCount.toLocaleString('ru-RU'),
+                        },
+                        {
+                          label: 'Закрыто за период',
+                          value: salesShiftStats.closedShiftCount.toLocaleString('ru-RU'),
+                        },
+                        {
+                          label: 'Активно сейчас',
+                          value: salesShiftStats.currentOpenShiftCount.toLocaleString('ru-RU'),
+                        },
+                        {
+                          label: 'Выручка на смену',
+                          value: `${formatCurrency(salesShiftStats.averageRevenuePerClosedShift)} ₽`,
+                        },
+                      ].map((metric) => (
+                        <div
+                          key={metric.label}
+                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                        >
+                          <p className="text-xs font-semibold uppercase text-slate-400">{metric.label}</p>
+                          <p className="mt-1 text-lg font-semibold text-slate-800">{metric.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400">Нет данных за выбранный период</p>
+                )}
+              </Card>
             </div>
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
               <Card title="Выручка по дням">
@@ -2102,6 +2446,116 @@ const AdminPage: React.FC = () => {
               </div>
             )}
           </Card>
+        </div>
+      ) : null}
+
+      {activeTab === 'staff' ? (
+        <div className="space-y-6">
+          <section className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+            <Card title="Новый кассир">
+              <form onSubmit={handleCreateCashier} className="space-y-3 text-sm">
+                <label className="block text-slate-600">
+                  <span className="mb-1 block text-xs uppercase">Имя</span>
+                  <input
+                    type="text"
+                    value={cashierForm.name}
+                    onChange={(event) => handleCashierFieldChange('name', event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    placeholder="ФИО или имя"
+                    autoComplete="name"
+                  />
+                </label>
+                <label className="block text-slate-600">
+                  <span className="mb-1 block text-xs uppercase">Email</span>
+                  <input
+                    type="email"
+                    value={cashierForm.email}
+                    onChange={(event) => handleCashierFieldChange('email', event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    placeholder="user@yago.cafe"
+                    autoComplete="email"
+                  />
+                </label>
+                <label className="block text-slate-600">
+                  <span className="mb-1 block text-xs uppercase">Пароль</span>
+                  <input
+                    type="password"
+                    value={cashierForm.password}
+                    onChange={(event) => handleCashierFieldChange('password', event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    placeholder="Минимум 6 символов"
+                    autoComplete="new-password"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={creatingCashier}
+                >
+                  {creatingCashier ? 'Создание…' : 'Добавить кассира'}
+                </button>
+                <p className="text-xs text-slate-400">
+                  Администратор или бариста сможет передать кассиру логин и пароль сразу после создания.
+                </p>
+              </form>
+            </Card>
+            <Card title="Кассиры">
+              {cashiersLoading ? (
+                <div className="grid gap-3">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div key={index} className="h-16 animate-pulse rounded-2xl bg-slate-200/70" />
+                  ))}
+                </div>
+              ) : cashiersError ? (
+                <div className="space-y-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-600">
+                  <p className="text-sm">{cashiersError}</p>
+                  <button
+                    type="button"
+                    onClick={handleReloadCashiers}
+                    className="rounded-2xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                  >
+                    Повторить попытку
+                  </button>
+                </div>
+              ) : cashiers.length ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Имя</th>
+                        <th className="px-3 py-2 text-left">Email</th>
+                        <th className="px-3 py-2 text-left">Создан</th>
+                        <th className="px-3 py-2 text-left">Обновлён</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {cashiers.map((cashier) => (
+                        <tr key={cashier.id}>
+                          <td className="px-3 py-2 font-semibold text-slate-800">{cashier.name || '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">{cashier.email || '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">{formatDateTime(cashier.createdAt)}</td>
+                          <td className="px-3 py-2 text-slate-500">{formatDateTime(cashier.updatedAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="flex flex-col items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">
+                    Пока кассиров нет. Добавьте первых сотрудников, чтобы выдать им доступ к системе.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleReloadCashiers}
+                    className="rounded-2xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                  >
+                    Обновить список
+                  </button>
+                </div>
+              )}
+            </Card>
+          </section>
         </div>
       ) : null}
 
