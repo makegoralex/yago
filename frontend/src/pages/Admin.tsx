@@ -85,9 +85,36 @@ type Customer = {
   totalSpent: number;
 };
 
+type AdminDiscount = {
+  _id: string;
+  name: string;
+  description?: string;
+  type: 'fixed' | 'percentage';
+  scope: 'order' | 'category' | 'product';
+  value: number;
+  categoryId?: string;
+  productId?: string;
+  targetName?: string;
+  autoApply: boolean;
+  autoApplyDays?: number[];
+  autoApplyStart?: string;
+  autoApplyEnd?: string;
+  isActive: boolean;
+};
+
+const DAY_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 1, label: 'Пн' },
+  { value: 2, label: 'Вт' },
+  { value: 3, label: 'Ср' },
+  { value: 4, label: 'Чт' },
+  { value: 5, label: 'Пт' },
+  { value: 6, label: 'Сб' },
+  { value: 0, label: 'Вс' },
+];
+
 const AdminPage: React.FC = () => {
   const { notify } = useToast();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'menu' | 'inventory' | 'suppliers'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'menu' | 'inventory' | 'suppliers' | 'discounts'>('dashboard');
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [summary, setSummary] = useState({
     totalOrders: 0,
@@ -193,6 +220,25 @@ const AdminPage: React.FC = () => {
     email: '',
     points: '',
     totalSpent: '',
+  });
+  const [discounts, setDiscounts] = useState<AdminDiscount[]>([]);
+  const [discountsLoading, setDiscountsLoading] = useState(false);
+  const [discountsReady, setDiscountsReady] = useState(false);
+  const [discountsError, setDiscountsError] = useState<string | null>(null);
+  const [discountActionId, setDiscountActionId] = useState<string | null>(null);
+  const [creatingDiscount, setCreatingDiscount] = useState(false);
+  const [discountForm, setDiscountForm] = useState({
+    name: '',
+    description: '',
+    type: 'percentage' as 'percentage' | 'fixed',
+    scope: 'order' as 'order' | 'category' | 'product',
+    value: '',
+    categoryId: '',
+    productId: '',
+    autoApply: false,
+    autoApplyDays: [] as number[],
+    autoApplyStart: '',
+    autoApplyEnd: '',
   });
 
   const loadDashboard = useCallback(async () => {
@@ -306,6 +352,38 @@ const AdminPage: React.FC = () => {
     }
   }, [notify]);
 
+  const loadDiscounts = useCallback(async () => {
+    try {
+      setDiscountsLoading(true);
+      setDiscountsError(null);
+      const response = await api.get('/api/admin/discounts');
+      const payload = getResponseData<AdminDiscount[]>(response);
+      setDiscounts(payload ?? []);
+    } catch (error) {
+      console.error('Не удалось загрузить скидки', error);
+      let message = 'Не удалось загрузить скидки';
+      if (isAxiosError(error)) {
+        const responseError =
+          typeof error.response?.data === 'object' && error.response?.data !== null
+            ? (error.response?.data as { error?: unknown }).error
+            : undefined;
+        if (typeof responseError === 'string' && responseError.trim()) {
+          message = responseError.trim();
+        }
+      }
+      setDiscountsError(message);
+      notify({ title: message, type: 'error' });
+    } finally {
+      setDiscountsLoading(false);
+      setDiscountsReady(true);
+    }
+  }, [notify]);
+
+  const handleReloadDiscounts = () => {
+    setDiscountsReady(false);
+    setDiscountsError(null);
+  };
+
   const loadCustomers = useCallback(async () => {
     setCustomersLoading(true);
     try {
@@ -356,6 +434,15 @@ const AdminPage: React.FC = () => {
         void loadCustomers();
       }
     }
+
+    if (activeTab === 'discounts') {
+      if (!menuLoading && (categories.length === 0 || products.length === 0)) {
+        void loadMenuData();
+      }
+      if (!discountsLoading && !discountsReady) {
+        void loadDiscounts();
+      }
+    }
   }, [
     activeTab,
     categories.length,
@@ -372,6 +459,9 @@ const AdminPage: React.FC = () => {
     suppliersLoading,
     suppliers.length,
     loadSuppliersData,
+    discountsLoading,
+    discountsReady,
+    loadDiscounts,
   ]);
 
   const loyaltySummary = useMemo<LoyaltyPointSummary>(() => ({
@@ -940,19 +1030,167 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const toggleDiscountDay = (day: number) => {
+    setDiscountForm((prev) => {
+      if (!prev.autoApply) {
+        return prev;
+      }
+
+      const exists = prev.autoApplyDays.includes(day);
+      const nextDays = exists ? prev.autoApplyDays.filter((value) => value !== day) : [...prev.autoApplyDays, day];
+      return { ...prev, autoApplyDays: nextDays };
+    });
+  };
+
+  const handleCreateDiscount = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedName = discountForm.name.trim();
+    if (!trimmedName) {
+      notify({ title: 'Введите название скидки', type: 'info' });
+      return;
+    }
+
+    const numericValue = Number(discountForm.value);
+    if (Number.isNaN(numericValue) || numericValue < 0) {
+      notify({ title: 'Укажите корректное значение скидки', type: 'info' });
+      return;
+    }
+
+    if (discountForm.type === 'percentage' && (numericValue < 0 || numericValue > 100)) {
+      notify({ title: 'Процент скидки должен быть от 0 до 100', type: 'info' });
+      return;
+    }
+
+    if (discountForm.scope === 'category' && !discountForm.categoryId) {
+      notify({ title: 'Выберите категорию для скидки', type: 'info' });
+      return;
+    }
+
+    if (discountForm.scope === 'product' && !discountForm.productId) {
+      notify({ title: 'Выберите товар для скидки', type: 'info' });
+      return;
+    }
+
+    if (discountForm.autoApply && discountForm.scope !== 'category') {
+      notify({ title: 'Автоприменение доступно только для категорий', type: 'info' });
+      return;
+    }
+
+    if (
+      discountForm.autoApply &&
+      (discountForm.autoApplyStart.trim() === '' || discountForm.autoApplyEnd.trim() === '')
+    ) {
+      notify({ title: 'Укажите время действия автоматической скидки', type: 'info' });
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      name: trimmedName,
+      description: discountForm.description.trim() || undefined,
+      type: discountForm.type,
+      scope: discountForm.scope,
+      value: numericValue,
+      autoApply: discountForm.scope === 'category' ? discountForm.autoApply : false,
+    };
+
+    if (discountForm.scope === 'category' && discountForm.categoryId) {
+      payload.categoryId = discountForm.categoryId;
+    }
+
+    if (discountForm.scope === 'product' && discountForm.productId) {
+      payload.productId = discountForm.productId;
+    }
+
+    if (payload.autoApply) {
+      payload.autoApplyDays = discountForm.autoApplyDays;
+      payload.autoApplyStart = discountForm.autoApplyStart || undefined;
+      payload.autoApplyEnd = discountForm.autoApplyEnd || undefined;
+    }
+
+    try {
+      setCreatingDiscount(true);
+      const response = await api.post('/api/admin/discounts', payload);
+      const created = getResponseData<AdminDiscount>(response);
+      if (created) {
+        setDiscounts((prev) => [created, ...prev]);
+        notify({ title: 'Скидка создана', type: 'success' });
+        setDiscountForm({
+          name: '',
+          description: '',
+          type: 'percentage',
+          scope: 'order',
+          value: '',
+          categoryId: '',
+          productId: '',
+          autoApply: false,
+          autoApplyDays: [],
+          autoApplyStart: '',
+          autoApplyEnd: '',
+        });
+      }
+    } catch (error) {
+      console.error('Не удалось создать скидку', error);
+      notify({ title: 'Не удалось создать скидку', type: 'error' });
+    } finally {
+      setCreatingDiscount(false);
+    }
+  };
+
+  const handleToggleDiscountActive = async (discount: AdminDiscount) => {
+    try {
+      setDiscountActionId(discount._id);
+      const response = await api.patch(`/api/admin/discounts/${discount._id}`, {
+        isActive: !discount.isActive,
+      });
+      const updated = getResponseData<AdminDiscount>(response);
+      if (updated) {
+        setDiscounts((prev) => prev.map((item) => (item._id === updated._id ? updated : item)));
+        notify({
+          title: updated.isActive ? 'Скидка активирована' : 'Скидка отключена',
+          type: 'success',
+        });
+      }
+    } catch (error) {
+      console.error('Не удалось обновить скидку', error);
+      notify({ title: 'Не удалось обновить скидку', type: 'error' });
+    } finally {
+      setDiscountActionId(null);
+    }
+  };
+
+  const handleDeleteDiscount = async (discount: AdminDiscount) => {
+    const confirmed = window.confirm(`Удалить скидку "${discount.name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDiscountActionId(discount._id);
+      await api.delete(`/api/admin/discounts/${discount._id}`);
+      setDiscounts((prev) => prev.filter((item) => item._id !== discount._id));
+      notify({ title: 'Скидка удалена', type: 'success' });
+    } catch (error) {
+      console.error('Не удалось удалить скидку', error);
+      notify({ title: 'Не удалось удалить скидку', type: 'error' });
+    } finally {
+      setDiscountActionId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6 lg:px-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Админ-панель</h1>
-          <p className="text-sm text-slate-500">Управление меню, запасами и поставщиками Yago Coffee</p>
+          <p className="text-sm text-slate-500">Управление меню, запасами, скидками и поставщиками Yago Coffee</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {[
+          {[ 
             { id: 'dashboard', label: 'Дашборд' },
             { id: 'menu', label: 'Меню' },
             { id: 'inventory', label: 'Склады' },
             { id: 'suppliers', label: 'Поставщики' },
+            { id: 'discounts', label: 'Скидки' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -2119,6 +2357,315 @@ const AdminPage: React.FC = () => {
               )}
             </Card>
           </section>
+        </div>
+      ) : null}
+
+      {activeTab === 'discounts' ? (
+        <div className="space-y-6">
+          <Card title="Новая скидка">
+            <form onSubmit={handleCreateDiscount} className="grid gap-4 text-sm md:grid-cols-2">
+              <div className="space-y-3">
+                <label className="block text-slate-600">
+                  <span className="mb-1 block text-xs uppercase">Название</span>
+                  <input
+                    type="text"
+                    value={discountForm.name}
+                    onChange={(event) => setDiscountForm((prev) => ({ ...prev, name: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    placeholder="Название скидки"
+                  />
+                </label>
+                <label className="block text-slate-600">
+                  <span className="mb-1 block text-xs uppercase">Описание</span>
+                  <textarea
+                    value={discountForm.description}
+                    onChange={(event) => setDiscountForm((prev) => ({ ...prev, description: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    rows={3}
+                    placeholder="Краткое описание механики"
+                  />
+                </label>
+                <label className="block text-slate-600">
+                  <span className="mb-1 block text-xs uppercase">Область действия</span>
+                  <select
+                    value={discountForm.scope}
+                    onChange={(event) => {
+                      const scope = event.target.value as typeof discountForm.scope;
+                      setDiscountForm((prev) => ({
+                        ...prev,
+                        scope,
+                        categoryId: scope === 'category' ? prev.categoryId : '',
+                        productId: scope === 'product' ? prev.productId : '',
+                        autoApply: scope === 'category' ? prev.autoApply : false,
+                        autoApplyDays: scope === 'category' ? prev.autoApplyDays : [],
+                        autoApplyStart: scope === 'category' ? prev.autoApplyStart : '',
+                        autoApplyEnd: scope === 'category' ? prev.autoApplyEnd : '',
+                      }));
+                    }}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                  >
+                    <option value="order">На весь чек</option>
+                    <option value="category">На категорию</option>
+                    <option value="product">На товар</option>
+                  </select>
+                </label>
+                {discountForm.scope === 'category' ? (
+                  <label className="block text-slate-600">
+                    <span className="mb-1 block text-xs uppercase">Категория</span>
+                    <select
+                      value={discountForm.categoryId}
+                      onChange={(event) => setDiscountForm((prev) => ({ ...prev, categoryId: event.target.value }))}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    >
+                      <option value="">Выберите категорию</option>
+                      {categories.map((category) => (
+                        <option key={category._id} value={category._id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {discountForm.scope === 'product' ? (
+                  <label className="block text-slate-600">
+                    <span className="mb-1 block text-xs uppercase">Товар</span>
+                    <select
+                      value={discountForm.productId}
+                      onChange={(event) => setDiscountForm((prev) => ({ ...prev, productId: event.target.value }))}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    >
+                      <option value="">Выберите товар</option>
+                      {products.map((product) => (
+                        <option key={product._id} value={product._id}>
+                          {product.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
+              <div className="space-y-3">
+                <label className="block text-slate-600">
+                  <span className="mb-1 block text-xs uppercase">Тип скидки</span>
+                  <select
+                    value={discountForm.type}
+                    onChange={(event) =>
+                      setDiscountForm((prev) => ({ ...prev, type: event.target.value as typeof prev.type }))
+                    }
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                  >
+                    <option value="percentage">Процент</option>
+                    <option value="fixed">Фиксированная сумма</option>
+                  </select>
+                </label>
+                <label className="block text-slate-600">
+                  <span className="mb-1 block text-xs uppercase">Значение</span>
+                  <input
+                    type="number"
+                    step={discountForm.type === 'percentage' ? 1 : 0.01}
+                    min={0}
+                    max={discountForm.type === 'percentage' ? 100 : undefined}
+                    value={discountForm.value}
+                    onChange={(event) => setDiscountForm((prev) => ({ ...prev, value: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    placeholder={discountForm.type === 'percentage' ? 'Процент' : 'Сумма в ₽'}
+                  />
+                </label>
+                {discountForm.scope === 'category' ? (
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={discountForm.autoApply}
+                        onChange={(event) =>
+                          setDiscountForm((prev) => ({
+                            ...prev,
+                            autoApply: event.target.checked,
+                            autoApplyDays: event.target.checked ? prev.autoApplyDays : [],
+                            autoApplyStart: event.target.checked ? prev.autoApplyStart : '',
+                            autoApplyEnd: event.target.checked ? prev.autoApplyEnd : '',
+                          }))
+                        }
+                      />
+                      Автоматическое применение по времени
+                    </label>
+                    {discountForm.autoApply ? (
+                      <div className="mt-3 space-y-3">
+                        <div>
+                          <p className="mb-1 text-xs uppercase text-slate-400">Дни недели</p>
+                          <div className="flex flex-wrap gap-2">
+                            {DAY_OPTIONS.map((day) => {
+                              const selected = discountForm.autoApplyDays.includes(day.value);
+                              return (
+                                <label
+                                  key={day.value}
+                                  className={`cursor-pointer rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                    selected
+                                      ? 'border-emerald-500 bg-emerald-500 text-white'
+                                      : 'border-slate-200 text-slate-500 hover:border-emerald-300'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    checked={selected}
+                                    onChange={() => toggleDiscountDay(day.value)}
+                                  />
+                                  {day.label}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label className="block text-slate-600">
+                            <span className="mb-1 block text-xs uppercase">Начало</span>
+                            <input
+                              type="time"
+                              value={discountForm.autoApplyStart}
+                              onChange={(event) =>
+                                setDiscountForm((prev) => ({ ...prev, autoApplyStart: event.target.value }))
+                              }
+                              className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                            />
+                          </label>
+                          <label className="block text-slate-600">
+                            <span className="mb-1 block text-xs uppercase">Окончание</span>
+                            <input
+                              type="time"
+                              value={discountForm.autoApplyEnd}
+                              onChange={(event) =>
+                                setDiscountForm((prev) => ({ ...prev, autoApplyEnd: event.target.value }))
+                              }
+                              className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <div className="md:col-span-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={creatingDiscount}
+                  className="rounded-2xl bg-slate-900 px-6 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {creatingDiscount ? 'Создание…' : 'Создать скидку'}
+                </button>
+              </div>
+            </form>
+          </Card>
+          <Card title="Список скидок">
+            {discountsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="h-16 animate-pulse rounded-2xl bg-slate-200/60" />
+                ))}
+              </div>
+            ) : discounts.length === 0 ? (
+              <div className="flex flex-col items-start gap-3 rounded-2xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">
+                <p>{discountsError ?? 'Скидки ещё не созданы.'}</p>
+                {discountsError ? (
+                  <button
+                    type="button"
+                    onClick={handleReloadDiscounts}
+                    className="rounded-full border border-slate-300 px-4 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                  >
+                    Попробовать снова
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Название</th>
+                      <th className="px-3 py-2 text-left">Тип</th>
+                      <th className="px-3 py-2 text-left">Значение</th>
+                      <th className="px-3 py-2 text-left">Область</th>
+                      <th className="px-3 py-2 text-left">Цель</th>
+                      <th className="px-3 py-2 text-left">Авто</th>
+                      <th className="px-3 py-2 text-left">Статус</th>
+                      <th className="px-3 py-2 text-right">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {discounts.map((discount) => {
+                      const valueLabel =
+                        discount.type === 'percentage'
+                          ? `${discount.value}%`
+                          : `${discount.value.toFixed(2)} ₽`;
+                      const scopeLabel =
+                        discount.scope === 'order'
+                          ? 'Чек'
+                          : discount.scope === 'category'
+                          ? 'Категория'
+                          : 'Товар';
+                      const dayLabels =
+                        discount.autoApplyDays && discount.autoApplyDays.length
+                          ? discount.autoApplyDays
+                              .map((day) => DAY_OPTIONS.find((option) => option.value === day)?.label ?? '')
+                              .filter(Boolean)
+                              .join(', ')
+                          : '';
+                      const schedule = discount.autoApply
+                        ? `${discount.autoApplyStart ?? '—'} — ${discount.autoApplyEnd ?? '—'}${dayLabels ? ` (${dayLabels})` : ''}`
+                        : '—';
+                      return (
+                        <tr key={discount._id}>
+                          <td className="px-3 py-2">
+                            <p className="font-semibold text-slate-800">{discount.name}</p>
+                            {discount.description ? (
+                              <p className="text-xs text-slate-400">{discount.description}</p>
+                            ) : null}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">{discount.type === 'percentage' ? 'Процент' : 'Сумма'}</td>
+                          <td className="px-3 py-2 text-slate-500">{valueLabel}</td>
+                          <td className="px-3 py-2 text-slate-500">{scopeLabel}</td>
+                          <td className="px-3 py-2 text-slate-500">{discount.targetName ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">{discount.autoApply ? schedule : '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {discount.isActive ? (
+                              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-600">
+                                Активна
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                                Выключена
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleDiscountActive(discount)}
+                                disabled={discountActionId === discount._id}
+                                className="rounded-2xl border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 disabled:opacity-60"
+                              >
+                                {discount.isActive ? 'Отключить' : 'Включить'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteDiscount(discount)}
+                                disabled={discountActionId === discount._id}
+                                className="rounded-2xl border border-red-200 px-3 py-1 text-xs font-semibold text-red-500 hover:border-red-300 disabled:opacity-60"
+                              >
+                                Удалить
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
         </div>
       ) : null}
     </div>

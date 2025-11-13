@@ -64,7 +64,7 @@ export const registerUser = async (params: {
     name: params.name,
     email: params.email.toLowerCase(),
     passwordHash,
-    role: params.role ?? 'barista',
+    role: params.role ?? 'cashier',
   });
 
   const tokens = generateTokens(user);

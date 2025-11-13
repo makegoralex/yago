@@ -14,12 +14,15 @@ import reportsRouter from './routes/reports';
 import adminManagementRouter from './routes/adminManagement';
 import suppliersRouter from './modules/suppliers/supplier.router';
 import inventoryRouter from './modules/inventory/inventory.router';
+import discountRouter, { createDiscountRouters } from './modules/discounts/discount.router';
 import { appConfig } from './config/env';
 
 const app = express();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+const { posRouter: posDiscountRouter, adminRouter: adminDiscountRouter } = createDiscountRouters();
 
 app.get('/', (_req, res) => {
   res.send('✅ Yago POS API is running');
@@ -31,12 +34,15 @@ app.get('/healthz', (_req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/catalog', catalogRouter);
+app.use('/api/orders/discounts', posDiscountRouter);
 app.use('/api/orders', orderRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/loyalty', loyaltyRouter);
+app.use('/api/discounts', discountRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/suppliers', suppliersRouter);
 app.use('/api/inventory', inventoryRouter);
+app.use('/api/admin/discounts', adminDiscountRouter);
 app.use('/api/admin', adminManagementRouter);
 
 app.get('/api/protected', authMiddleware, (req, res) => {

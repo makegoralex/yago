@@ -42,6 +42,11 @@ const POSPage: React.FC = () => {
   const redeemPoints = useOrderStore((state) => state.redeemPoints);
   const clearDiscount = useOrderStore((state) => state.clearDiscount);
   const cancelOrder = useOrderStore((state) => state.cancelOrder);
+  const availableDiscounts = useOrderStore((state) => state.availableDiscounts);
+  const appliedDiscounts = useOrderStore((state) => state.appliedDiscounts);
+  const selectedDiscountIds = useOrderStore((state) => state.selectedDiscountIds);
+  const fetchAvailableDiscounts = useOrderStore((state) => state.fetchAvailableDiscounts);
+  const toggleDiscount = useOrderStore((state) => state.toggleDiscount);
 
   const { notify } = useToast();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -49,6 +54,7 @@ const POSPage: React.FC = () => {
   const [isPaymentOpen, setPaymentOpen] = useState(false);
   const [isLoyaltyOpen, setLoyaltyOpen] = useState(false);
   const [isPaying, setPaying] = useState(false);
+  const [isStartingOrder, setStartingOrder] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [activeSection, setActiveSection] = useState<'products' | 'customers' | 'reports'>('products');
   const [isRedeemOpen, setRedeemOpen] = useState(false);
@@ -56,11 +62,22 @@ const POSPage: React.FC = () => {
 
   useEffect(() => {
     void fetchCatalog();
-    createDraft().catch(() => {
-      notify({ title: 'Ошибка заказа', description: 'Не удалось создать черновик заказа', type: 'error' });
-    });
     void fetchActiveOrders();
-  }, [fetchCatalog, createDraft, fetchActiveOrders, notify]);
+    void fetchAvailableDiscounts();
+  }, [fetchCatalog, fetchActiveOrders, fetchAvailableDiscounts]);
+
+  useEffect(() => {
+    if (orderId || activeOrders.length === 0) {
+      return;
+    }
+
+    const draftOrder = activeOrders.find((order) => order.status === 'draft') ?? activeOrders[0];
+    if (!draftOrder) {
+      return;
+    }
+
+    void loadOrder(draftOrder._id);
+  }, [orderId, activeOrders, loadOrder]);
 
   useEffect(() => {
     if (!activeCategoryId && categories.length > 0) {
@@ -82,6 +99,31 @@ const POSPage: React.FC = () => {
   }, [products, activeCategoryId]);
 
   const earnedPoints = total * 0.05;
+
+  const handleStartOrder = async () => {
+    if (orderId) {
+      if (!isTablet) {
+        setOrderDrawerOpen(true);
+      }
+      return;
+    }
+
+    setStartingOrder(true);
+    try {
+      await createDraft();
+      if (!isTablet) {
+        setOrderDrawerOpen(true);
+      }
+    } catch (error) {
+      notify({
+        title: 'Ошибка заказа',
+        description: 'Не удалось создать черновик заказа',
+        type: 'error',
+      });
+    } finally {
+      setStartingOrder(false);
+    }
+  };
 
   const openPaymentModal = (method: PaymentMethod) => {
     setPaymentMethod(method);
@@ -192,9 +234,19 @@ const POSPage: React.FC = () => {
               </button>
             </div>
           </div>
-          {activeOrders.length > 0 ? (
-            <div className="mb-4 rounded-2xl bg-white p-4 shadow-soft">
+          <div className="mb-4 rounded-2xl bg-white p-4 shadow-soft">
+            <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
+              <button
+                type="button"
+                onClick={() => void handleStartOrder()}
+                disabled={isStartingOrder}
+                className="rounded-2xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-secondary/60 hover:text-secondary disabled:opacity-50"
+              >
+                {orderId ? 'Открыть заказ' : isStartingOrder ? 'Создание…' : 'Новый заказ'}
+              </button>
+            </div>
+            {activeOrders.length > 0 ? (
               <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {activeOrders.map((order) => {
                   const isActive = orderId === order._id;
@@ -218,8 +270,10 @@ const POSPage: React.FC = () => {
                   );
                 })}
               </div>
-            </div>
-          ) : null}
+            ) : (
+              <p className="mt-2 text-sm text-slate-500">Нет активных заказов.</p>
+            )}
+          </div>
           {loading ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -356,6 +410,14 @@ const POSPage: React.FC = () => {
                 })
                 .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
             }
+            availableDiscounts={availableDiscounts}
+            appliedDiscounts={appliedDiscounts}
+            selectedDiscountIds={selectedDiscountIds}
+            onToggleDiscount={(discountId) =>
+              void toggleDiscount(discountId).catch(() =>
+                notify({ title: 'Не удалось применить скидку', type: 'error' })
+              )
+            }
             visible
           />
         </div>
@@ -457,10 +519,18 @@ const POSPage: React.FC = () => {
                       setOrderDrawerOpen(false);
                       notify({ title: 'Заказ отменён', type: 'info' });
                     })
-                    .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
-                }
-                visible={isOrderDrawerOpen}
-              />
+                .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
+            }
+            availableDiscounts={availableDiscounts}
+            appliedDiscounts={appliedDiscounts}
+            selectedDiscountIds={selectedDiscountIds}
+            onToggleDiscount={(discountId) =>
+              void toggleDiscount(discountId).catch(() =>
+                notify({ title: 'Не удалось применить скидку', type: 'error' })
+              )
+            }
+            visible={isOrderDrawerOpen}
+          />
             </div>
           </div>
         </div>
