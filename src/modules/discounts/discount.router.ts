@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { isValidObjectId, Types } from 'mongoose';
 
 import { requireRole, authMiddleware } from '../../middleware/auth';
@@ -225,35 +225,30 @@ const mapDiscountResponse = async (discounts: DiscountRecord[]) => {
   });
 };
 
-router.use(authMiddleware);
-
-router.get(
-  '/available',
-  requireRole(CASHIER_ROLES),
-  async (req, res, next) => {
+const withErrorHandling = (handler: (req: RouterRequest, res: RouterResponse) => Promise<void>) => {
+  return async (req: RouterRequest, res: RouterResponse, next: NextFunction) => {
     try {
-      const discounts = await getAvailableDiscounts();
-      const mapped = await mapDiscountResponse(discounts);
-      res.json({ data: mapped, error: null });
+      await handler(req, res);
     } catch (error) {
       next(error);
     }
-  }
-);
+  };
+};
 
-router.get(
-  '/',
-  requireRole(ADMIN_ROLES),
-  async (req, res, next) => {
-    try {
-      const discounts = await DiscountModel.find().sort({ createdAt: -1 }).lean<DiscountRecord[]>();
-      const mapped = await mapDiscountResponse(discounts);
-      res.json({ data: mapped, error: null });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
+type RouterRequest = Request;
+type RouterResponse = Response;
+
+const handleGetAvailableDiscounts = async (_req: RouterRequest, res: RouterResponse): Promise<void> => {
+  const discounts = await getAvailableDiscounts();
+  const mapped = await mapDiscountResponse(discounts);
+  res.json({ data: mapped, error: null });
+};
+
+const handleListDiscounts = async (_req: RouterRequest, res: RouterResponse): Promise<void> => {
+  const discounts = await DiscountModel.find().sort({ createdAt: -1 }).lean<DiscountRecord[]>();
+  const mapped = await mapDiscountResponse(discounts);
+  res.json({ data: mapped, error: null });
+};
 
 const parseDiscountPayload = async (payload: DiscountPayload, partial = false) => {
   const name = normalizeString(payload.name);
@@ -342,109 +337,116 @@ const parseDiscountPayload = async (payload: DiscountPayload, partial = false) =
   };
 };
 
-router.post(
-  '/',
-  requireRole(ADMIN_ROLES),
-  async (req, res, next) => {
-    try {
-      const parsed = await parseDiscountPayload(req.body ?? {}, false);
-      const created = await DiscountModel.create({
-        name: parsed.name!,
-        description: parsed.description,
-        type: parsed.type!,
-        scope: parsed.scope!,
-        value: parsed.value!,
-        categoryId: parsed.categoryId,
-        productId: parsed.productId,
-        autoApply: parsed.autoApply,
-        autoApplyDays: parsed.autoApply ? parsed.autoApplyDays : undefined,
-        autoApplyStart: parsed.autoApply ? parsed.autoApplyStart : undefined,
-        autoApplyEnd: parsed.autoApply ? parsed.autoApplyEnd : undefined,
-        isActive: parsed.isActive,
-      });
+const handleCreateDiscount = async (req: RouterRequest, res: RouterResponse): Promise<void> => {
+  const parsed = await parseDiscountPayload(req.body ?? {}, false);
+  const created = await DiscountModel.create({
+    name: parsed.name!,
+    description: parsed.description,
+    type: parsed.type!,
+    scope: parsed.scope!,
+    value: parsed.value!,
+    categoryId: parsed.categoryId,
+    productId: parsed.productId,
+    autoApply: parsed.autoApply,
+    autoApplyDays: parsed.autoApply ? parsed.autoApplyDays : undefined,
+    autoApplyStart: parsed.autoApply ? parsed.autoApplyStart : undefined,
+    autoApplyEnd: parsed.autoApply ? parsed.autoApplyEnd : undefined,
+    isActive: parsed.isActive,
+  });
 
-      const discount = await DiscountModel.findById(created._id).lean<DiscountRecord>();
-      if (!discount) {
-        throw new Error('Не удалось загрузить созданную скидку');
-      }
-
-      const mapped = await mapDiscountResponse([discount]);
-      res.status(201).json({ data: mapped[0], error: null });
-    } catch (error) {
-      next(error);
-    }
+  const discount = await DiscountModel.findById(created._id).lean<DiscountRecord>();
+  if (!discount) {
+    throw new Error('Не удалось загрузить созданную скидку');
   }
-);
 
-router.patch(
-  '/:id',
-  requireRole(ADMIN_ROLES),
-  async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      if (!isValidObjectId(id)) {
-        res.status(400).json({ data: null, error: 'Некорректный идентификатор скидки' });
-        return;
-      }
+  const mapped = await mapDiscountResponse([discount]);
+  res.status(201).json({ data: mapped[0], error: null });
+};
 
-      const parsed = await parseDiscountPayload(req.body ?? {}, true);
-      const update: Record<string, unknown> = {};
-
-      if (parsed.name !== undefined) update.name = parsed.name;
-      if (parsed.description !== undefined) update.description = parsed.description;
-      if (parsed.type !== undefined) update.type = parsed.type;
-      if (parsed.scope !== undefined) update.scope = parsed.scope;
-      if (parsed.value !== undefined) update.value = parsed.value;
-      if (parsed.categoryId !== undefined) update.categoryId = parsed.categoryId;
-      if (parsed.productId !== undefined) update.productId = parsed.productId;
-      if (parsed.autoApply !== undefined) update.autoApply = parsed.autoApply;
-      if (parsed.autoApplyDays !== undefined) update.autoApplyDays = parsed.autoApplyDays;
-      if (parsed.autoApplyStart !== undefined) update.autoApplyStart = parsed.autoApplyStart;
-      if (parsed.autoApplyEnd !== undefined) update.autoApplyEnd = parsed.autoApplyEnd;
-      if (parsed.isActive !== undefined) update.isActive = parsed.isActive;
-
-      if (parsed.autoApply === false) {
-        update.autoApplyDays = undefined;
-        update.autoApplyStart = undefined;
-        update.autoApplyEnd = undefined;
-      }
-
-      const discount = await DiscountModel.findByIdAndUpdate(id, update, { new: true }).lean<DiscountRecord>();
-      if (!discount) {
-        res.status(404).json({ data: null, error: 'Скидка не найдена' });
-        return;
-      }
-
-      const mapped = await mapDiscountResponse([discount]);
-      res.json({ data: mapped[0], error: null });
-    } catch (error) {
-      next(error);
-    }
+const handleUpdateDiscount = async (req: RouterRequest, res: RouterResponse): Promise<void> => {
+  const { id } = req.params;
+  if (!isValidObjectId(id)) {
+    res.status(400).json({ data: null, error: 'Некорректный идентификатор скидки' });
+    return;
   }
-);
 
-router.delete(
-  '/:id',
-  requireRole(ADMIN_ROLES),
-  async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      if (!isValidObjectId(id)) {
-        res.status(400).json({ data: null, error: 'Некорректный идентификатор скидки' });
-        return;
-      }
+  const parsed = await parseDiscountPayload(req.body ?? {}, true);
+  const update: Record<string, unknown> = {};
 
-      const discount = await DiscountModel.findByIdAndDelete(id);
-      if (!discount) {
-        res.status(404).json({ data: null, error: 'Скидка не найдена' });
-        return;
-      }
+  if (parsed.name !== undefined) update.name = parsed.name;
+  if (parsed.description !== undefined) update.description = parsed.description;
+  if (parsed.type !== undefined) update.type = parsed.type;
+  if (parsed.scope !== undefined) update.scope = parsed.scope;
+  if (parsed.value !== undefined) update.value = parsed.value;
+  if (parsed.categoryId !== undefined) update.categoryId = parsed.categoryId;
+  if (parsed.productId !== undefined) update.productId = parsed.productId;
+  if (parsed.autoApply !== undefined) update.autoApply = parsed.autoApply;
+  if (parsed.autoApplyDays !== undefined) update.autoApplyDays = parsed.autoApplyDays;
+  if (parsed.autoApplyStart !== undefined) update.autoApplyStart = parsed.autoApplyStart;
+  if (parsed.autoApplyEnd !== undefined) update.autoApplyEnd = parsed.autoApplyEnd;
+  if (parsed.isActive !== undefined) update.isActive = parsed.isActive;
 
-      res.json({ data: { deleted: true }, error: null });
-    } catch (error) {
-      next(error);
-    }
+  if (parsed.autoApply === false) {
+    update.autoApplyDays = undefined;
+    update.autoApplyStart = undefined;
+    update.autoApplyEnd = undefined;
   }
-);
+
+  const discount = await DiscountModel.findByIdAndUpdate(id, update, { new: true }).lean<DiscountRecord>();
+  if (!discount) {
+    res.status(404).json({ data: null, error: 'Скидка не найдена' });
+    return;
+  }
+
+  const mapped = await mapDiscountResponse([discount]);
+  res.json({ data: mapped[0], error: null });
+};
+
+const handleDeleteDiscount = async (req: RouterRequest, res: RouterResponse): Promise<void> => {
+  const { id } = req.params;
+  if (!isValidObjectId(id)) {
+    res.status(400).json({ data: null, error: 'Некорректный идентификатор скидки' });
+    return;
+  }
+
+  const discount = await DiscountModel.findByIdAndDelete(id);
+  if (!discount) {
+    res.status(404).json({ data: null, error: 'Скидка не найдена' });
+    return;
+  }
+
+  res.json({ data: { deleted: true }, error: null });
+};
+
+router.use(authMiddleware);
+
+router.get('/available', requireRole(CASHIER_ROLES), withErrorHandling(handleGetAvailableDiscounts));
+router.get('/', requireRole(ADMIN_ROLES), withErrorHandling(handleListDiscounts));
+router.post('/', requireRole(ADMIN_ROLES), withErrorHandling(handleCreateDiscount));
+router.patch('/:id', requireRole(ADMIN_ROLES), withErrorHandling(handleUpdateDiscount));
+router.delete('/:id', requireRole(ADMIN_ROLES), withErrorHandling(handleDeleteDiscount));
+
+const createPosDiscountRouter = (): Router => {
+  const posRouter = Router();
+  posRouter.use(authMiddleware);
+  posRouter.get('/available', requireRole(CASHIER_ROLES), withErrorHandling(handleGetAvailableDiscounts));
+  return posRouter;
+};
+
+const createAdminDiscountRouter = (): Router => {
+  const adminRouter = Router();
+  adminRouter.use(authMiddleware);
+  adminRouter.use(requireRole(ADMIN_ROLES));
+  adminRouter.get('/', withErrorHandling(handleListDiscounts));
+  adminRouter.post('/', withErrorHandling(handleCreateDiscount));
+  adminRouter.patch('/:id', withErrorHandling(handleUpdateDiscount));
+  adminRouter.delete('/:id', withErrorHandling(handleDeleteDiscount));
+  return adminRouter;
+};
+
+export const createDiscountRouters = () => ({
+  posRouter: createPosDiscountRouter(),
+  adminRouter: createAdminDiscountRouter(),
+});
 
 export default router;

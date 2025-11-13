@@ -356,7 +356,7 @@ const AdminPage: React.FC = () => {
     try {
       setDiscountsLoading(true);
       setDiscountsError(null);
-      const response = await api.get('/api/discounts');
+      const response = await api.get('/api/admin/discounts');
       const payload = getResponseData<AdminDiscount[]>(response);
       setDiscounts(payload ?? []);
     } catch (error) {
@@ -1109,7 +1109,7 @@ const AdminPage: React.FC = () => {
 
     try {
       setCreatingDiscount(true);
-      const response = await api.post('/api/discounts', payload);
+      const response = await api.post('/api/admin/discounts', payload);
       const created = getResponseData<AdminDiscount>(response);
       if (created) {
         setDiscounts((prev) => [created, ...prev]);
@@ -1139,7 +1139,7 @@ const AdminPage: React.FC = () => {
   const handleToggleDiscountActive = async (discount: AdminDiscount) => {
     try {
       setDiscountActionId(discount._id);
-      const response = await api.patch(`/api/discounts/${discount._id}`, {
+      const response = await api.patch(`/api/admin/discounts/${discount._id}`, {
         isActive: !discount.isActive,
       });
       const updated = getResponseData<AdminDiscount>(response);
@@ -1166,7 +1166,7 @@ const AdminPage: React.FC = () => {
 
     try {
       setDiscountActionId(discount._id);
-      await api.delete(`/api/discounts/${discount._id}`);
+      await api.delete(`/api/admin/discounts/${discount._id}`);
       setDiscounts((prev) => prev.filter((item) => item._id !== discount._id));
       notify({ title: 'Скидка удалена', type: 'success' });
     } catch (error) {

@@ -665,7 +665,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   },
   async fetchAvailableDiscounts() {
     try {
-      const response = await api.get('/api/discounts/available');
+      const response = await api.get('/api/orders/discounts/available');
       const discounts = mapDiscountSummaries(response.data?.data);
       set({ availableDiscounts: discounts });
     } catch (error) {
