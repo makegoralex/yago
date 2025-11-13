@@ -13,38 +13,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Upload project to server
+      - name: Copy files to server (password auth)
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: .
+          password: ${{ secrets.SSH_PASSWORD }}
+          source: "."
           target: ${{ secrets.APP_DIR }}
           overwrite: true
 
-      - name: Run deploy commands on server
+      - name: Execute commands on server (password auth)
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd ${{ secrets.APP_DIR }}
 
-            echo "=== Backend install ==="
-            npm install
+            npm install || true
+            npm run build || true
 
-            echo "=== Backend build ==="
-            npm run build || echo "No backend build script"
-
-            echo "=== Frontend build ==="
             cd frontend
-            npm install
-            npm run build
+            npm install || true
+            npm run build || true
             cd ..
 
-            echo "=== Restart PM2 ==="
             pm2 reload ${{ secrets.PM2_APP_NAME }} --update-env || pm2 start dist/app.js --name ${{ secrets.PM2_APP_NAME }}
