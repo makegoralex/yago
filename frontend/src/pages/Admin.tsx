@@ -223,6 +223,8 @@ const AdminPage: React.FC = () => {
   });
   const [discounts, setDiscounts] = useState<AdminDiscount[]>([]);
   const [discountsLoading, setDiscountsLoading] = useState(false);
+  const [discountsReady, setDiscountsReady] = useState(false);
+  const [discountsError, setDiscountsError] = useState<string | null>(null);
   const [discountActionId, setDiscountActionId] = useState<string | null>(null);
   const [creatingDiscount, setCreatingDiscount] = useState(false);
   const [discountForm, setDiscountForm] = useState({
@@ -353,16 +355,34 @@ const AdminPage: React.FC = () => {
   const loadDiscounts = useCallback(async () => {
     try {
       setDiscountsLoading(true);
+      setDiscountsError(null);
       const response = await api.get('/api/discounts');
       const payload = getResponseData<AdminDiscount[]>(response);
       setDiscounts(payload ?? []);
     } catch (error) {
       console.error('Не удалось загрузить скидки', error);
-      notify({ title: 'Не удалось загрузить скидки', type: 'error' });
+      let message = 'Не удалось загрузить скидки';
+      if (isAxiosError(error)) {
+        const responseError =
+          typeof error.response?.data === 'object' && error.response?.data !== null
+            ? (error.response?.data as { error?: unknown }).error
+            : undefined;
+        if (typeof responseError === 'string' && responseError.trim()) {
+          message = responseError.trim();
+        }
+      }
+      setDiscountsError(message);
+      notify({ title: message, type: 'error' });
     } finally {
       setDiscountsLoading(false);
+      setDiscountsReady(true);
     }
   }, [notify]);
+
+  const handleReloadDiscounts = () => {
+    setDiscountsReady(false);
+    setDiscountsError(null);
+  };
 
   const loadCustomers = useCallback(async () => {
     setCustomersLoading(true);
@@ -419,7 +439,7 @@ const AdminPage: React.FC = () => {
       if (!menuLoading && (categories.length === 0 || products.length === 0)) {
         void loadMenuData();
       }
-      if (!discountsLoading && discounts.length === 0) {
+      if (!discountsLoading && !discountsReady) {
         void loadDiscounts();
       }
     }
@@ -439,8 +459,8 @@ const AdminPage: React.FC = () => {
     suppliersLoading,
     suppliers.length,
     loadSuppliersData,
-    discounts.length,
     discountsLoading,
+    discountsReady,
     loadDiscounts,
   ]);
 
@@ -2545,7 +2565,18 @@ const AdminPage: React.FC = () => {
                 ))}
               </div>
             ) : discounts.length === 0 ? (
-              <p className="text-sm text-slate-500">Скидки ещё не созданы.</p>
+              <div className="flex flex-col items-start gap-3 rounded-2xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">
+                <p>{discountsError ?? 'Скидки ещё не созданы.'}</p>
+                {discountsError ? (
+                  <button
+                    type="button"
+                    onClick={handleReloadDiscounts}
+                    className="rounded-full border border-slate-300 px-4 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                  >
+                    Попробовать снова
+                  </button>
+                ) : null}
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200 text-sm">

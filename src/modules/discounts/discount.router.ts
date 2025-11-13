@@ -141,13 +141,22 @@ const toStringId = (value: unknown): string | undefined => {
 
 type DiscountRecord = Discount & { _id: Types.ObjectId };
 
+const toValidStringId = (value: unknown): string | undefined => {
+  const stringId = toStringId(value);
+  if (!stringId) {
+    return undefined;
+  }
+
+  return Types.ObjectId.isValid(stringId) ? stringId : undefined;
+};
+
 const mapDiscountResponse = async (discounts: DiscountRecord[]) => {
   const categoryIds = new Set<string>();
   const productIds = new Set<string>();
 
   for (const discount of discounts) {
-    const categoryId = toStringId(discount.categoryId);
-    const productId = toStringId(discount.productId);
+    const categoryId = toValidStringId(discount.categoryId);
+    const productId = toValidStringId(discount.productId);
     if (categoryId) {
       categoryIds.add(categoryId);
     }
@@ -157,12 +166,16 @@ const mapDiscountResponse = async (discounts: DiscountRecord[]) => {
   }
 
   const categories = categoryIds.size
-    ? await CategoryModel.find({ _id: { $in: Array.from(categoryIds, (id) => new Types.ObjectId(id)) } })
+    ? await CategoryModel.find({
+        _id: { $in: Array.from(categoryIds, (id) => new Types.ObjectId(id)) },
+      })
         .select('name')
         .lean()
     : [];
   const products = productIds.size
-    ? await ProductModel.find({ _id: { $in: Array.from(productIds, (id) => new Types.ObjectId(id)) } })
+    ? await ProductModel.find({
+        _id: { $in: Array.from(productIds, (id) => new Types.ObjectId(id)) },
+      })
         .select('name')
         .lean()
     : [];
@@ -178,9 +191,9 @@ const mapDiscountResponse = async (discounts: DiscountRecord[]) => {
   }
 
   return discounts.map((discount) => {
-    const categoryId = toStringId(discount.categoryId);
-    const productId = toStringId(discount.productId);
-    const discountId = toStringId(discount._id) ?? '';
+    const categoryId = toValidStringId(discount.categoryId);
+    const productId = toValidStringId(discount.productId);
+    const discountId = toValidStringId(discount._id) ?? discount._id.toString();
 
     return {
       _id: discountId,
@@ -189,8 +202,8 @@ const mapDiscountResponse = async (discounts: DiscountRecord[]) => {
       type: discount.type,
       scope: discount.scope,
       value: discount.value,
-      categoryId: categoryId ? new Types.ObjectId(categoryId) : undefined,
-      productId: productId ? new Types.ObjectId(productId) : undefined,
+      categoryId,
+      productId,
       targetName:
         discount.scope === 'category'
           ? categoryId
