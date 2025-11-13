@@ -18,7 +18,7 @@ import { calculateOrderTotals } from '../discounts/discount.service';
 
 const router = Router();
 
-const CASHIER_ROLES = ['admin', 'cashier'];
+const CASHIER_ROLES = ['admin', 'cashier', 'barista'];
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'card'];
 const ORDER_STATUSES: OrderStatus[] = ['draft', 'paid', 'completed'];
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['draft', 'paid'];

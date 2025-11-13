@@ -33,7 +33,7 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           id: { type: 'string', example: '665c2ba2d6f42e4a3c8f9921' },
           name: { type: 'string', example: 'Alex Barista' },
           email: { type: 'string', example: 'alex@yago.coffee' },
-          role: { type: 'string', enum: ['admin', 'manager', 'barista'] },
+          role: { type: 'string', enum: ['admin', 'manager', 'cashier', 'barista'] },
         },
       },
       AuthTokens: {
@@ -66,7 +66,7 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           name: { type: 'string' },
           email: { type: 'string', format: 'email' },
           password: { type: 'string', format: 'password' },
-          role: { type: 'string', enum: ['admin', 'manager', 'barista'] },
+          role: { type: 'string', enum: ['admin', 'manager', 'cashier', 'barista'] },
         },
       },
       RefreshRequest: {
