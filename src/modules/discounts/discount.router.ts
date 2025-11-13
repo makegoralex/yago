@@ -256,11 +256,19 @@ const parseDiscountPayload = async (payload: DiscountPayload, partial = false) =
   const type = payload.type === 'percentage' || payload.type === 'fixed' ? payload.type : undefined;
   const scope = payload.scope === 'order' || payload.scope === 'category' || payload.scope === 'product' ? payload.scope : undefined;
   const value = parseNumber(payload.value);
-  const autoApply = parseBoolean(payload.autoApply, false);
+  const autoApply =
+    payload.autoApply === undefined && partial ? undefined : parseBoolean(payload.autoApply, false);
   const autoApplyDays = parseDays(payload.autoApplyDays);
   const autoApplyStart = parseTime(payload.autoApplyStart);
   const autoApplyEnd = parseTime(payload.autoApplyEnd);
-  const isActive = typeof payload.isActive === 'boolean' ? payload.isActive : parseBoolean(payload.isActive, true);
+  let isActive: boolean | undefined;
+  if (payload.isActive === undefined && partial) {
+    isActive = undefined;
+  } else if (typeof payload.isActive === 'boolean') {
+    isActive = payload.isActive;
+  } else {
+    isActive = parseBoolean(payload.isActive, true);
+  }
 
   let categoryId: Types.ObjectId | undefined;
   if (payload.categoryId) {
@@ -337,6 +345,33 @@ const parseDiscountPayload = async (payload: DiscountPayload, partial = false) =
   };
 };
 
+type ParsedDiscountPayload = Awaited<ReturnType<typeof parseDiscountPayload>>;
+
+const buildDiscountUpdate = (parsed: ParsedDiscountPayload): Record<string, unknown> => {
+  const update: Record<string, unknown> = {};
+
+  if (parsed.name !== undefined) update.name = parsed.name;
+  if (parsed.description !== undefined) update.description = parsed.description;
+  if (parsed.type !== undefined) update.type = parsed.type;
+  if (parsed.scope !== undefined) update.scope = parsed.scope;
+  if (parsed.value !== undefined) update.value = parsed.value;
+  if (parsed.categoryId !== undefined) update.categoryId = parsed.categoryId;
+  if (parsed.productId !== undefined) update.productId = parsed.productId;
+  if (parsed.autoApply !== undefined) update.autoApply = parsed.autoApply;
+  if (parsed.autoApplyDays !== undefined) update.autoApplyDays = parsed.autoApplyDays;
+  if (parsed.autoApplyStart !== undefined) update.autoApplyStart = parsed.autoApplyStart;
+  if (parsed.autoApplyEnd !== undefined) update.autoApplyEnd = parsed.autoApplyEnd;
+  if (parsed.isActive !== undefined) update.isActive = parsed.isActive;
+
+  if (parsed.autoApply === false) {
+    update.autoApplyDays = undefined;
+    update.autoApplyStart = undefined;
+    update.autoApplyEnd = undefined;
+  }
+
+  return update;
+};
+
 const handleCreateDiscount = async (req: RouterRequest, res: RouterResponse): Promise<void> => {
   const parsed = await parseDiscountPayload(req.body ?? {}, false);
   const created = await DiscountModel.create({
@@ -371,26 +406,7 @@ const handleUpdateDiscount = async (req: RouterRequest, res: RouterResponse): Pr
   }
 
   const parsed = await parseDiscountPayload(req.body ?? {}, true);
-  const update: Record<string, unknown> = {};
-
-  if (parsed.name !== undefined) update.name = parsed.name;
-  if (parsed.description !== undefined) update.description = parsed.description;
-  if (parsed.type !== undefined) update.type = parsed.type;
-  if (parsed.scope !== undefined) update.scope = parsed.scope;
-  if (parsed.value !== undefined) update.value = parsed.value;
-  if (parsed.categoryId !== undefined) update.categoryId = parsed.categoryId;
-  if (parsed.productId !== undefined) update.productId = parsed.productId;
-  if (parsed.autoApply !== undefined) update.autoApply = parsed.autoApply;
-  if (parsed.autoApplyDays !== undefined) update.autoApplyDays = parsed.autoApplyDays;
-  if (parsed.autoApplyStart !== undefined) update.autoApplyStart = parsed.autoApplyStart;
-  if (parsed.autoApplyEnd !== undefined) update.autoApplyEnd = parsed.autoApplyEnd;
-  if (parsed.isActive !== undefined) update.isActive = parsed.isActive;
-
-  if (parsed.autoApply === false) {
-    update.autoApplyDays = undefined;
-    update.autoApplyStart = undefined;
-    update.autoApplyEnd = undefined;
-  }
+  const update = buildDiscountUpdate(parsed);
 
   const discount = (await DiscountModel.findByIdAndUpdate(id, update, { new: true }).lean()) as
     | DiscountRecord
@@ -450,5 +466,10 @@ export const createDiscountRouters = () => ({
   posRouter: createPosDiscountRouter(),
   adminRouter: createAdminDiscountRouter(),
 });
+
+export const __test__ = {
+  parseDiscountPayload,
+  buildDiscountUpdate,
+};
 
 export default router;
