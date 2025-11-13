@@ -37,22 +37,46 @@ jobs:
       # ------------------------------------
       - name: Upload frontend dist (rsync)
         run: |
+          set -euo pipefail
+          if [ ! -d ./frontend/dist ]; then
+            echo "Frontend dist directory not found" >&2
+            exit 1
+          fi
+
+          REMOTE="${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
+          REMOTE_DIR="${{ secrets.APP_DIR }}/frontend/dist"
+          REMOTE_DIR_ESCAPED=$(printf '%q' "$REMOTE_DIR")
+          SSH_CMD="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${{ secrets.SSH_PORT }}"
+
           sshpass -p "${{ secrets.SSH_PASSWORD }}" \
           rsync -avz --delete \
-          -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.SSH_PORT }}" \
+          -e "$SSH_CMD" \
+          --rsync-path="mkdir -p ${REMOTE_DIR_ESCAPED} && rsync" \
           ./frontend/dist/ \
-          ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.APP_DIR }}/frontend/dist/
+          "$REMOTE:${REMOTE_DIR_ESCAPED}/"
 
       # ------------------------------------
       # UPLOAD BACKEND via RSYNC
       # ------------------------------------
       - name: Upload backend files (rsync)
         run: |
+          set -euo pipefail
+          FILES=(./src ./package.json ./tsconfig.json)
+          if [ -f ./package-lock.json ]; then
+            FILES+=(./package-lock.json)
+          fi
+
+          REMOTE="${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
+          REMOTE_DIR="${{ secrets.APP_DIR }}"
+          REMOTE_DIR_ESCAPED=$(printf '%q' "$REMOTE_DIR")
+          SSH_CMD="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${{ secrets.SSH_PORT }}"
+
           sshpass -p "${{ secrets.SSH_PASSWORD }}" \
           rsync -avz --delete \
-          -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.SSH_PORT }}" \
-          ./src ./package.json ./package-lock.json ./tsconfig.json \
-          ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.APP_DIR }}/
+          -e "$SSH_CMD" \
+          --rsync-path="mkdir -p ${REMOTE_DIR_ESCAPED} && rsync" \
+          "${FILES[@]}" \
+          "$REMOTE:${REMOTE_DIR_ESCAPED}/"
 
       # ------------------------------------
       # RUN BACKEND BUILD + PM2 RELOAD
