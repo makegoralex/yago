@@ -8,8 +8,8 @@ import { getAvailableDiscounts } from './discount.service';
 
 const router = Router();
 
-const ADMIN_ROLES = ['admin'];
-const CASHIER_ROLES = ['admin', 'cashier'];
+const ADMIN_ROLES = ['admin', 'manager'];
+const CASHIER_ROLES = ['admin', 'manager', 'barista'];
 
 type DiscountPayload = {
   name?: unknown;
