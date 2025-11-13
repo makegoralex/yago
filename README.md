@@ -1,4 +1,4 @@
-# Yago Repository Snapshot
+# Yago Repository Snapshot1
 
 This workspace was set up to track the contents of the public repository at
 <https://github.com/makegoralex/yago>. Network restrictions prevented fetching
