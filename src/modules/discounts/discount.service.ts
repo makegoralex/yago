@@ -212,13 +212,17 @@ export const calculateOrderTotals = async (
     const selectedDiscounts = (await DiscountModel.find({
       _id: { $in: selectedIds },
       isActive: true,
-    }).lean()) as DiscountRecord[];
+    })
+      .lean()
+      .exec()) as unknown as DiscountRecord[];
     for (const discount of selectedDiscounts) {
       discountMap.set(discount._id.toString(), { discount, application: 'selected' });
     }
   }
 
-  const autoDiscounts = (await DiscountModel.find({ autoApply: true, isActive: true }).lean()) as DiscountRecord[];
+  const autoDiscounts = (await DiscountModel.find({ autoApply: true, isActive: true })
+    .lean()
+    .exec()) as unknown as DiscountRecord[];
   for (const discount of autoDiscounts) {
     if (!isWithinTimeWindow(discount, now)) {
       continue;
@@ -372,6 +376,6 @@ export const calculateOrderTotals = async (
 };
 
 export const getAvailableDiscounts = async (now: Date = new Date()) => {
-  const discounts = (await DiscountModel.find({ isActive: true }).lean()) as DiscountRecord[];
+  const discounts = (await DiscountModel.find({ isActive: true }).lean().exec()) as unknown as DiscountRecord[];
   return discounts.filter((discount) => !discount.autoApply || isWithinTimeWindow(discount, now));
 };

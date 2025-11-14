@@ -5,7 +5,7 @@ import { IngredientModel } from '../modules/catalog/ingredient.model';
 import { SupplierModel } from '../modules/suppliers/supplier.model';
 import { WarehouseModel } from '../modules/inventory/warehouse.model';
 import { InventoryItemModel, type InventoryItem } from '../modules/inventory/inventoryItem.model';
-import { DiscountModel } from '../modules/discounts/discount.model';
+import { DiscountModel, type Discount } from '../modules/discounts/discount.model';
 
 const demoCatalog = [
   {
@@ -147,13 +147,13 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
     await SupplierModel.insertMany(demoSuppliers);
   }
 
-  const suppliers = (await SupplierModel.find().lean()) as Array<{
+  const suppliers = (await SupplierModel.find().lean().exec()) as unknown as Array<{
     _id: Types.ObjectId;
     name: string;
   }>;
   const supplierMap = new Map<string, Types.ObjectId>();
   for (const supplier of suppliers) {
-    supplierMap.set(supplier.name, supplier._id as Types.ObjectId);
+    supplierMap.set(supplier.name, supplier._id);
   }
 
   if (ingredientCount === 0) {
@@ -167,13 +167,13 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
     );
   }
 
-  const ingredients = (await IngredientModel.find().lean()) as Array<{
+  const ingredients = (await IngredientModel.find().lean().exec()) as unknown as Array<{
     _id: Types.ObjectId;
     name: string;
   }>;
   const ingredientMap = new Map<string, Types.ObjectId>();
   for (const ingredient of ingredients) {
-    ingredientMap.set(ingredient.name, ingredient._id as Types.ObjectId);
+    ingredientMap.set(ingredient.name, ingredient._id);
   }
 
   if (categoryCount === 0 && productCount === 0) {
@@ -282,16 +282,22 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
 
   if (discountCount === 0) {
     const [productMatcha, categoryMilkDrinks] = await Promise.all([
-      ProductModel.findOne({ name: 'Матча латте' }).lean(),
-      CategoryModel.findOne({ name: 'Молочные напитки' }).lean(),
+      ProductModel.findOne({ name: 'Матча латте' })
+        .lean<{ _id: Types.ObjectId }>()
+        .exec(),
+      CategoryModel.findOne({ name: 'Молочные напитки' })
+        .lean<{ _id: Types.ObjectId }>()
+        .exec(),
     ]);
 
-    const demoDiscounts = [
+    type DiscountSeed = Omit<Discount, 'createdAt' | 'updatedAt'>;
+
+    const demoDiscounts: DiscountSeed[] = [
       {
         name: 'Добро пожаловать 10%',
         description: 'Скидка 10% на первый заказ',
-        type: 'percentage' as const,
-        scope: 'order' as const,
+        type: 'percentage',
+        scope: 'order',
         value: 10,
         autoApply: false,
         isActive: true,
@@ -302,8 +308,8 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
       demoDiscounts.push({
         name: 'Молочные напитки −30 ₽',
         description: 'Фиксированная скидка на все молочные напитки',
-        type: 'fixed' as const,
-        scope: 'category' as const,
+        type: 'fixed',
+        scope: 'category',
         value: 30,
         categoryId: categoryMilkDrinks._id,
         autoApply: false,
@@ -315,8 +321,8 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
       demoDiscounts.push({
         name: 'Матча латте 15%',
         description: 'Скидка 15% на авторский Матча латте',
-        type: 'percentage' as const,
-        scope: 'product' as const,
+        type: 'percentage',
+        scope: 'product',
         value: 15,
         productId: productMatcha._id,
         autoApply: true,
