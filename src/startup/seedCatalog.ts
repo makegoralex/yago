@@ -5,6 +5,7 @@ import { IngredientModel } from '../modules/catalog/ingredient.model';
 import { SupplierModel } from '../modules/suppliers/supplier.model';
 import { WarehouseModel } from '../modules/inventory/warehouse.model';
 import { InventoryItemModel, type InventoryItem } from '../modules/inventory/inventoryItem.model';
+import { DiscountModel } from '../modules/discounts/discount.model';
 
 const demoCatalog = [
   {
@@ -133,12 +134,13 @@ const demoWarehouses = [
 ];
 
 export const ensureDemoCatalogSeeded = async (): Promise<void> => {
-  const [categoryCount, productCount, ingredientCount, supplierCount, warehouseCount] = await Promise.all([
+  const [categoryCount, productCount, ingredientCount, supplierCount, warehouseCount, discountCount] = await Promise.all([
     CategoryModel.countDocuments(),
     ProductModel.countDocuments(),
     IngredientModel.countDocuments(),
     SupplierModel.countDocuments(),
     WarehouseModel.countDocuments(),
+    DiscountModel.countDocuments(),
   ]);
 
   if (supplierCount === 0) {
@@ -276,5 +278,56 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
     if (inventorySeed.length > 0) {
       await InventoryItemModel.insertMany(inventorySeed);
     }
+  }
+
+  if (discountCount === 0) {
+    const [productMatcha, categoryMilkDrinks] = await Promise.all([
+      ProductModel.findOne({ name: 'Матча латте' }).lean(),
+      CategoryModel.findOne({ name: 'Молочные напитки' }).lean(),
+    ]);
+
+    const demoDiscounts = [
+      {
+        name: 'Добро пожаловать 10%',
+        description: 'Скидка 10% на первый заказ',
+        type: 'percentage' as const,
+        scope: 'order' as const,
+        value: 10,
+        autoApply: false,
+        isActive: true,
+      },
+    ];
+
+    if (categoryMilkDrinks?._id) {
+      demoDiscounts.push({
+        name: 'Молочные напитки −30 ₽',
+        description: 'Фиксированная скидка на все молочные напитки',
+        type: 'fixed' as const,
+        scope: 'category' as const,
+        value: 30,
+        categoryId: categoryMilkDrinks._id,
+        autoApply: false,
+        isActive: true,
+      });
+    }
+
+    if (productMatcha?._id) {
+      demoDiscounts.push({
+        name: 'Матча латте 15%',
+        description: 'Скидка 15% на авторский Матча латте',
+        type: 'percentage' as const,
+        scope: 'product' as const,
+        value: 15,
+        productId: productMatcha._id,
+        autoApply: true,
+        autoApplyDays: [1, 3, 5],
+        autoApplyStart: '08:00',
+        autoApplyEnd: '12:00',
+        isActive: true,
+      });
+    }
+
+    await DiscountModel.insertMany(demoDiscounts);
+    console.log('Seeded demo discounts for Yago POS');
   }
 };
