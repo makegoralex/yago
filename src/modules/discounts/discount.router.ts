@@ -245,7 +245,7 @@ const handleGetAvailableDiscounts = async (_req: RouterRequest, res: RouterRespo
 };
 
 const handleListDiscounts = async (_req: RouterRequest, res: RouterResponse): Promise<void> => {
-  const discounts = (await DiscountModel.find().sort({ createdAt: -1 }).lean()) as DiscountRecord[];
+  const discounts = (await DiscountModel.find().sort({ createdAt: -1 }).lean().exec()) as unknown as DiscountRecord[];
   const mapped = await mapDiscountResponse(discounts);
   res.json({ data: mapped, error: null });
 };

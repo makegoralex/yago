@@ -1,4 +1,4 @@
-import { FilterQuery } from 'mongoose';
+import { FilterQuery, Types } from 'mongoose';
 
 import { IUser, UserModel } from '../../models/User';
 import { hashPassword } from '../../services/authService';
@@ -50,14 +50,23 @@ const sanitizeUser = (user: IUser): CashierSummary => ({
   updatedAt: user.updatedAt,
 });
 
+type LeanCashier = {
+  _id: Types.ObjectId;
+  name: string;
+  email: string;
+  role: IUser['role'];
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export const listCashiers = async (
   filter: FilterQuery<IUser> = {}
 ): Promise<CashierSummary[]> => {
-  const query: FilterQuery<IUser> = { ...filter, role: 'cashier' };
+  const allowedRoles: IUser['role'][] = ['cashier', 'barista'];
+  const roleFilter: FilterQuery<IUser> = { role: { $in: allowedRoles } };
+  const query: FilterQuery<IUser> = { ...filter, ...roleFilter };
 
-  const cashiers = (await UserModel.find(query).sort({ name: 1 }).lean()) as Array<
-    IUser & { _id: { toString(): string } }
-  >;
+  const cashiers = (await UserModel.find(query).sort({ name: 1 }).lean().exec()) as unknown as LeanCashier[];
 
   return cashiers.map((cashier) => ({
     id: cashier._id.toString(),
