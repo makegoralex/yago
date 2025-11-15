@@ -10,11 +10,13 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().accessToken;
-  if (token) {
+  const session = useAuthStore.getState().session;
+
+  if (session?.accessToken) {
     config.headers = config.headers ?? {};
-    config.headers.Authorization = `Bearer ${token}`;
+    config.headers.Authorization = `Bearer ${session.accessToken}`;
   }
+
   return config;
 });
 
@@ -22,24 +24,40 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const session = useAuthStore.getState().session;
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-      const { refreshToken, clearSession, setSession, user, remember } = useAuthStore.getState();
-      if (!refreshToken || !user) {
-        clearSession();
+
+      if (!session?.refreshToken || !session?.user) {
+        useAuthStore.getState().clearSession();
         return Promise.reject(error);
       }
+
       try {
-        const refreshResponse = await axios.post(`${resolvedBaseURL}/api/auth/refresh`, { refreshToken });
-        const { accessToken: newAccessToken, refreshToken: newRefreshToken } = refreshResponse.data.data;
-        setSession({ user, accessToken: newAccessToken, refreshToken: newRefreshToken, remember: remember ?? true });
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        const refreshResponse = await axios.post(`${resolvedBaseURL}/api/auth/refresh`, {
+          refreshToken: session.refreshToken,
+        });
+
+        const newTokens = refreshResponse.data.data;
+
+        useAuthStore
+          .getState()
+          .setSession({
+            user: session.user,
+            accessToken: newTokens.accessToken,
+            refreshToken: newTokens.refreshToken,
+            remember: session.remember,
+          });
+
+        originalRequest.headers.Authorization = `Bearer ${newTokens.accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
-        clearSession();
+        useAuthStore.getState().clearSession();
         return Promise.reject(refreshError);
       }
     }
+
     return Promise.reject(error);
   }
 );
