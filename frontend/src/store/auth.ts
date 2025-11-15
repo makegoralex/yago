@@ -20,6 +20,12 @@ type Session = {
 type AuthState = {
   session: Session | null;
 
+  // 🔥 Совместимость со старым кодом
+  user: AuthUser | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  remember: boolean;
+
   setSession: (session: Session) => void;
   clearSession: () => void;
 };
@@ -41,10 +47,23 @@ const loadSession = (): Session | null => {
 export const useAuthStore = create<AuthState>((set) => ({
   session: loadSession(),
 
+  // Геттеры для совместимости
+  get user() {
+    return this.session?.user ?? null;
+  },
+  get accessToken() {
+    return this.session?.accessToken ?? null;
+  },
+  get refreshToken() {
+    return this.session?.refreshToken ?? null;
+  },
+  get remember() {
+    return this.session?.remember ?? false;
+  },
+
   setSession: (session) => {
     set({ session });
 
-    // сохраняем ВСЕГДА при remember = true
     if (session.remember) {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
     } else {
@@ -54,6 +73,8 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   clearSession: () => {
     window.localStorage.removeItem(STORAGE_KEY);
-    set({ session: null });
+    set({
+      session: null,
+    });
   },
 }));
