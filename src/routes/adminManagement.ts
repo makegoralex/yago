@@ -13,6 +13,14 @@ import { InventoryItemModel } from '../modules/inventory/inventoryItem.model';
 import { WarehouseModel } from '../modules/inventory/warehouse.model';
 import { SupplierModel } from '../modules/suppliers/supplier.model';
 import {
+  handleCreateDiscount,
+  handleDeleteDiscount,
+  handleListDiscounts,
+  handleUpdateDiscount,
+  withErrorHandling as withDiscountErrorHandling,
+} from '../modules/discounts/discount.router';
+import { fetchSalesAndShiftStats } from '../modules/adminStats/adminStats.service';
+import {
   CashierServiceError,
   createCashierAccount,
   deleteCashierAccount,
@@ -29,6 +37,19 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
   };
+};
+
+const parseDateOnly = (value: unknown): Date | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return undefined;
+  }
+
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 };
 
 router.get(
@@ -113,6 +134,12 @@ router.delete(
     }
   })
 );
+
+router.get('/discounts', withDiscountErrorHandling(handleListDiscounts));
+router.post('/discounts', withDiscountErrorHandling(handleCreateDiscount));
+router.put('/discounts/:id', withDiscountErrorHandling(handleUpdateDiscount));
+router.patch('/discounts/:id', withDiscountErrorHandling(handleUpdateDiscount));
+router.delete('/discounts/:id', withDiscountErrorHandling(handleDeleteDiscount));
 
 router.get(
   '/catalog',
@@ -205,6 +232,33 @@ router.get(
       .lean();
 
     res.json({ data: { items: lowStockItems }, error: null });
+  })
+);
+
+router.get(
+  '/stats/sales-and-shifts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const from = parseDateOnly(req.query.from);
+    const to = parseDateOnly(req.query.to);
+
+    if (req.query.from && !from) {
+      res.status(400).json({ data: null, error: 'from должен быть в формате YYYY-MM-DD' });
+      return;
+    }
+
+    if (req.query.to && !to) {
+      res.status(400).json({ data: null, error: 'to должен быть в формате YYYY-MM-DD' });
+      return;
+    }
+
+    if (from && to && from > to) {
+      res.status(400).json({ data: null, error: 'from должен быть меньше или равен to' });
+      return;
+    }
+
+    const stats = await fetchSalesAndShiftStats({ from, to });
+
+    res.json({ data: stats, error: null });
   })
 );
 
