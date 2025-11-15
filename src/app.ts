@@ -12,6 +12,7 @@ import customersRouter from './modules/customers/customer.router';
 import loyaltyRouter from './modules/loyalty/loyalty.router';
 import reportsRouter from './routes/reports';
 import adminManagementRouter from './routes/adminManagement';
+import adminStatsRouter from './routes/adminStats';
 import suppliersRouter from './modules/suppliers/supplier.router';
 import inventoryRouter from './modules/inventory/inventory.router';
 import discountRouter, { createDiscountRouters } from './modules/discounts/discount.router';
@@ -43,6 +44,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/suppliers', suppliersRouter);
 app.use('/api/inventory', inventoryRouter);
 app.use('/api/admin/discounts', adminDiscountRouter);
+app.use('/api/admin/stats', adminStatsRouter);
 app.use('/api/admin', adminManagementRouter);
 
 app.get('/api/protected', authMiddleware, (req, res) => {
