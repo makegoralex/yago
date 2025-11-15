@@ -12,7 +12,7 @@ import customersRouter from './modules/customers/customer.router';
 import loyaltyRouter from './modules/loyalty/loyalty.router';
 import reportsRouter from './routes/reports';
 import adminManagementRouter from './routes/adminManagement';
-import adminStatsRouter from './routes/adminStats';
+import adminStatsRouter from './modules/adminStats/adminStats.router';
 import suppliersRouter from './modules/suppliers/supplier.router';
 import inventoryRouter from './modules/inventory/inventory.router';
 import discountRouter, { createDiscountRouters } from './modules/discounts/discount.router';

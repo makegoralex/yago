@@ -15,14 +15,15 @@ import { SupplierModel } from '../modules/suppliers/supplier.model';
 import {
   CashierServiceError,
   createCashierAccount,
+  deleteCashierAccount,
   listCashiers,
+  updateCashierAccount,
 } from '../modules/staff/cashier.service';
 
 const router = Router();
 
 router.use(authMiddleware);
-
-const ADMIN_AND_BARISTA: string[] = ['admin', 'barista'];
+router.use(requireRole('admin'));
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {
@@ -32,7 +33,6 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
 
 router.get(
   '/cashiers',
-  requireRole(ADMIN_AND_BARISTA),
   asyncHandler(async (_req: Request, res: Response) => {
     const cashiers = await listCashiers();
 
@@ -45,7 +45,6 @@ router.get(
 
 router.post(
   '/cashiers',
-  requireRole(ADMIN_AND_BARISTA),
   asyncHandler(async (req: Request, res: Response) => {
     const { name, email, password } = req.body ?? {};
 
@@ -57,6 +56,53 @@ router.post(
       });
 
       res.status(201).json({ data: { cashier }, error: null });
+    } catch (error) {
+      if (error instanceof CashierServiceError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
+
+router.put(
+  '/cashiers/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { name, email, password, role } = req.body ?? {};
+    const normalizedRole = role === 'cashier' || role === 'barista' ? role : undefined;
+
+    try {
+      const cashier = await updateCashierAccount({
+        id,
+        name: typeof name === 'string' ? name : undefined,
+        email: typeof email === 'string' ? email : undefined,
+        password: typeof password === 'string' ? password : undefined,
+        role: normalizedRole,
+      });
+
+      res.json({ data: { cashier }, error: null });
+    } catch (error) {
+      if (error instanceof CashierServiceError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
+
+router.delete(
+  '/cashiers/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    try {
+      await deleteCashierAccount(id);
+      res.json({ data: { deleted: true }, error: null });
     } catch (error) {
       if (error instanceof CashierServiceError) {
         res.status(error.status).json({ data: null, error: error.message });

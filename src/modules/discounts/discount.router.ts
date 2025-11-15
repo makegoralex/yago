@@ -441,6 +441,7 @@ router.use(authMiddleware);
 router.get('/available', requireRole(CASHIER_ROLES), withErrorHandling(handleGetAvailableDiscounts));
 router.get('/', requireRole(ADMIN_ROLES), withErrorHandling(handleListDiscounts));
 router.post('/', requireRole(ADMIN_ROLES), withErrorHandling(handleCreateDiscount));
+router.put('/:id', requireRole(ADMIN_ROLES), withErrorHandling(handleUpdateDiscount));
 router.patch('/:id', requireRole(ADMIN_ROLES), withErrorHandling(handleUpdateDiscount));
 router.delete('/:id', requireRole(ADMIN_ROLES), withErrorHandling(handleDeleteDiscount));
 
@@ -457,6 +458,7 @@ const createAdminDiscountRouter = (): Router => {
   adminRouter.use(requireRole(ADMIN_ROLES));
   adminRouter.get('/', withErrorHandling(handleListDiscounts));
   adminRouter.post('/', withErrorHandling(handleCreateDiscount));
+  adminRouter.put('/:id', withErrorHandling(handleUpdateDiscount));
   adminRouter.patch('/:id', withErrorHandling(handleUpdateDiscount));
   adminRouter.delete('/:id', withErrorHandling(handleDeleteDiscount));
   return adminRouter;
