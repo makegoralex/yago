@@ -2,6 +2,12 @@ import { Schema, model, Types, Document } from 'mongoose';
 
 export type ShiftStatus = 'open' | 'closed';
 
+export interface ShiftTotals {
+  cash: number;
+  card: number;
+  total: number;
+}
+
 export interface Shift {
   orgId: string;
   locationId: string;
@@ -15,12 +21,22 @@ export interface Shift {
   closingBalance?: number;
   openingNote?: string;
   closingNote?: string;
+  totals?: ShiftTotals;
   status: ShiftStatus;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export type ShiftDocument = Document & Shift;
+
+const totalsSchema = new Schema<ShiftTotals>(
+  {
+    cash: { type: Number, required: false, default: 0, min: 0 },
+    card: { type: Number, required: false, default: 0, min: 0 },
+    total: { type: Number, required: false, default: 0, min: 0 },
+  },
+  { _id: false }
+);
 
 const shiftSchema = new Schema<ShiftDocument>(
   {
@@ -36,6 +52,7 @@ const shiftSchema = new Schema<ShiftDocument>(
     closingBalance: { type: Number, min: 0 },
     openingNote: { type: String, trim: true },
     closingNote: { type: String, trim: true },
+    totals: { type: totalsSchema, required: false },
     status: {
       type: String,
       enum: ['open', 'closed'],

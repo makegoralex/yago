@@ -225,7 +225,9 @@ const mapDiscountResponse = async (discounts: DiscountRecord[]) => {
   });
 };
 
-const withErrorHandling = (handler: (req: RouterRequest, res: RouterResponse) => Promise<void>) => {
+export const withErrorHandling = (
+  handler: (req: RouterRequest, res: RouterResponse) => Promise<void>
+) => {
   return async (req: RouterRequest, res: RouterResponse, next: NextFunction) => {
     try {
       await handler(req, res);
@@ -238,13 +240,19 @@ const withErrorHandling = (handler: (req: RouterRequest, res: RouterResponse) =>
 type RouterRequest = Request;
 type RouterResponse = Response;
 
-const handleGetAvailableDiscounts = async (_req: RouterRequest, res: RouterResponse): Promise<void> => {
+export const handleGetAvailableDiscounts = async (
+  _req: RouterRequest,
+  res: RouterResponse
+): Promise<void> => {
   const discounts = await getAvailableDiscounts();
   const mapped = await mapDiscountResponse(discounts);
   res.json({ data: mapped, error: null });
 };
 
-const handleListDiscounts = async (_req: RouterRequest, res: RouterResponse): Promise<void> => {
+export const handleListDiscounts = async (
+  _req: RouterRequest,
+  res: RouterResponse
+): Promise<void> => {
   const discounts = (await DiscountModel.find().sort({ createdAt: -1 }).lean().exec()) as unknown as DiscountRecord[];
   const mapped = await mapDiscountResponse(discounts);
   res.json({ data: mapped, error: null });
@@ -372,7 +380,10 @@ const buildDiscountUpdate = (parsed: ParsedDiscountPayload): Record<string, unkn
   return update;
 };
 
-const handleCreateDiscount = async (req: RouterRequest, res: RouterResponse): Promise<void> => {
+export const handleCreateDiscount = async (
+  req: RouterRequest,
+  res: RouterResponse
+): Promise<void> => {
   const parsed = await parseDiscountPayload(req.body ?? {}, false);
   const created = await DiscountModel.create({
     name: parsed.name!,
@@ -398,7 +409,10 @@ const handleCreateDiscount = async (req: RouterRequest, res: RouterResponse): Pr
   res.status(201).json({ data: mapped[0], error: null });
 };
 
-const handleUpdateDiscount = async (req: RouterRequest, res: RouterResponse): Promise<void> => {
+export const handleUpdateDiscount = async (
+  req: RouterRequest,
+  res: RouterResponse
+): Promise<void> => {
   const { id } = req.params;
   if (!isValidObjectId(id)) {
     res.status(400).json({ data: null, error: 'Некорректный идентификатор скидки' });
@@ -420,7 +434,10 @@ const handleUpdateDiscount = async (req: RouterRequest, res: RouterResponse): Pr
   res.json({ data: mapped[0], error: null });
 };
 
-const handleDeleteDiscount = async (req: RouterRequest, res: RouterResponse): Promise<void> => {
+export const handleDeleteDiscount = async (
+  req: RouterRequest,
+  res: RouterResponse
+): Promise<void> => {
   const { id } = req.params;
   if (!isValidObjectId(id)) {
     res.status(400).json({ data: null, error: 'Некорректный идентификатор скидки' });
@@ -441,22 +458,30 @@ router.use(authMiddleware);
 router.get('/available', requireRole(CASHIER_ROLES), withErrorHandling(handleGetAvailableDiscounts));
 router.get('/', requireRole(ADMIN_ROLES), withErrorHandling(handleListDiscounts));
 router.post('/', requireRole(ADMIN_ROLES), withErrorHandling(handleCreateDiscount));
+router.put('/:id', requireRole(ADMIN_ROLES), withErrorHandling(handleUpdateDiscount));
 router.patch('/:id', requireRole(ADMIN_ROLES), withErrorHandling(handleUpdateDiscount));
 router.delete('/:id', requireRole(ADMIN_ROLES), withErrorHandling(handleDeleteDiscount));
 
-const createPosDiscountRouter = (): Router => {
+export const createPosDiscountRouter = (): Router => {
   const posRouter = Router();
   posRouter.use(authMiddleware);
   posRouter.get('/available', requireRole(CASHIER_ROLES), withErrorHandling(handleGetAvailableDiscounts));
   return posRouter;
 };
 
-const createAdminDiscountRouter = (): Router => {
+type AdminDiscountRouterOptions = {
+  skipAuth?: boolean;
+};
+
+export const createAdminDiscountRouter = (options: AdminDiscountRouterOptions = {}): Router => {
   const adminRouter = Router();
-  adminRouter.use(authMiddleware);
-  adminRouter.use(requireRole(ADMIN_ROLES));
+  if (!options.skipAuth) {
+    adminRouter.use(authMiddleware);
+    adminRouter.use(requireRole(ADMIN_ROLES));
+  }
   adminRouter.get('/', withErrorHandling(handleListDiscounts));
   adminRouter.post('/', withErrorHandling(handleCreateDiscount));
+  adminRouter.put('/:id', withErrorHandling(handleUpdateDiscount));
   adminRouter.patch('/:id', withErrorHandling(handleUpdateDiscount));
   adminRouter.delete('/:id', withErrorHandling(handleDeleteDiscount));
   return adminRouter;
