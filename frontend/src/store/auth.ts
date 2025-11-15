@@ -18,13 +18,14 @@ type Session = {
 };
 
 type AuthState = {
-  session: Session | null;
-
-  // 🔥 Совместимость со старым кодом
+  // старая структура (нужна старому фронту + Codex-коду)
   user: AuthUser | null;
   accessToken: string | null;
   refreshToken: string | null;
   remember: boolean;
+
+  // новая структура — для новых модулей Codex
+  session: Session | null;
 
   setSession: (session: Session) => void;
   clearSession: () => void;
@@ -44,37 +45,46 @@ const loadSession = (): Session | null => {
   }
 };
 
-export const useAuthStore = create<AuthState>((set) => ({
-  session: loadSession(),
+export const useAuthStore = create<AuthState>((set) => {
+  const session = loadSession();
 
-  // Геттеры для совместимости
-  get user() {
-    return this.session?.user ?? null;
-  },
-  get accessToken() {
-    return this.session?.accessToken ?? null;
-  },
-  get refreshToken() {
-    return this.session?.refreshToken ?? null;
-  },
-  get remember() {
-    return this.session?.remember ?? false;
-  },
+  return {
+    // старая модель данных
+    user: session?.user ?? null,
+    accessToken: session?.accessToken ?? null,
+    refreshToken: session?.refreshToken ?? null,
+    remember: session?.remember ?? false,
 
-  setSession: (session) => {
-    set({ session });
+    // новая модель данных
+    session,
 
-    if (session.remember) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    } else {
+    setSession: (session) => {
+      // сохраняем в Zustand
+      set({
+        session,
+        user: session.user,
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        remember: session.remember,
+      });
+
+      // сохраняем в localStorage
+      if (session.remember) {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+      } else {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+    },
+
+    clearSession: () => {
       window.localStorage.removeItem(STORAGE_KEY);
-    }
-  },
-
-  clearSession: () => {
-    window.localStorage.removeItem(STORAGE_KEY);
-    set({
-      session: null,
-    });
-  },
-}));
+      set({
+        session: null,
+        user: null,
+        accessToken: null,
+        refreshToken: null,
+        remember: false,
+      });
+    },
+  };
+});
