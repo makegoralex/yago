@@ -10,20 +10,83 @@ interface TokenPayload {
   role: string;
 }
 
+const TOKEN_COOKIE_NAMES = ['accessToken', 'token'];
+
+const parseCookieHeader = (cookieHeader: string | undefined): Record<string, string> => {
+  if (!cookieHeader) {
+    return {};
+  }
+
+  return cookieHeader.split(';').reduce<Record<string, string>>((acc, segment) => {
+    const [rawName, ...rest] = segment.split('=');
+    if (!rawName) {
+      return acc;
+    }
+
+    const name = rawName.trim();
+    const value = rest.join('=').trim();
+    if (!name) {
+      return acc;
+    }
+
+    acc[name] = value;
+    return acc;
+  }, {});
+};
+
+const resolveAccessToken = (req: Request): string | null => {
+  const headerToken = req.get('authorization') ?? req.get('Authorization');
+  if (headerToken && headerToken.startsWith('Bearer ')) {
+    return headerToken.slice('Bearer '.length).trim() || null;
+  }
+
+  const directHeaderToken =
+    (typeof req.headers['x-access-token'] === 'string'
+      ? req.headers['x-access-token']
+      : Array.isArray(req.headers['x-access-token'])
+        ? req.headers['x-access-token'][0]
+        : undefined) ??
+    (typeof req.headers['access-token'] === 'string'
+      ? req.headers['access-token']
+      : Array.isArray(req.headers['access-token'])
+        ? req.headers['access-token'][0]
+        : undefined);
+
+  if (directHeaderToken) {
+    return directHeaderToken;
+  }
+
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    const cookies = parseCookieHeader(cookieHeader);
+    for (const name of TOKEN_COOKIE_NAMES) {
+      if (cookies[name]) {
+        return cookies[name];
+      }
+    }
+  }
+
+  const queryToken = req.query.accessToken ?? req.query.token;
+  if (typeof queryToken === 'string' && queryToken.trim()) {
+    return queryToken.trim();
+  }
+
+  return null;
+};
+
 export const authMiddleware = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
+    const token = resolveAccessToken(req);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ data: null, error: 'Authorization header missing or invalid' });
+    if (!token) {
+      res.status(401).json({ data: null, error: 'Authorization token is required' });
       return;
     }
 
-    const token = authHeader.slice(7);
     const payload = jwt.verify(token, appConfig.jwtAccessSecret) as TokenPayload;
 
     const user = await UserModel.findById(payload.sub).select('name email role');
