@@ -34,10 +34,49 @@ const parseCookieHeader = (cookieHeader: string | undefined): Record<string, str
   }, {});
 };
 
+const safelyDecodeURIComponent = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+const resolveAuthorizationHeaderToken = (headerValue: string | undefined): string | null => {
+  if (!headerValue) {
+    return null;
+  }
+
+  const trimmed = headerValue.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const bearerMatch = /^Bearer\s+(.+)$/i.exec(trimmed);
+  if (bearerMatch?.[1]) {
+    const candidate = bearerMatch[1].trim();
+    return candidate ? safelyDecodeURIComponent(candidate) : null;
+  }
+
+  const tokenMatch = /^Token\s+(.+)$/i.exec(trimmed);
+  if (tokenMatch?.[1]) {
+    const candidate = tokenMatch[1].trim();
+    return candidate ? safelyDecodeURIComponent(candidate) : null;
+  }
+
+  if (!trimmed.includes(' ')) {
+    return safelyDecodeURIComponent(trimmed);
+  }
+
+  return null;
+};
+
 const resolveAccessToken = (req: Request): string | null => {
-  const headerToken = req.get('authorization') ?? req.get('Authorization');
-  if (headerToken && headerToken.startsWith('Bearer ')) {
-    return headerToken.slice('Bearer '.length).trim() || null;
+  const headerToken =
+    resolveAuthorizationHeaderToken(req.get('authorization')) ??
+    resolveAuthorizationHeaderToken(req.get('Authorization'));
+  if (headerToken) {
+    return headerToken;
   }
 
   const directHeaderToken =
@@ -53,7 +92,7 @@ const resolveAccessToken = (req: Request): string | null => {
         : undefined);
 
   if (directHeaderToken) {
-    return directHeaderToken;
+    return safelyDecodeURIComponent(directHeaderToken);
   }
 
   const cookieHeader = req.headers.cookie;
@@ -61,14 +100,14 @@ const resolveAccessToken = (req: Request): string | null => {
     const cookies = parseCookieHeader(cookieHeader);
     for (const name of TOKEN_COOKIE_NAMES) {
       if (cookies[name]) {
-        return cookies[name];
+        return safelyDecodeURIComponent(cookies[name]);
       }
     }
   }
 
   const queryToken = req.query.accessToken ?? req.query.token;
   if (typeof queryToken === 'string' && queryToken.trim()) {
-    return queryToken.trim();
+    return safelyDecodeURIComponent(queryToken.trim());
   }
 
   return null;
