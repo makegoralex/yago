@@ -10,67 +10,50 @@ export type AuthUser = {
   id?: string;
 };
 
-type AuthState = {
-  user: AuthUser | null;
-  accessToken: string | null;
-  refreshToken: string | null;
+type Session = {
+  user: AuthUser;
+  accessToken: string;
+  refreshToken: string;
   remember: boolean;
+};
 
-  setSession: (payload: {
-    user: AuthUser;
-    accessToken: string;
-    refreshToken: string;
-    remember: boolean;
-  }) => void;
+type AuthState = {
+  session: Session | null;
 
+  setSession: (session: Session) => void;
   clearSession: () => void;
 };
 
 const STORAGE_KEY = 'yago-auth';
 
-const loadSession = () => {
-  if (typeof window === 'undefined') {
-    return { user: null, accessToken: null, refreshToken: null, remember: false };
-  }
+const loadSession = (): Session | null => {
+  if (typeof window === 'undefined') return null;
 
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return { user: null, accessToken: null, refreshToken: null, remember: false };
-    }
+    if (!raw) return null;
     return JSON.parse(raw);
   } catch {
-    return { user: null, accessToken: null, refreshToken: null, remember: false };
+    return null;
   }
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
-  ...loadSession(),
+  session: loadSession(),
 
-  setSession: ({ user, accessToken, refreshToken, remember }) => {
-    const session = { user, accessToken, refreshToken, remember };
+  setSession: (session) => {
+    set({ session });
 
-    if (typeof window !== 'undefined') {
-      if (remember) {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-      } else {
-        window.localStorage.removeItem(STORAGE_KEY);
-      }
+    // сохраняем ВСЕГДА при remember = true
+    if (session.remember) {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    } else {
+      window.localStorage.removeItem(STORAGE_KEY);
     }
-
-    set(session);
   },
 
   clearSession: () => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
-
-    set({
-      user: null,
-      accessToken: null,
-      refreshToken: null,
-      remember: false,
-    });
+    window.localStorage.removeItem(STORAGE_KEY);
+    set({ session: null });
   },
 }));
