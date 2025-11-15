@@ -18,6 +18,14 @@ export interface CreateCashierParams {
   password: string;
 }
 
+export interface UpdateCashierParams {
+  id: string;
+  name?: string;
+  email?: string;
+  password?: string;
+  role?: IUser['role'];
+}
+
 export class CashierServiceError extends Error {
   constructor(message: string, public readonly status: number = 400) {
     super(message);
@@ -26,6 +34,15 @@ export class CashierServiceError extends Error {
 }
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+const STAFF_ROLES: IUser['role'][] = ['cashier', 'barista'];
+
+const ensureValidId = (id: string): Types.ObjectId => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new CashierServiceError('Некорректный идентификатор кассира');
+  }
+
+  return new Types.ObjectId(id);
+};
 
 const resolveId = (user: IUser): string => {
   const maybeId = (user as { id?: string }).id;
@@ -62,8 +79,7 @@ type LeanCashier = {
 export const listCashiers = async (
   filter: FilterQuery<IUser> = {}
 ): Promise<CashierSummary[]> => {
-  const allowedRoles: IUser['role'][] = ['cashier', 'barista'];
-  const roleFilter: FilterQuery<IUser> = { role: { $in: allowedRoles } };
+  const roleFilter: FilterQuery<IUser> = { role: { $in: STAFF_ROLES } };
   const query: FilterQuery<IUser> = { ...filter, ...roleFilter };
 
   const cashiers = (await UserModel.find(query).sort({ name: 1 }).lean().exec()) as unknown as LeanCashier[];
@@ -113,4 +129,72 @@ export const createCashierAccount = async (
   });
 
   return sanitizeUser(user);
+};
+
+const findCashierById = async (id: string) => {
+  const objectId = ensureValidId(id);
+  const cashier = await UserModel.findOne({ _id: objectId, role: { $in: STAFF_ROLES } });
+
+  if (!cashier) {
+    throw new CashierServiceError('Кассир не найден', 404);
+  }
+
+  return cashier;
+};
+
+export const updateCashierAccount = async (
+  params: UpdateCashierParams
+): Promise<CashierSummary> => {
+  const cashier = await findCashierById(params.id);
+
+  if (params.name !== undefined) {
+    const trimmedName = params.name.trim();
+    if (!trimmedName) {
+      throw new CashierServiceError('Имя кассира обязательно');
+    }
+    cashier.name = trimmedName;
+  }
+
+  if (params.email !== undefined) {
+    const normalizedEmail = normalizeEmail(params.email);
+    if (!normalizedEmail) {
+      throw new CashierServiceError('Email кассира обязателен');
+    }
+
+    const existingUser = await UserModel.findOne({
+      email: normalizedEmail,
+      _id: { $ne: cashier._id },
+    });
+
+    if (existingUser) {
+      throw new CashierServiceError('Пользователь с таким email уже существует', 409);
+    }
+
+    cashier.email = normalizedEmail;
+  }
+
+  if (params.password !== undefined) {
+    const trimmedPassword = params.password.trim();
+    if (!trimmedPassword) {
+      throw new CashierServiceError('Пароль кассира обязателен');
+    }
+
+    cashier.passwordHash = await hashPassword(trimmedPassword);
+  }
+
+  if (params.role !== undefined) {
+    if (!STAFF_ROLES.includes(params.role)) {
+      throw new CashierServiceError('Некорректная роль сотрудника');
+    }
+
+    cashier.role = params.role;
+  }
+
+  await cashier.save();
+  return sanitizeUser(cashier);
+};
+
+export const deleteCashierAccount = async (id: string): Promise<void> => {
+  const cashier = await findCashierById(id);
+  await UserModel.deleteOne({ _id: cashier._id });
 };
