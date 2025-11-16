@@ -407,6 +407,7 @@ const AdminPage: React.FC = () => {
   const [creatingDiscount, setCreatingDiscount] = useState(false);
   const restaurantName = useRestaurantStore((state) => state.name);
   const restaurantLogo = useRestaurantStore((state) => state.logoUrl);
+  const enableOrderTags = useRestaurantStore((state) => state.enableOrderTags);
   const updateRestaurantBranding = useRestaurantStore((state) => state.updateBranding);
   const resetRestaurantBranding = useRestaurantStore((state) => state.resetBranding);
   const [brandingForm, setBrandingForm] = useState({ name: restaurantName, logoUrl: restaurantLogo });
@@ -1616,6 +1617,18 @@ const AdminPage: React.FC = () => {
   const handleResetBranding = () => {
     resetRestaurantBranding();
     notify({ title: 'Настройки сброшены', description: 'Возвращено название Yago Coffee', type: 'info' });
+  };
+
+  const handleToggleOrderTags = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = event.target.checked;
+    updateRestaurantBranding({ enableOrderTags: checked });
+    notify({
+      title: checked ? 'Метки включены' : 'Метки отключены',
+      description: checked
+        ? 'Кассиры увидят переключатели «С собой» и «Доставка» в POS'
+        : 'Переключатели скрыты до повторного включения',
+      type: 'info',
+    });
   };
 
   return (
@@ -3477,6 +3490,30 @@ const AdminPage: React.FC = () => {
               <p className="mt-4 text-xs text-slate-500">
                 Так будет выглядеть заголовок на странице /pos. Изменения применяются сразу после сохранения.
               </p>
+            </div>
+          </Card>
+          <Card title="Метки заказов">
+            <div className="space-y-4 text-sm text-slate-600">
+              <p>
+                Включите подписи «С собой» и «Доставка», чтобы кассир мог помечать тип исполнения заказа в колонке
+                оформления. Данные попадут в аналитику смен и отчётов.
+              </p>
+              <label className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700">
+                <span>Показывать переключатели в кассе</span>
+                <input
+                  type="checkbox"
+                  checked={enableOrderTags}
+                  onChange={handleToggleOrderTags}
+                  className="h-5 w-5 rounded border-slate-300 text-secondary focus:ring-secondary"
+                />
+              </label>
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
+                {enableOrderTags ? (
+                  <p>В POS уже доступны кнопки «В заведении», «С собой» и «Доставка» в блоке текущего заказа.</p>
+                ) : (
+                  <p>После включения здесь появится блок выбора типа заказа в правой колонке POS.</p>
+                )}
+              </div>
             </div>
           </Card>
         </div>

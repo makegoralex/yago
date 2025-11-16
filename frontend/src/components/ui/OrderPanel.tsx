@@ -169,7 +169,11 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
             })}
           </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="mx-4 mb-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+          Чтобы отмечать «С собой» и «Доставка», включите метки в разделе «Ресторан» админ-панели.
+        </div>
+      )}
       {customer ? (
         <div className="mx-4 mb-3 rounded-2xl border border-secondary/20 bg-secondary/5 p-4">
           <div className="flex items-center justify-between gap-3">
