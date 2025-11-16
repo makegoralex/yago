@@ -6,6 +6,7 @@ import type {
   DiscountSummary,
   OrderItem,
   PaymentMethod,
+  OrderTag,
 } from '../../store/order';
 
 type OrderPanelProps = {
@@ -18,7 +19,6 @@ type OrderPanelProps = {
   onDecrement: (productId: string) => void;
   onRemove: (productId: string) => void;
   onPay: (method: PaymentMethod) => void;
-  onComplete: () => void;
   onAddCustomer: () => void;
   onClearCustomer?: () => void;
   isProcessing: boolean;
@@ -28,10 +28,15 @@ type OrderPanelProps = {
   onRedeemLoyalty?: () => void;
   onClearDiscount?: () => void;
   onCancel?: () => void;
+  onComplete?: () => void;
   availableDiscounts?: DiscountSummary[];
   appliedDiscounts?: AppliedDiscount[];
   selectedDiscountIds?: string[];
   onToggleDiscount?: (discountId: string) => void;
+  isCompleting?: boolean;
+  orderTagsEnabled?: boolean;
+  orderTag?: OrderTag | null;
+  onChangeOrderTag?: (tag: OrderTag | null) => void;
 };
 
 const statusLabels: Record<NonNullable<OrderPanelProps['status']>, string> = {
@@ -50,7 +55,6 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   onDecrement,
   onRemove,
   onPay,
-  onComplete,
   onAddCustomer,
   onClearCustomer,
   isProcessing,
@@ -60,20 +64,30 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   onRedeemLoyalty,
   onClearDiscount,
   onCancel,
+  onComplete,
   availableDiscounts = [],
   appliedDiscounts = [],
   selectedDiscountIds = [],
   onToggleDiscount,
+  isCompleting = false,
+  orderTagsEnabled = false,
+  orderTag = null,
+  onChangeOrderTag,
 }) => {
   const hasItems = items.length > 0;
   const canPay = status === null || status === 'draft';
-  const canComplete = status === 'paid';
   const canCancel = status === null || status === 'draft';
+  const canComplete = status === 'paid';
   const customerPoints = Number(customer?.points ?? 0);
   const selectableDiscounts = availableDiscounts.filter((discount) => !discount.autoApply);
   const autoAppliedDiscounts = availableDiscounts.filter((discount) => discount.autoApply);
   const hasManualDiscount = appliedDiscounts.some((discount) => discount.application === 'manual');
   const hasResettableDiscounts = hasManualDiscount || selectedDiscountIds.length > 0;
+  const tagOptions: Array<{ value: OrderTag | null; label: string }> = [
+    { value: null, label: 'В заведении' },
+    { value: 'takeaway', label: 'С собой' },
+    { value: 'delivery', label: 'Доставка' },
+  ];
 
   const formatDiscountLabel = (discount: AppliedDiscount): string => {
     const parts: string[] = [discount.name];
@@ -131,6 +145,31 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           ) : null}
         </div>
       </div>
+      {orderTagsEnabled ? (
+        <div className="mx-4 mb-3">
+          <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Тип заказа</p>
+          <div className="flex flex-wrap gap-2">
+            {tagOptions.map((option) => {
+              const isSelected = option.value === (orderTag ?? null);
+              return (
+                <button
+                  key={option.value ?? 'dine-in'}
+                  type="button"
+                  onClick={() => onChangeOrderTag?.(option.value ?? null)}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                    isSelected
+                      ? 'border-secondary bg-secondary/10 text-secondary'
+                      : 'border-slate-200 text-slate-500 hover:border-secondary/40'
+                  } ${onChangeOrderTag ? '' : 'cursor-not-allowed opacity-60'}`}
+                  disabled={!onChangeOrderTag}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
       {customer ? (
         <div className="mx-4 mb-3 rounded-2xl border border-secondary/20 bg-secondary/5 p-4">
           <div className="flex items-center justify-between gap-3">
@@ -303,14 +342,16 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
             disabled={!hasItems || !canPay || isProcessing}
           />
         </div>
-        <button
-          type="button"
-          disabled={!canComplete || isProcessing}
-          onClick={onComplete}
-          className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-slate-900 text-base font-semibold text-white shadow-soft transition hover:bg-slate-800 disabled:opacity-60"
-        >
-          Завершить заказ
-        </button>
+        {onComplete && canComplete ? (
+          <button
+            type="button"
+            onClick={onComplete}
+            disabled={isProcessing || isCompleting}
+            className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-primary/30 text-sm font-semibold text-primary transition hover:border-primary hover:bg-primary/5 disabled:opacity-60"
+          >
+            {isCompleting ? 'Завершение…' : 'Завершить заказ'}
+          </button>
+        ) : null}
         {onCancel && canCancel ? (
           <button
             type="button"

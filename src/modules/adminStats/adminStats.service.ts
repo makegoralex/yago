@@ -16,6 +16,8 @@ export interface SalesAndShiftStats {
   closedShiftCount: number;
   currentOpenShiftCount: number;
   averageRevenuePerClosedShift: number;
+  takeawayOrders: number;
+  deliveryOrders: number;
   period?: {
     from?: string;
     to?: string;
@@ -73,13 +75,19 @@ export const fetchSalesAndShiftStats = async (
   }
 
   const [orderStats, shifts] = await Promise.all([
-    OrderModel.aggregate<{ totalRevenue: number; totalOrders: number }>([
+    OrderModel.aggregate<{ totalRevenue: number; totalOrders: number; takeawayOrders: number; deliveryOrders: number }>([
       { $match: orderMatch },
       {
         $group: {
           _id: null,
           totalRevenue: { $sum: '$total' },
           totalOrders: { $sum: 1 },
+          takeawayOrders: {
+            $sum: { $cond: [{ $eq: ['$orderTag', 'takeaway'] }, 1, 0] },
+          },
+          deliveryOrders: {
+            $sum: { $cond: [{ $eq: ['$orderTag', 'delivery'] }, 1, 0] },
+          },
         },
       },
     ]).then((result) => result[0]),
@@ -91,6 +99,8 @@ export const fetchSalesAndShiftStats = async (
   const totalRevenue = Number(orderStats?.totalRevenue ?? 0);
   const orderCount = orderStats?.totalOrders ?? 0;
   const averageOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
+  const takeawayOrders = orderStats?.takeawayOrders ?? 0;
+  const deliveryOrders = orderStats?.deliveryOrders ?? 0;
 
   let openShiftCount = 0;
   let closedShiftCount = 0;
@@ -127,6 +137,8 @@ export const fetchSalesAndShiftStats = async (
     closedShiftCount,
     currentOpenShiftCount: openShiftCount,
     averageRevenuePerClosedShift,
+    takeawayOrders,
+    deliveryOrders,
     period,
   };
 };

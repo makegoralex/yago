@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '../store/auth';
 import { useToast } from '../providers/ToastProvider';
+import { useRestaurantStore } from '../store/restaurant';
 
 const SettingsPage: React.FC = () => {
   const user = useAuthStore((state) => state.user);
   const clearSession = useAuthStore((state) => state.clearSession);
+  const enableOrderTags = useRestaurantStore((state) => state.enableOrderTags);
+  const updateRestaurantSettings = useRestaurantStore((state) => state.updateBranding);
   const navigate = useNavigate();
   const { notify } = useToast();
 
@@ -14,6 +17,10 @@ const SettingsPage: React.FC = () => {
     clearSession();
     notify({ title: 'Вы вышли из аккаунта', type: 'info' });
     navigate('/login');
+  };
+
+  const handleToggleOrderTags = (event: React.ChangeEvent<HTMLInputElement>) => {
+    updateRestaurantSettings({ enableOrderTags: event.target.checked });
   };
 
   return (
@@ -28,6 +35,24 @@ const SettingsPage: React.FC = () => {
           <p>Имя: {user?.name}</p>
           <p>Email: {user?.email}</p>
           <p>Роль: {user?.role}</p>
+        </div>
+      </section>
+      <section className="rounded-3xl bg-white p-6 shadow-soft">
+        <h2 className="text-lg font-semibold text-slate-900">Настройки ресторана</h2>
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Метки заказов</p>
+            <p className="text-sm text-slate-500">Отображать переключатели «С собой» и «Доставка» на кассе</p>
+          </div>
+          <label className="inline-flex items-center gap-3">
+            <span className="text-sm text-slate-600">Включено</span>
+            <input
+              type="checkbox"
+              checked={enableOrderTags}
+              onChange={handleToggleOrderTags}
+              className="h-5 w-5 rounded border-slate-300 text-secondary focus:ring-secondary"
+            />
+          </label>
         </div>
       </section>
       <section className="rounded-3xl bg-white p-6 shadow-soft">

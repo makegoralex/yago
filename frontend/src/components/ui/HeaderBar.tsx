@@ -2,7 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import { useRestaurantStore } from '../../store/restaurant';
-import { useTheme } from '../../providers/ThemeProvider';
+type ShiftStatus = 'open' | 'closed' | 'loading';
+
+type HeaderBarProps = {
+  onToggleSidebar: () => void;
+  isSidebarCollapsed: boolean;
+  onShowHistory: () => void;
+  onShowShift: () => void;
+  shiftStatus: ShiftStatus;
+};
 
 const formatTime = (date: Date) =>
   date.toLocaleTimeString('ru-RU', {
@@ -10,12 +18,14 @@ const formatTime = (date: Date) =>
     minute: '2-digit',
   });
 
-const HeaderBar: React.FC<{ onToggleSidebar: () => void; isSidebarCollapsed: boolean }> = ({
+const HeaderBar: React.FC<HeaderBarProps> = ({
   onToggleSidebar,
   isSidebarCollapsed,
+  onShowHistory,
+  onShowShift,
+  shiftStatus,
 }) => {
   const { user } = useAuthStore();
-  const { theme, toggleTheme } = useTheme();
   const restaurantName = useRestaurantStore((state) => state.name);
   const restaurantLogo = useRestaurantStore((state) => state.logoUrl);
   const navigate = useNavigate();
@@ -71,11 +81,34 @@ const HeaderBar: React.FC<{ onToggleSidebar: () => void; isSidebarCollapsed: boo
         ) : null}
         <button
           type="button"
-          onClick={toggleTheme}
-          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition hover:bg-slate-200"
-          aria-label="Переключить тему"
+          onClick={onShowShift}
+          className={`relative flex h-12 w-12 items-center justify-center rounded-2xl transition ${
+            shiftStatus === 'open'
+              ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+              : shiftStatus === 'loading'
+              ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
+          }`}
+          aria-label="Состояние смены"
         >
-          {theme === 'light' ? '🌙' : '☀️'}
+          🕓
+          <span
+            className={`absolute bottom-2 right-2 inline-flex h-2.5 w-2.5 rounded-full ${
+              shiftStatus === 'open'
+                ? 'bg-emerald-500'
+                : shiftStatus === 'loading'
+                ? 'bg-amber-400'
+                : 'bg-rose-500'
+            }`}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={onShowHistory}
+          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition hover:bg-slate-200"
+          aria-label="История чеков"
+        >
+          🧾
         </button>
         <button
           type="button"
