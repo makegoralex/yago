@@ -367,6 +367,11 @@ router.post(
 
     const activeShift = await findActiveShiftForRegister(normalizedRegisterId, cashierId);
 
+    if (!activeShift) {
+      res.status(409).json({ data: null, error: 'Сначала откройте смену на кассе' });
+      return;
+    }
+
     const existingDraft = await OrderModel.findOne({
       orgId: normalizedOrgId,
       locationId: normalizedLocationId,
@@ -390,7 +395,7 @@ router.post(
       orgId: normalizedOrgId,
       locationId: normalizedLocationId,
       registerId: normalizedRegisterId,
-      shiftId: activeShift?._id,
+      shiftId: activeShift._id,
       cashierId: new Types.ObjectId(cashierId),
       warehouseId: normalizedWarehouseId ?? undefined,
       customerId: normalizedCustomerId,

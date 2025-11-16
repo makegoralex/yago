@@ -62,10 +62,7 @@ const calculateShiftTotals = async (
 
 router.use(authMiddleware);
 
-router.post(
-  '/open',
-  requireRole(SHIFT_ROLES),
-  asyncHandler(async (req, res) => {
+const openShiftHandler: RequestHandler = asyncHandler(async (req, res) => {
     const { orgId, locationId, registerId, openingBalance, openingNote } = req.body ?? {};
     const cashierId = req.user?.id;
 
@@ -116,8 +113,10 @@ router.post(
     });
 
     res.status(201).json({ data: shift, error: null });
-  })
-);
+  });
+
+router.post('/', requireRole(SHIFT_ROLES), openShiftHandler);
+router.post('/open', requireRole(SHIFT_ROLES), openShiftHandler);
 
 router.post(
   '/:id/close',
