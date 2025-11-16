@@ -12,6 +12,7 @@ import {
 import api from '../lib/api';
 import { useToast } from '../providers/ToastProvider';
 import type { Category, Product } from '../store/catalog';
+import { useRestaurantStore } from '../store/restaurant';
 
 const getResponseData = <T,>(response: { data?: unknown }): T | undefined => {
   if (!response || typeof response !== 'object') {
@@ -269,7 +270,7 @@ const DAY_OPTIONS: Array<{ value: number; label: string }> = [
 const AdminPage: React.FC = () => {
   const { notify } = useToast();
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'menu' | 'inventory' | 'suppliers' | 'discounts' | 'staff'
+    'dashboard' | 'menu' | 'inventory' | 'suppliers' | 'discounts' | 'staff' | 'branding'
   >('dashboard');
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [summary, setSummary] = useState({
@@ -398,6 +399,16 @@ const AdminPage: React.FC = () => {
   const [discountsError, setDiscountsError] = useState<string | null>(null);
   const [discountActionId, setDiscountActionId] = useState<string | null>(null);
   const [creatingDiscount, setCreatingDiscount] = useState(false);
+  const restaurantName = useRestaurantStore((state) => state.name);
+  const restaurantLogo = useRestaurantStore((state) => state.logoUrl);
+  const updateRestaurantBranding = useRestaurantStore((state) => state.updateBranding);
+  const resetRestaurantBranding = useRestaurantStore((state) => state.resetBranding);
+  const [brandingForm, setBrandingForm] = useState({ name: restaurantName, logoUrl: restaurantLogo });
+  const [brandingSaving, setBrandingSaving] = useState(false);
+
+  useEffect(() => {
+    setBrandingForm({ name: restaurantName, logoUrl: restaurantLogo });
+  }, [restaurantName, restaurantLogo]);
   const [discountForm, setDiscountForm] = useState({
     name: '',
     description: '',
@@ -1583,12 +1594,32 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const handleSubmitBranding = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalizedName = brandingForm.name.trim() || 'Yago Coffee';
+    setBrandingSaving(true);
+    try {
+      updateRestaurantBranding({ name: normalizedName, logoUrl: brandingForm.logoUrl.trim() });
+      notify({ title: 'Брендинг обновлён', description: 'Новые данные уже применены на кассе', type: 'success' });
+    } finally {
+      setBrandingSaving(false);
+    }
+  };
+
+  const handleResetBranding = () => {
+    resetRestaurantBranding();
+    notify({ title: 'Настройки сброшены', description: 'Возвращено название Yago Coffee', type: 'info' });
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6 lg:px-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Админ-панель</h1>
-          <p className="text-sm text-slate-500">Управление персоналом, меню, запасами, скидками и поставщиками Yago Coffee</p>
+          <p className="text-sm text-slate-500">
+            Управление персоналом, меню, запасами, скидками и поставщиками {restaurantName}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {[
@@ -1598,6 +1629,7 @@ const AdminPage: React.FC = () => {
             { id: 'staff', label: 'Персонал' },
             { id: 'suppliers', label: 'Поставщики' },
             { id: 'discounts', label: 'Скидки' },
+            { id: 'branding', label: 'Ресторан' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -3359,6 +3391,79 @@ const AdminPage: React.FC = () => {
                 </table>
               </div>
             )}
+          </Card>
+        </div>
+      ) : null}
+
+      {activeTab === 'branding' ? (
+        <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+          <Card title="Кастомизация ресторана">
+            <form onSubmit={handleSubmitBranding} className="space-y-6 text-sm text-slate-600">
+              <label className="flex flex-col gap-2">
+                <span className="text-xs uppercase text-slate-400">Название ресторана</span>
+                <input
+                  type="text"
+                  value={brandingForm.name}
+                  onChange={(event) => setBrandingForm((prev) => ({ ...prev, name: event.target.value }))}
+                  className="rounded-2xl border border-slate-200 px-4 py-3"
+                  placeholder="Например, Кофейня на Арбате"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs uppercase text-slate-400">Ссылка на логотип</span>
+                <input
+                  type="url"
+                  value={brandingForm.logoUrl}
+                  onChange={(event) => setBrandingForm((prev) => ({ ...prev, logoUrl: event.target.value }))}
+                  className="rounded-2xl border border-slate-200 px-4 py-3"
+                  placeholder="https://example.com/logo.png"
+                />
+                <span className="text-xs text-slate-400">
+                  Поддерживаются только публичные ссылки. Изображение автоматически подставится в шапку кассы.
+                </span>
+              </label>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="submit"
+                  className="rounded-2xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={brandingSaving}
+                >
+                  Сохранить
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetBranding}
+                  className="rounded-2xl border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+                >
+                  Сбросить настройки
+                </button>
+              </div>
+            </form>
+          </Card>
+          <Card title="Предпросмотр шапки POS">
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center gap-3">
+                {brandingForm.logoUrl ? (
+                  <img
+                    src={brandingForm.logoUrl}
+                    alt={brandingForm.name}
+                    className="h-14 w-14 rounded-2xl border border-slate-100 object-cover"
+                  />
+                ) : (
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-xs font-semibold text-slate-400">
+                    Лого
+                  </div>
+                )}
+                <div>
+                  <p className="text-lg font-semibold text-slate-900">{brandingForm.name || 'Название ресторана'}</p>
+                  <p className="text-xs text-slate-500">Управление продажами</p>
+                </div>
+              </div>
+              <p className="mt-4 text-xs text-slate-500">
+                Так будет выглядеть заголовок на странице /pos. Изменения применяются сразу после сохранения.
+              </p>
+            </div>
           </Card>
         </div>
       ) : null}
