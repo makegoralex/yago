@@ -133,13 +133,10 @@ const serveFrontendStatic: express.RequestHandler = (req, res, next) => {
 const serveSpaFallback = (req: Request, res: Response, next: NextFunction): void => {
   if (req.path.startsWith('/api/')) {
     return next();
-}
-if (req.path.startsWith('/docs') || req.path.startsWith('/healthz')) {
+  }
+
+  if (req.path.startsWith('/docs') || req.path.startsWith('/healthz')) {
     return next();
-}
- {
-    next();
-    return;
   }
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -147,16 +144,18 @@ if (req.path.startsWith('/docs') || req.path.startsWith('/healthz')) {
     return;
   }
 
-  if (!frontendDistPath || !fs.existsSync(path.join(frontendDistPath, 'index.html'))) {
+  let distPath = frontendDistPath;
+  if (!distPath || !fs.existsSync(path.join(distPath, 'index.html'))) {
     refreshFrontendBundle();
+    distPath = frontendDistPath;
   }
 
-  if (!frontendDistPath) {
+  if (!distPath) {
     next();
     return;
   }
 
-  res.sendFile(path.join(frontendDistPath, 'index.html'), (err) => {
+  res.sendFile(path.join(distPath, 'index.html'), (err) => {
     if (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         frontendDistPath = undefined;

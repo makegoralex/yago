@@ -14,7 +14,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ------------------------------------
-      # INSTALL FRONTEND + BUILD (on GitHub)
+      # INSTALL + BUILD FRONTEND (on GitHub)
       # ------------------------------------
       - name: Install frontend deps
         working-directory: ./frontend
@@ -22,6 +22,15 @@ jobs:
 
       - name: Build frontend
         working-directory: ./frontend
+        run: npm run build
+
+      # ------------------------------------
+      # INSTALL + BUILD BACKEND (on GitHub)
+      # ------------------------------------
+      - name: Install backend deps
+        run: npm install
+
+      - name: Build backend
         run: npm run build
 
       # ------------------------------------
@@ -56,12 +65,17 @@ jobs:
           "$REMOTE:${REMOTE_DIR_ESCAPED}/"
 
       # ------------------------------------
-      # UPLOAD BACKEND via RSYNC
+      # UPLOAD BACKEND DIST via RSYNC
       # ------------------------------------
-      - name: Upload backend files (rsync)
+      - name: Upload backend dist (rsync)
         run: |
           set -euo pipefail
-          FILES=(./src ./package.json ./tsconfig.json)
+          if [ ! -d ./dist ]; then
+            echo "Backend dist directory not found" >&2
+            exit 1
+          fi
+
+          FILES=(./dist ./package.json ./tsconfig.json)
           if [ -f ./package-lock.json ]; then
             FILES+=(./package-lock.json)
           fi
@@ -81,7 +95,7 @@ jobs:
       # ------------------------------------
       # RUN BACKEND BUILD + PM2 RELOAD
       # ------------------------------------
-      - name: Build backend + PM2
+      - name: Install deps + reload PM2
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -90,6 +104,5 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd ${{ secrets.APP_DIR }}
-            npm install --legacy-peer-deps || true
-            npm run build || true
-            pm2 reload ${{ secrets.PM2_APP_NAME }} --update-env || pm2 start dist/app.js --name ${{ secrets.PM2_APP_NAME }}
+            npm install --legacy-peer-deps
+            pm2 reload ${{ secrets.PM2_APP_NAME }} --update-env || pm2 start dist/index.js --name ${{ secrets.PM2_APP_NAME }}
