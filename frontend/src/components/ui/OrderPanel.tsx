@@ -18,7 +18,6 @@ type OrderPanelProps = {
   onDecrement: (productId: string) => void;
   onRemove: (productId: string) => void;
   onPay: (method: PaymentMethod) => void;
-  onComplete: () => void;
   onAddCustomer: () => void;
   onClearCustomer?: () => void;
   isProcessing: boolean;
@@ -50,7 +49,6 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   onDecrement,
   onRemove,
   onPay,
-  onComplete,
   onAddCustomer,
   onClearCustomer,
   isProcessing,
@@ -67,7 +65,6 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
 }) => {
   const hasItems = items.length > 0;
   const canPay = status === null || status === 'draft';
-  const canComplete = status === 'paid';
   const canCancel = status === null || status === 'draft';
   const customerPoints = Number(customer?.points ?? 0);
   const selectableDiscounts = availableDiscounts.filter((discount) => !discount.autoApply);
@@ -303,14 +300,6 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
             disabled={!hasItems || !canPay || isProcessing}
           />
         </div>
-        <button
-          type="button"
-          disabled={!canComplete || isProcessing}
-          onClick={onComplete}
-          className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-slate-900 text-base font-semibold text-white shadow-soft transition hover:bg-slate-800 disabled:opacity-60"
-        >
-          Завершить заказ
-        </button>
         {onCancel && canCancel ? (
           <button
             type="button"

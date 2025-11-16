@@ -7,7 +7,7 @@ import OrderPanel from '../components/ui/OrderPanel';
 import PaymentModal from '../components/ui/PaymentModal';
 import LoyaltyModal from '../components/ui/LoyaltyModal';
 import RedeemPointsModal from '../components/ui/RedeemPointsModal';
-import { useCatalogStore } from '../store/catalog';
+import { useCatalogStore, type Product } from '../store/catalog';
 import {
   useOrderStore,
   type PaymentMethod,
@@ -76,6 +76,8 @@ const POSPage: React.FC = () => {
   const [activeSection, setActiveSection] = useState<'products' | 'customers' | 'reports'>('products');
   const [isRedeemOpen, setRedeemOpen] = useState(false);
   const [isRedeeming, setRedeeming] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isHistoryOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     void fetchCatalog();
@@ -134,7 +136,20 @@ const POSPage: React.FC = () => {
     return products.filter((product) => product.categoryId === activeCategoryId);
   }, [products, activeCategoryId]);
 
+  const searchResults = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return [];
+    }
+
+    return products
+      .filter((product) => product.name.toLowerCase().includes(normalizedQuery))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+      .slice(0, 8);
+  }, [products, searchQuery]);
+
   const earnedPoints = total * 0.05;
+  const startOrderButtonLabel = isStartingOrder ? 'Создание…' : orderId ? 'Продолжить заказ' : 'Создать заказ';
 
   const handleStartOrder = async () => {
     if (!currentShift) {
@@ -277,21 +292,26 @@ const POSPage: React.FC = () => {
   };
 
   const handleAddProduct = (product: typeof products[number]) => {
-    void addProduct(product)
-      .then(() => {
-        notify({ title: product.name, description: 'Добавлено в заказ', type: 'success' });
-      })
-      .catch(() => {
-        notify({ title: 'Не удалось добавить товар', type: 'error' });
-      });
+    void addProduct(product).catch(() => {
+      notify({ title: 'Не удалось добавить товар', type: 'error' });
+    });
     if (!isTablet) {
       setOrderDrawerOpen(true);
     }
   };
 
+  const handleProductSearchSelect = (product: Product) => {
+    handleAddProduct(product);
+    setSearchQuery('');
+  };
+
   return (
     <div className="flex min-h-screen flex-col gap-4 bg-slate-100 px-4 py-4 pb-32 lg:px-6 lg:pb-6">
-      <HeaderBar onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)} isSidebarCollapsed={sidebarCollapsed} />
+      <HeaderBar
+        onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
+        isSidebarCollapsed={sidebarCollapsed}
+        onShowHistory={() => setHistoryOpen(true)}
+      />
       <ShiftStatusCard
         shift={currentShift}
         loading={isShiftLoading}
@@ -310,37 +330,45 @@ const POSPage: React.FC = () => {
           />
         </div>
         <div className="flex-1">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-slate-900">Меню</h2>
-            <div className="flex items-center gap-3 lg:hidden">
-              <button
-                type="button"
-                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-500"
-                onClick={() => setOrderDrawerOpen(true)}
-              >
-                Смотреть заказ ({items.length})
-              </button>
-              <button
-                type="button"
-                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-500"
-                onClick={handleRemoveCustomer}
-              >
-                Сбросить клиента
-              </button>
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-slate-900">Меню</h2>
+              <div className="flex items-center gap-3 lg:hidden">
+                <button
+                  type="button"
+                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-500"
+                  onClick={() => setOrderDrawerOpen(true)}
+                >
+                  Смотреть заказ ({items.length})
+                </button>
+                <button
+                  type="button"
+                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-500"
+                  onClick={handleRemoveCustomer}
+                >
+                  Сбросить клиента
+                </button>
+              </div>
             </div>
+            <ProductSearchBar
+              query={searchQuery}
+              onQueryChange={setSearchQuery}
+              results={searchResults}
+              onSelect={handleProductSearchSelect}
+            />
           </div>
           <div className="mb-4 rounded-2xl bg-white p-4 shadow-soft">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
               <button
                 type="button"
                 onClick={() => void handleStartOrder()}
                 disabled={isStartingOrder}
-                className="rounded-2xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-secondary/60 hover:text-secondary disabled:opacity-50"
+                className="w-full rounded-3xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
               >
-                {orderId ? 'Открыть заказ' : isStartingOrder ? 'Создание…' : 'Новый заказ'}
+                {startOrderButtonLabel}
               </button>
-          </div>
+            </div>
           {activeOrders.length > 0 ? (
             <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {activeOrders.map((order) => {
@@ -369,14 +397,6 @@ const POSPage: React.FC = () => {
               <p className="mt-2 text-sm text-slate-500">Нет активных заказов.</p>
             )}
           </div>
-          <ReceiptHistoryCard
-            shift={currentShift}
-            history={shiftHistory}
-            loading={shiftHistoryLoading}
-            shiftLoading={isShiftLoading}
-            onRefresh={handleRefreshHistory}
-            className="mb-4 hidden lg:block"
-          />
           {loading ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -440,15 +460,6 @@ const POSPage: React.FC = () => {
                       ))}
                     </ul>
                   )}
-                  <div className="mt-4 lg:hidden">
-                    <ReceiptHistoryCard
-                      shift={currentShift}
-                      history={shiftHistory}
-                      loading={shiftHistoryLoading}
-                      shiftLoading={isShiftLoading}
-                      onRefresh={handleRefreshHistory}
-                    />
-                  </div>
                 </div>
               ) : null}
               {activeSection !== 'products' && !isTablet ? (
@@ -489,14 +500,6 @@ const POSPage: React.FC = () => {
             }
             onRemove={(productId) => void removeItem(productId)}
             onPay={(method) => openPaymentModal(method)}
-            onComplete={() =>
-              void completeOrder()
-                .then(() => {
-                  setOrderDrawerOpen(false);
-                  notify({ title: 'Заказ завершён', type: 'success' });
-                })
-                .catch(() => notify({ title: 'Не удалось завершить заказ', type: 'error' }))
-            }
             onAddCustomer={() => setLoyaltyOpen(true)}
             onClearCustomer={handleRemoveCustomer}
             isProcessing={isPaying}
@@ -600,14 +603,6 @@ const POSPage: React.FC = () => {
                 }
                 onRemove={(productId) => void removeItem(productId)}
                 onPay={(method) => openPaymentModal(method)}
-                onComplete={() =>
-                  void completeOrder()
-                    .then(() => {
-                      setOrderDrawerOpen(false);
-                      notify({ title: 'Заказ завершён', type: 'success' });
-                    })
-                    .catch(() => notify({ title: 'Не удалось завершить заказ', type: 'error' }))
-                }
                 onAddCustomer={() => setLoyaltyOpen(true)}
                 onClearCustomer={handleRemoveCustomer}
                 isProcessing={isPaying}
@@ -647,6 +642,16 @@ const POSPage: React.FC = () => {
           </div>
         </div>
       ) : null}
+      <HistoryOverlay open={isHistoryOpen} onClose={() => setHistoryOpen(false)}>
+        <ReceiptHistoryCard
+          shift={currentShift}
+          history={shiftHistory}
+          loading={shiftHistoryLoading}
+          shiftLoading={isShiftLoading}
+          onRefresh={handleRefreshHistory}
+          className="mb-0"
+        />
+      </HistoryOverlay>
     </div>
   );
 };
@@ -668,6 +673,97 @@ const TabButton: React.FC<TabButtonProps> = ({ label, active, onClick }) => (
     {label}
   </button>
 );
+
+type HistoryOverlayProps = {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+};
+
+const HistoryOverlay: React.FC<HistoryOverlayProps> = ({ open, onClose, children }) => {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} />
+      <div className="relative z-10 flex h-full items-end justify-center px-4 py-6 sm:items-center">
+        <div className="relative w-full max-w-2xl rounded-[32px] bg-white p-4 shadow-2xl">
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200"
+            aria-label="Закрыть историю чеков"
+          >
+            ✕
+          </button>
+          <div className="max-h-[75vh] overflow-y-auto pr-1 pt-4 sm:pt-2">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+type ProductSearchBarProps = {
+  query: string;
+  onQueryChange: (value: string) => void;
+  results: Product[];
+  onSelect: (product: Product) => void;
+};
+
+const ProductSearchBar: React.FC<ProductSearchBarProps> = ({ query, onQueryChange, results, onSelect }) => {
+  const hasQuery = query.trim().length > 0;
+
+  return (
+    <div className="relative w-full lg:max-w-md">
+      <input
+        type="search"
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        placeholder="Поиск по меню"
+        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-soft focus:border-primary focus:outline-none"
+      />
+      {query ? (
+        <button
+          type="button"
+          onClick={() => onQueryChange('')}
+          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500"
+          aria-label="Очистить поиск"
+        >
+          Очистить
+        </button>
+      ) : (
+        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg text-slate-400">⌕</span>
+      )}
+      {hasQuery ? (
+        <div className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-2xl">
+          {results.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-slate-500">Ничего не найдено</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {results.map((product) => (
+                <li key={product._id}>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      onSelect(product);
+                    }}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <span className="truncate pr-3">{product.name}</span>
+                    <span className="text-sm font-semibold text-slate-900">{product.price.toFixed(2)} ₽</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 const formatTimeLabel = (value: string): string =>
   new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
