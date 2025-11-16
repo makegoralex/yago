@@ -28,9 +28,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) => {
               {product.description}
             </p>
           ) : null}
-          {product.modifiers?.length ? (
+          {product.modifierGroups?.length ? (
             <p className="mt-1 text-[11px] uppercase tracking-wide text-slate-400">
-              {product.modifiers.join(' · ')}
+              {product.modifierGroups.map((group) => group.name).join(' · ')}
             </p>
           ) : null}
         </div>

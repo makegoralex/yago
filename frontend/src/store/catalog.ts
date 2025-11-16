@@ -7,6 +7,22 @@ export type Category = {
   sortOrder?: number;
 };
 
+export type ModifierOption = {
+  _id: string;
+  name: string;
+  priceChange?: number;
+  costChange?: number;
+};
+
+export type ModifierGroup = {
+  _id: string;
+  name: string;
+  selectionType: 'single' | 'multiple';
+  required: boolean;
+  sortOrder?: number;
+  options: ModifierOption[];
+};
+
 export type Product = {
   _id: string;
   name: string;
@@ -18,7 +34,7 @@ export type Product = {
   price: number;
   discountType?: 'percentage' | 'fixed';
   discountValue?: number;
-  modifiers?: string[];
+  modifierGroups?: ModifierGroup[];
   isActive?: boolean;
   ingredients?: Array<{ ingredientId: string; quantity: number }>;
 };

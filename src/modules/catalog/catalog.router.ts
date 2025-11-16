@@ -4,6 +4,7 @@ import { isValidObjectId, Types } from 'mongoose';
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { CategoryModel, ProductModel, type ProductIngredient } from './catalog.model';
 import { IngredientModel } from './ingredient.model';
+import { ModifierGroupModel } from './modifierGroup.model';
 import { recalculateProductCost, recalculateProductsForIngredient } from './productCost.service';
 
 const router = Router();
@@ -73,6 +74,46 @@ const normalizeIngredients = async (
   return normalized;
 };
 
+const normalizeModifierGroups = async (
+  modifierGroups: unknown
+): Promise<Types.ObjectId[] | undefined> => {
+  if (modifierGroups === undefined) {
+    return undefined;
+  }
+
+  if (modifierGroups === null) {
+    return [];
+  }
+
+  if (!Array.isArray(modifierGroups)) {
+    throw new Error('modifierGroups must be an array of ids');
+  }
+
+  if (modifierGroups.length === 0) {
+    return [];
+  }
+
+  const uniqueIds = new Set<string>();
+
+  for (const id of modifierGroups) {
+    if (typeof id !== 'string' || !isValidObjectId(id)) {
+      throw new Error('modifierGroups must be a list of valid ids');
+    }
+
+    uniqueIds.add(id);
+  }
+
+  const existing = await ModifierGroupModel.find({ _id: { $in: Array.from(uniqueIds) } })
+    .select('_id')
+    .lean();
+
+  if (existing.length !== uniqueIds.size) {
+    throw new Error('One or more modifier groups were not found');
+  }
+
+  return Array.from(uniqueIds, (id) => new Types.ObjectId(id));
+};
+
 const computeProductPricing = (
   basePriceInput: unknown,
   priceInput: unknown,
@@ -126,6 +167,169 @@ router.get(
     const categories = await CategoryModel.find().sort({ sortOrder: 1, name: 1 });
 
     res.json({ data: categories, error: null });
+  })
+);
+
+router.get(
+  '/modifier-groups',
+  asyncHandler(async (_req, res) => {
+    const groups = await ModifierGroupModel.find().sort({ sortOrder: 1, name: 1 });
+
+    res.json({ data: groups, error: null });
+  })
+);
+
+router.post(
+  '/modifier-groups',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    const { name, selectionType, required, sortOrder, options } = req.body ?? {};
+
+    if (!name?.trim()) {
+      res.status(400).json({ data: null, error: 'Name is required' });
+      return;
+    }
+
+    if (selectionType !== 'single' && selectionType !== 'multiple') {
+      res.status(400).json({ data: null, error: 'selectionType must be single or multiple' });
+      return;
+    }
+
+    if (required !== undefined && typeof required !== 'boolean') {
+      res.status(400).json({ data: null, error: 'required must be a boolean' });
+      return;
+    }
+
+    if (options !== undefined && !Array.isArray(options)) {
+      res.status(400).json({ data: null, error: 'options must be an array' });
+      return;
+    }
+
+    const normalizedOptions = (options ?? []).map((option: any) => ({
+      name: String(option?.name ?? '').trim(),
+      priceChange: Number(option?.priceChange ?? 0),
+      costChange: Number(option?.costChange ?? 0),
+    }));
+
+    if (normalizedOptions.some((option) => !option.name)) {
+      res.status(400).json({ data: null, error: 'Each option must have a name' });
+      return;
+    }
+
+    const group = new ModifierGroupModel({
+      name: name.trim(),
+      selectionType,
+      required: Boolean(required),
+      sortOrder,
+      options: normalizedOptions,
+    });
+
+    await group.save();
+
+    res.status(201).json({ data: group, error: null });
+  })
+);
+
+router.put(
+  '/modifier-groups/:id',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { name, selectionType, required, sortOrder, options } = req.body ?? {};
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({ data: null, error: 'Invalid modifier group id' });
+      return;
+    }
+
+    const update: Record<string, unknown> = {};
+
+    if (name !== undefined) {
+      if (!String(name).trim()) {
+        res.status(400).json({ data: null, error: 'Name cannot be empty' });
+        return;
+      }
+
+      update.name = String(name).trim();
+    }
+
+    if (selectionType !== undefined) {
+      if (selectionType !== 'single' && selectionType !== 'multiple') {
+        res.status(400).json({ data: null, error: 'selectionType must be single or multiple' });
+        return;
+      }
+
+      update.selectionType = selectionType;
+    }
+
+    if (required !== undefined) {
+      if (typeof required !== 'boolean') {
+        res.status(400).json({ data: null, error: 'required must be a boolean' });
+        return;
+      }
+
+      update.required = required;
+    }
+
+    if (sortOrder !== undefined) {
+      update.sortOrder = sortOrder;
+    }
+
+    if (options !== undefined) {
+      if (!Array.isArray(options)) {
+        res.status(400).json({ data: null, error: 'options must be an array' });
+        return;
+      }
+
+      const normalizedOptions = options.map((option: any) => ({
+        name: String(option?.name ?? '').trim(),
+        priceChange: Number(option?.priceChange ?? 0),
+        costChange: Number(option?.costChange ?? 0),
+      }));
+
+      if (normalizedOptions.some((option) => !option.name)) {
+        res.status(400).json({ data: null, error: 'Each option must have a name' });
+        return;
+      }
+
+      update.options = normalizedOptions;
+    }
+
+    const group = await ModifierGroupModel.findByIdAndUpdate(id, update, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!group) {
+      res.status(404).json({ data: null, error: 'Modifier group not found' });
+      return;
+    }
+
+    res.json({ data: group, error: null });
+  })
+);
+
+router.delete(
+  '/modifier-groups/:id',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({ data: null, error: 'Invalid modifier group id' });
+      return;
+    }
+
+    const group = await ModifierGroupModel.findById(id);
+
+    if (!group) {
+      res.status(404).json({ data: null, error: 'Modifier group not found' });
+      return;
+    }
+
+    await group.deleteOne();
+
+    res.json({ data: { id: group.id }, error: null });
   })
 );
 
@@ -233,7 +437,9 @@ router.get(
       filter.isActive = { $ne: false };
     }
 
-    const products = await ProductModel.find(filter).sort({ name: 1 });
+    const products = await ProductModel.find(filter)
+      .populate('modifierGroups')
+      .sort({ name: 1 });
 
     res.json({ data: products, error: null });
   })
@@ -250,7 +456,7 @@ router.post(
       basePrice,
       discountType,
       discountValue,
-      modifiers,
+      modifierGroups,
       isActive,
       description,
       imageUrl,
@@ -279,17 +485,13 @@ router.post(
       return;
     }
 
-    let normalizedModifiers: string[] | undefined;
+    let normalizedModifierGroups: Types.ObjectId[] | undefined;
 
-    if (modifiers !== undefined) {
-      if (!Array.isArray(modifiers) || !modifiers.every((item) => typeof item === 'string')) {
-        res.status(400).json({ data: null, error: 'Modifiers must be an array of strings' });
-        return;
-      }
-
-      normalizedModifiers = (modifiers as string[])
-        .map((modifier) => modifier.trim())
-        .filter(Boolean);
+    try {
+      normalizedModifierGroups = await normalizeModifierGroups(modifierGroups);
+    } catch (error) {
+      res.status(400).json({ data: null, error: error instanceof Error ? error.message : 'Invalid modifierGroups' });
+      return;
     }
 
     let normalizedIngredients: ProductIngredient[] | undefined;
@@ -319,7 +521,7 @@ router.post(
       basePrice: pricing.basePrice,
       discountType: pricing.discountType,
       discountValue: pricing.discountValue,
-      modifiers: normalizedModifiers,
+      modifierGroups: normalizedModifierGroups,
       ingredients: normalizedIngredients,
       isActive,
     });
@@ -343,7 +545,7 @@ router.put(
       basePrice,
       discountType,
       discountValue,
-      modifiers,
+      modifierGroups,
       isActive,
       description,
       imageUrl,
@@ -382,15 +584,13 @@ router.put(
       update.categoryId = categoryId;
     }
 
-    if (modifiers !== undefined) {
-      if (!Array.isArray(modifiers) || !modifiers.every((item) => typeof item === 'string')) {
-        res.status(400).json({ data: null, error: 'Modifiers must be an array of strings' });
+    if (modifierGroups !== undefined) {
+      try {
+        update.modifierGroups = await normalizeModifierGroups(modifierGroups);
+      } catch (error) {
+        res.status(400).json({ data: null, error: error instanceof Error ? error.message : 'Invalid modifierGroups' });
         return;
       }
-
-      update.modifiers = (modifiers as string[])
-        .map((modifier) => modifier.trim())
-        .filter(Boolean);
     }
 
     if (isActive !== undefined) {

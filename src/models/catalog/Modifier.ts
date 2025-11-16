@@ -1,7 +1,14 @@
-export interface Modifier {
+export interface ModifierOption {
   id: string;
   name: string;
-  description?: string;
-  priceAdjustment?: number;
-  isDefault: boolean;
+  priceChange?: number;
+  costChange?: number;
+}
+
+export interface ModifierGroup {
+  id: string;
+  name: string;
+  selectionType: 'single' | 'multiple';
+  required: boolean;
+  options: ModifierOption[];
 }

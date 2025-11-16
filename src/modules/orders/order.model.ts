@@ -6,14 +6,31 @@ export type PaymentMethod = 'cash' | 'card';
 
 export type OrderTag = 'takeaway' | 'delivery';
 
+export interface SelectedModifierOption {
+  optionId: Types.ObjectId;
+  name: string;
+  priceChange: number;
+  costChange: number;
+}
+
+export interface SelectedModifier {
+  groupId: Types.ObjectId;
+  groupName: string;
+  selectionType: 'single' | 'multiple';
+  required: boolean;
+  options: SelectedModifierOption[];
+}
+
 export interface OrderItem {
+  lineId: string;
   productId: Types.ObjectId;
   name: string;
   categoryId?: Types.ObjectId;
   categoryName?: string;
   qty: number;
   price: number;
-  modifiersApplied?: string[];
+  costPrice?: number;
+  modifiersApplied?: SelectedModifier[];
   total: number;
 }
 
@@ -62,17 +79,30 @@ export type OrderDocument = Document & Order;
 
 const orderItemSchema = new Schema<OrderItem>(
   {
+    lineId: { type: String, required: true, trim: true },
     productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
     name: { type: String, required: true, trim: true },
     categoryId: { type: Schema.Types.ObjectId, ref: 'Category', required: false },
     categoryName: { type: String, required: false, trim: true },
     qty: { type: Number, required: true, min: 0 },
     price: { type: Number, required: true, min: 0 },
-    modifiersApplied: {
-      type: [String],
-      required: false,
-      default: undefined,
-    },
+    costPrice: { type: Number, required: false, min: 0 },
+    modifiersApplied: [
+      {
+        groupId: { type: Schema.Types.ObjectId, ref: 'ModifierGroup', required: true },
+        groupName: { type: String, required: true, trim: true },
+        selectionType: { type: String, enum: ['single', 'multiple'], required: true },
+        required: { type: Boolean, required: true },
+        options: [
+          {
+            optionId: { type: Schema.Types.ObjectId, required: true },
+            name: { type: String, required: true, trim: true },
+            priceChange: { type: Number, required: true, default: 0 },
+            costChange: { type: Number, required: true, default: 0 },
+          },
+        ],
+      },
+    ],
     total: { type: Number, required: true, min: 0 },
   },
   { _id: false }
