@@ -106,12 +106,6 @@ const POSPage: React.FC = () => {
   }, [orderId, activeOrders, loadOrder]);
 
   useEffect(() => {
-    if (!activeCategoryId && categories.length > 0) {
-      setActiveCategory(categories[0]._id);
-    }
-  }, [activeCategoryId, categories, setActiveCategory]);
-
-  useEffect(() => {
     if (activeSection === 'reports') {
       void fetchActiveOrders();
     }
