@@ -4,6 +4,8 @@ export type OrderStatus = 'draft' | 'paid' | 'completed';
 
 export type PaymentMethod = 'cash' | 'card';
 
+export type OrderTag = 'takeaway' | 'delivery';
+
 export interface OrderItem {
   productId: Types.ObjectId;
   name: string;
@@ -50,6 +52,7 @@ export interface Order {
   appliedDiscounts: AppliedDiscount[];
   total: number;
   payment?: OrderPayment;
+  orderTag?: OrderTag;
   status: OrderStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -119,6 +122,7 @@ const orderSchema = new Schema<OrderDocument>(
     appliedDiscounts: { type: [appliedDiscountSchema], default: [] },
     total: { type: Number, required: true, min: 0, default: 0 },
     payment: { type: paymentSchema, required: false },
+    orderTag: { type: String, enum: ['takeaway', 'delivery'], required: false },
     status: {
       type: String,
       enum: ['draft', 'paid', 'completed'],
