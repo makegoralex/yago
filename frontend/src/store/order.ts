@@ -16,7 +16,23 @@ export type PaymentMethod = 'cash' | 'card';
 
 export type OrderTag = 'takeaway' | 'delivery';
 
+export type SelectedModifierOption = {
+  optionId: string;
+  name: string;
+  priceChange: number;
+  costChange: number;
+};
+
+export type SelectedModifier = {
+  groupId: string;
+  groupName: string;
+  selectionType: 'single' | 'multiple';
+  required: boolean;
+  options: SelectedModifierOption[];
+};
+
 export type OrderItem = {
+  lineId: string;
   productId: string;
   name: string;
   categoryId?: string;
@@ -24,7 +40,8 @@ export type OrderItem = {
   qty: number;
   price: number;
   total: number;
-  modifiersApplied?: string[];
+  costPrice?: number;
+  modifiersApplied?: SelectedModifier[];
 };
 
 export type ActiveOrder = {
@@ -92,9 +109,9 @@ type OrderState = {
   shiftHistory: OrderHistoryEntry[];
   shiftHistoryLoading: boolean;
   createDraft: (options?: { forceNew?: boolean }) => Promise<void>;
-  addProduct: (product: Product) => Promise<void>;
-  updateItemQty: (productId: string, qty: number) => Promise<void>;
-  removeItem: (productId: string) => Promise<void>;
+  addProduct: (product: Product, modifiers?: SelectedModifier[]) => Promise<void>;
+  updateItemQty: (lineId: string, qty: number) => Promise<void>;
+  removeItem: (lineId: string) => Promise<void>;
   attachCustomer: (customer: CustomerSummary | null) => Promise<void>;
   payOrder: (payload: { method: PaymentMethod; amountTendered: number; change?: number }) => Promise<void>;
   completeOrder: () => Promise<void>;
@@ -117,12 +134,75 @@ type OrderState = {
 
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 
+const mapSelectedModifiers = (modifiers: any): SelectedModifier[] => {
+  if (!Array.isArray(modifiers)) {
+    return [];
+  }
+
+  const result: SelectedModifier[] = [];
+
+  for (const modifier of modifiers) {
+    if (!modifier || typeof modifier !== 'object') {
+      continue;
+    }
+
+    const groupId = String((modifier as any).groupId ?? '');
+    const groupName = typeof (modifier as any).groupName === 'string' ? (modifier as any).groupName : '';
+    const selectionType = (modifier as any).selectionType === 'multiple' ? 'multiple' : 'single';
+    const required = Boolean((modifier as any).required);
+    if (!groupId || !groupName) {
+      continue;
+    }
+
+    const options: SelectedModifierOption[] = Array.isArray((modifier as any).options)
+        ? (modifier as any).options
+            .map((option: any) => ({
+                optionId: String(option?.optionId ?? option?._id ?? option?.id ?? ''),
+                name: typeof option?.name === 'string' ? option.name : '',
+                priceChange: typeof option?.priceChange === 'number' ? option.priceChange : 0,
+                costChange: typeof option?.costChange === 'number' ? option.costChange : 0,
+              }))
+            .filter((option: SelectedModifierOption) => option.optionId && option.name)
+        : [];
+
+    result.push({ groupId, groupName, selectionType, required, options });
+  }
+
+  return result;
+};
+
+const buildLineId = (productId: string, modifiers?: SelectedModifier[]): string => {
+  if (!modifiers || modifiers.length === 0) {
+    return productId;
+  }
+
+  const parts = modifiers
+    .map((modifier) => {
+      const optionPart = modifier.options.map((option) => option.optionId).sort().join(',');
+      return `${modifier.groupId}:${optionPart}`;
+    })
+    .sort();
+
+  return `${productId}:${parts.join('|')}`;
+};
+
 const mapOrderItems = (items: any[] | undefined): OrderItem[] => {
   if (!Array.isArray(items)) {
     return [];
   }
 
   return items.map((item) => ({
+    lineId:
+      typeof item.lineId === 'string' && item.lineId
+        ? item.lineId
+        : buildLineId(
+            String(
+              typeof item.productId === 'object' && item.productId
+                ? item.productId._id ?? item.productId
+                : item.productId ?? item._id ?? ''
+            ),
+            mapSelectedModifiers(item.modifiersApplied)
+          ),
     productId: String(
       typeof item.productId === 'object' && item.productId
         ? item.productId._id ?? item.productId
@@ -138,11 +218,18 @@ const mapOrderItems = (items: any[] | undefined): OrderItem[] => {
       : undefined,
     categoryName: typeof item.categoryName === 'string' ? item.categoryName : undefined,
     price: item.price,
+    costPrice: item.costPrice,
     qty: item.qty,
     total: item.total,
-    modifiersApplied: item.modifiersApplied,
+    modifiersApplied: mapSelectedModifiers(item.modifiersApplied),
   }));
 };
+
+const mapModifiersToPayload = (modifiers?: SelectedModifier[]) =>
+  modifiers?.map((modifier) => ({
+    groupId: modifier.groupId,
+    optionIds: modifier.options.map((option) => option.optionId),
+  }));
 
 const mapAppliedDiscounts = (discounts: any): AppliedDiscount[] => {
   if (!Array.isArray(discounts)) {
@@ -469,50 +556,64 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       set({ loading: false });
     }
   },
-  async addProduct(product) {
+  async addProduct(product, modifiers) {
     const state = get();
     if (!state.orderId) {
       await state.createDraft();
     }
 
+    const priceAdjustment = modifiers?.reduce(
+      (acc, modifier) => acc + modifier.options.reduce((sum, option) => sum + option.priceChange, 0),
+      0
+    );
+    const costAdjustment = modifiers?.reduce(
+      (acc, modifier) => acc + modifier.options.reduce((sum, option) => sum + option.costChange, 0),
+      0
+    );
+
+    const unitPrice = roundCurrency(product.price + (priceAdjustment ?? 0));
+    const unitCost = roundCurrency((product.costPrice ?? 0) + (costAdjustment ?? 0));
+    const lineId = buildLineId(product._id, modifiers);
+
     const currentItems = get().items;
-    const existing = currentItems.find((item) => item.productId === product._id);
+    const existing = currentItems.find((item) => item.lineId === lineId);
     const updatedItems = existing
       ? currentItems.map((item) =>
-          item.productId === product._id
+          item.lineId === lineId
             ? {
                 ...item,
                 qty: item.qty + 1,
-                total: roundCurrency((item.qty + 1) * item.price),
+                total: roundCurrency((item.qty + 1) * unitPrice),
               }
             : item
         )
       : [
           ...currentItems,
           {
+            lineId,
             productId: product._id,
             name: product.name,
-            price: product.price,
+            price: unitPrice,
+            costPrice: unitCost,
             qty: 1,
-            total: roundCurrency(product.price),
+            total: roundCurrency(unitPrice),
+            modifiersApplied: modifiers,
           },
         ];
 
     await get().syncItems(updatedItems);
   },
-  async updateItemQty(productId, qty) {
+  async updateItemQty(lineId, qty) {
     const updatedItems = get()
       .items.map((item) =>
-        item.productId === productId
-          ? { ...item, qty, total: roundCurrency(qty * item.price) }
-          : item
+        item.lineId === lineId ? { ...item, qty, total: roundCurrency(qty * item.price) } : item
       )
       .filter((item) => item.qty > 0);
 
     await get().syncItems(updatedItems);
   },
-  async removeItem(productId) {
-    const updatedItems = get().items.filter((item) => item.productId !== productId);
+  async removeItem(lineId) {
+    const updatedItems = get().items.filter((item) => item.lineId !== lineId);
     await get().syncItems(updatedItems);
   },
   async attachCustomer(customer) {
@@ -637,7 +738,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       items: updatedItems.map((item) => ({
         productId: item.productId,
         qty: item.qty,
-        modifiersApplied: item.modifiersApplied,
+        modifiersApplied: mapModifiersToPayload(item.modifiersApplied),
       })),
       manualDiscount: manualDiscountOverride,
       discountIds,
