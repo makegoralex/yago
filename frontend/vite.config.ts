@@ -1,33 +1,16 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import legacy from '@vitejs/plugin-legacy';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  plugins: [
-    react(),
-    legacy({
-      targets: [
-        'defaults',
-        'iOS >= 10',
-        'Safari >= 10'
-      ],
-      additionalLegacyPolyfills: [
-        'regenerator-runtime/runtime'
-      ],
-      renderLegacyChunks: true,
-      modernPolyfills: false
-    })
-  ],
+  plugins: [react()],
 
   server: {
-    port: 5173
+    port: 5173,
   },
 
   build: {
-    target: 'es2018',
+    outDir: 'dist',
     sourcemap: false,
-    rollupOptions: {
-      external: ['core-js/features/intl']
-    }
-  }
-});
+    target: 'es2017',
+  },
+})
