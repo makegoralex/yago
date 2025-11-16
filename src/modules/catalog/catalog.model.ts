@@ -1,5 +1,7 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
+import type { ModifierGroupDocument } from './modifierGroup.model';
+
 export interface ProductIngredient {
   ingredientId: Types.ObjectId;
   quantity: number;
@@ -43,7 +45,7 @@ export interface Product {
   discountType?: 'percentage' | 'fixed';
   discountValue?: number;
   imageUrl?: string;
-  modifiers?: string[];
+  modifierGroups?: Types.ObjectId[] | ModifierGroupDocument[];
   ingredients?: ProductIngredient[];
   isActive: boolean;
   createdAt: Date;
@@ -99,11 +101,12 @@ const productSchema = new Schema<ProductDocument>(
       required: false,
       trim: true,
     },
-    modifiers: {
-      type: [String],
-      required: false,
-      default: undefined,
-    },
+    modifierGroups: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'ModifierGroup',
+      },
+    ],
     ingredients: {
       type: [
         {

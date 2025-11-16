@@ -205,10 +205,15 @@ const deductInventoryForOrder = async (order: OrderDocument): Promise<void> => {
 
 router.use(authMiddleware);
 
+type ItemModifierPayload = {
+  groupId: string;
+  optionIds?: string[];
+};
+
 type ItemPayload = {
   productId: string;
   qty: number;
-  modifiersApplied?: string[];
+  modifiersApplied?: ItemModifierPayload[];
 };
 
 type ItemsRequestPayload = {
@@ -246,48 +251,62 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
       throw new Error('Each item must include a quantity greater than or equal to zero');
     }
 
-    if (
-      modifiersApplied !== undefined &&
-      (!Array.isArray(modifiersApplied) || !modifiersApplied.every((modifier) => typeof modifier === 'string'))
-    ) {
-      throw new Error('modifiersApplied must be an array of strings');
+    if (modifiersApplied !== undefined && !Array.isArray(modifiersApplied)) {
+      throw new Error('modifiersApplied must be an array');
     }
+
+    const normalizedModifiers = Array.isArray(modifiersApplied)
+      ? modifiersApplied.map((modifier) => {
+          if (!modifier || typeof modifier !== 'object') {
+            throw new Error('modifiersApplied must contain modifier objects');
+          }
+
+          const groupId = (modifier as ItemModifierPayload).groupId;
+          const optionIds = (modifier as ItemModifierPayload).optionIds;
+
+          if (!groupId || typeof groupId !== 'string' || !isValidObjectId(groupId)) {
+            throw new Error('Each modifier must include a valid groupId');
+          }
+
+          if (optionIds !== undefined && (!Array.isArray(optionIds) || optionIds.some((id) => typeof id !== 'string'))) {
+            throw new Error('optionIds must be an array of ids');
+          }
+
+          const trimmedOptionIds = optionIds?.map((value) => value.trim()).filter(Boolean) ?? [];
+
+          return { groupId, optionIds: trimmedOptionIds } satisfies ItemModifierPayload;
+        })
+      : undefined;
 
     uniqueIds.add(productId);
 
     sanitizedItems.push({
       productId,
       qty,
-      modifiersApplied: modifiersApplied?.map((modifier) => modifier.trim()).filter(Boolean),
+      modifiersApplied: normalizedModifiers,
     });
   }
 
   const products = await ProductModel.find({ _id: { $in: [...uniqueIds] } })
-    .select('name price isActive categoryId')
+    .select('name price isActive categoryId costPrice modifierGroups')
+    .populate('modifierGroups')
     .lean();
 
   if (products.length !== uniqueIds.size) {
     throw new Error('One or more products could not be found');
   }
 
-  const productMap = new Map<
-    string,
-    { name: string; price: number; isActive?: boolean; categoryId?: Types.ObjectId | null }
-  >();
+  const productMap = new Map<string, typeof products[number]>();
   const categoryIds = new Set<string>();
-  for (const product of products) {
-    const productCategoryId = product.categoryId ? new Types.ObjectId(product.categoryId) : null;
-    if (productCategoryId) {
+    for (const product of products) {
+      const productCategoryId = new Types.ObjectId(product.categoryId);
       categoryIds.add(productCategoryId.toString());
-    }
 
-    productMap.set(product._id.toString(), {
-      name: product.name,
-      price: product.price,
-      isActive: product.isActive,
-      categoryId: productCategoryId,
-    });
-  }
+      productMap.set(product._id.toString(), {
+        ...product,
+        categoryId: productCategoryId,
+      });
+    }
 
   let categoryMap: Map<string, string> = new Map();
   if (categoryIds.size) {
@@ -299,6 +318,21 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
 
     categoryMap = new Map(categories.map((category) => [category._id.toString(), category.name ?? '']));
   }
+
+  const buildLineId = (productId: string, modifiers: OrderItem['modifiersApplied']): string => {
+    if (!modifiers || modifiers.length === 0) {
+      return productId;
+    }
+
+    const parts = modifiers
+      .map((modifier) => {
+        const optionPart = modifier.options.map((option) => option.optionId.toString()).sort().join(',');
+        return `${modifier.groupId.toString()}:${optionPart}`;
+      })
+      .sort();
+
+    return `${productId}:${parts.join('|')}`;
+  };
 
   return sanitizedItems
     .filter((item) => item.qty > 0)
@@ -312,20 +346,114 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
         throw new Error(`${product.name} недоступен для продажи`);
       }
 
-      const price = roundCurrency(product.price);
-      const total = roundCurrency(price * item.qty);
+      const modifierGroups = Array.isArray(product.modifierGroups) ? product.modifierGroups : [];
+      const modifierGroupMap = new Map(
+        modifierGroups.map((group: any) => [String(group._id ?? group.id ?? ''), group])
+      );
 
-      const modifiers = item.modifiersApplied?.length ? item.modifiersApplied : undefined;
+      const selectedModifiers: OrderItem['modifiersApplied'] = [];
+      const requiredGroupIds = new Set(
+        modifierGroups
+          .filter((group: any) => Boolean(group?.required))
+          .map((group: any) => String(group?._id ?? group?.id ?? ''))
+          .filter(Boolean)
+      );
+
+      for (const modifier of item.modifiersApplied ?? []) {
+        const group = modifierGroupMap.get(modifier.groupId);
+        if (!group) {
+          throw new Error('Selected modifier group is not available for this product');
+        }
+
+        const selectionType = group.selectionType === 'multiple' ? 'multiple' : 'single';
+        const optionIds = Array.isArray(modifier.optionIds) ? modifier.optionIds : [];
+        const uniqueOptionIds = Array.from(new Set(optionIds));
+
+        if (selectionType === 'single' && uniqueOptionIds.length > 1) {
+          throw new Error('Only one option can be selected for this modifier group');
+        }
+
+          type OptionMapValue = { name?: string; priceChange?: number; costChange?: number };
+
+          const optionMap = new Map<string, OptionMapValue>(
+            (group.options ?? []).map((option: any) => [String(option._id ?? option.id ?? ''), option])
+          );
+
+        const resolvedOptions = uniqueOptionIds
+          .map((optionId) => {
+            const option = optionMap.get(optionId);
+            if (!option) {
+              throw new Error('Selected modifier option not found');
+            }
+
+              const optionName = typeof option.name === 'string' ? option.name : '';
+              if (!optionName) {
+                throw new Error('Selected modifier option not found');
+              }
+
+              return {
+                optionId: new Types.ObjectId(optionId),
+                name: optionName,
+                priceChange: Number(option.priceChange ?? 0),
+                costChange: Number(option.costChange ?? 0),
+              };
+            })
+            .filter(Boolean);
+
+        if (group.required && resolvedOptions.length === 0) {
+          throw new Error(`Выберите вариант для модификатора «${group.name}»`);
+        }
+
+        requiredGroupIds.delete(modifier.groupId);
+
+        if (resolvedOptions.length === 0) {
+          continue;
+        }
+
+        selectedModifiers.push({
+          groupId: new Types.ObjectId(modifier.groupId),
+          groupName: group.name,
+          selectionType,
+          required: Boolean(group.required),
+          options: resolvedOptions,
+        });
+      }
+
+      const missingRequired = Array.from(requiredGroupIds);
+      if (missingRequired.length > 0) {
+        throw new Error('Не выбраны обязательные модификаторы');
+      }
+
+      const priceAdjustment = selectedModifiers.reduce(
+        (acc, modifier) => acc + modifier.options.reduce((sum, option) => sum + option.priceChange, 0),
+        0
+      );
+
+      const costAdjustment = selectedModifiers.reduce(
+        (acc, modifier) => acc + modifier.options.reduce((sum, option) => sum + option.costChange, 0),
+        0
+      );
+
+      const basePrice = roundCurrency(product.price);
+      const unitPrice = Math.max(0, roundCurrency(basePrice + priceAdjustment));
+      const baseCost = typeof product.costPrice === 'number' ? product.costPrice : 0;
+      const unitCost = Math.max(0, roundCurrency(baseCost + costAdjustment));
+      const total = roundCurrency(unitPrice * item.qty);
+
+      const modifiers = selectedModifiers.length ? selectedModifiers : undefined;
       const categoryId = product.categoryId ?? undefined;
       const categoryName = categoryId ? categoryMap.get(categoryId.toString()) : undefined;
+      const lineId = buildLineId(item.productId, modifiers);
 
       return {
+        lineId,
         productId: new Types.ObjectId(item.productId),
         name: product.name,
         categoryId: categoryId ?? undefined,
         categoryName,
         qty: item.qty,
-        price,
+        price: unitPrice,
+        costPrice: unitCost,
         modifiersApplied: modifiers,
         total,
       } satisfies OrderItem;

@@ -4,6 +4,6 @@ export interface Product {
   description?: string;
   price: number;
   categoryId: string;
-  modifierIds?: string[];
+  modifierGroups?: string[];
   isAvailable: boolean;
 }
