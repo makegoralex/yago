@@ -2,7 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import { useRestaurantStore } from '../../store/restaurant';
-import { useTheme } from '../../providers/ThemeProvider';
+type HeaderBarProps = {
+  onToggleSidebar: () => void;
+  isSidebarCollapsed: boolean;
+  onShowHistory: () => void;
+};
 
 const formatTime = (date: Date) =>
   date.toLocaleTimeString('ru-RU', {
@@ -10,12 +14,8 @@ const formatTime = (date: Date) =>
     minute: '2-digit',
   });
 
-const HeaderBar: React.FC<{ onToggleSidebar: () => void; isSidebarCollapsed: boolean }> = ({
-  onToggleSidebar,
-  isSidebarCollapsed,
-}) => {
+const HeaderBar: React.FC<HeaderBarProps> = ({ onToggleSidebar, isSidebarCollapsed, onShowHistory }) => {
   const { user } = useAuthStore();
-  const { theme, toggleTheme } = useTheme();
   const restaurantName = useRestaurantStore((state) => state.name);
   const restaurantLogo = useRestaurantStore((state) => state.logoUrl);
   const navigate = useNavigate();
@@ -71,11 +71,11 @@ const HeaderBar: React.FC<{ onToggleSidebar: () => void; isSidebarCollapsed: boo
         ) : null}
         <button
           type="button"
-          onClick={toggleTheme}
+          onClick={onShowHistory}
           className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition hover:bg-slate-200"
-          aria-label="Переключить тему"
+          aria-label="История чеков"
         >
-          {theme === 'light' ? '🌙' : '☀️'}
+          🧾
         </button>
         <button
           type="button"
