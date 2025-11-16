@@ -11,6 +11,7 @@ import {
   type OrderItem,
   type OrderStatus,
   type PaymentMethod,
+  type OrderTag,
 } from './order.model';
 import { WarehouseModel } from '../inventory/warehouse.model';
 import { adjustInventoryQuantity } from '../inventory/inventoryCost.service';
@@ -24,6 +25,7 @@ const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'card'];
 const ORDER_STATUSES: OrderStatus[] = ['draft', 'paid', 'completed'];
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['draft', 'paid'];
 const FULFILLED_ORDER_STATUSES: OrderStatus[] = ['paid', 'completed'];
+const ORDER_TAGS: OrderTag[] = ['takeaway', 'delivery'];
 const CUSTOMER_PROJECTION = 'name phone points';
 
 let cachedDefaultWarehouseId: Types.ObjectId | null | undefined;
@@ -68,6 +70,23 @@ const reloadOrderWithCustomer = async (orderId: Types.ObjectId | string | null |
 };
 
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
+
+const normalizeOrderTag = (value: unknown): OrderTag | null => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    throw new Error('orderTag must be takeaway or delivery');
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!ORDER_TAGS.includes(normalized as OrderTag)) {
+    throw new Error('orderTag must be takeaway or delivery');
+  }
+
+  return normalized as OrderTag;
+};
 
 const buildShiftHistoryFilter = (
   shift: ShiftDocument,
@@ -197,6 +216,7 @@ type ItemsRequestPayload = {
   manualDiscount?: number;
   discountIds?: string[];
   customerId?: string | null;
+  orderTag?: string | null;
 };
  
 const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
@@ -347,7 +367,7 @@ router.post(
   '/start',
   requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
-    const { orgId, locationId, registerId, customerId, warehouseId } = req.body ?? {};
+    const { orgId, locationId, registerId, customerId, warehouseId, orderTag } = req.body ?? {};
     const cashierId = req.user?.id;
 
     if (!cashierId) {
@@ -386,6 +406,14 @@ router.post(
       return;
     }
 
+    let normalizedOrderTag: OrderTag | null = null;
+    try {
+      normalizedOrderTag = normalizeOrderTag(orderTag);
+    } catch (error) {
+      res.status(400).json({ data: null, error: error instanceof Error ? error.message : 'Invalid orderTag' });
+      return;
+    }
+
     const normalizedOrgId = String(orgId).trim();
     const normalizedLocationId = String(locationId).trim();
     const normalizedRegisterId = String(registerId).trim();
@@ -394,25 +422,6 @@ router.post(
 
     if (!activeShift) {
       res.status(409).json({ data: null, error: 'Сначала откройте смену на кассе' });
-      return;
-    }
-
-    const existingDraft = await OrderModel.findOne({
-      orgId: normalizedOrgId,
-      locationId: normalizedLocationId,
-      registerId: normalizedRegisterId,
-      cashierId: new Types.ObjectId(cashierId),
-      status: 'draft',
-    })
-      .sort({ updatedAt: -1 })
-      .populate('customerId', CUSTOMER_PROJECTION);
-
-    if (existingDraft) {
-      if (!existingDraft.shiftId && activeShift?._id) {
-        existingDraft.shiftId = activeShift._id as Types.ObjectId;
-        await existingDraft.save();
-      }
-      res.status(200).json({ data: existingDraft, error: null });
       return;
     }
 
@@ -430,6 +439,7 @@ router.post(
       manualDiscount: 0,
       appliedDiscounts: [],
       total: 0,
+      orderTag: normalizedOrderTag ?? undefined,
       status: 'draft',
     });
 
@@ -517,6 +527,17 @@ router.post(
         order.customerId = customer._id as Types.ObjectId;
       } else {
         res.status(400).json({ data: null, error: 'customerId must be a valid identifier or null' });
+        return;
+      }
+    }
+
+    if (payload.orderTag !== undefined) {
+      try {
+        const normalizedTag = normalizeOrderTag(payload.orderTag);
+        order.orderTag = normalizedTag ?? undefined;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'orderTag must be takeaway or delivery';
+        res.status(400).json({ data: null, error: message });
         return;
       }
     }

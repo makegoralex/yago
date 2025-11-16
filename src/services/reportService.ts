@@ -15,6 +15,8 @@ export interface SummaryReport {
   totalCustomers: number;
   totalPointsIssued: number;
   totalPointsRedeemed: number;
+  takeawayOrders: number;
+  deliveryOrders: number;
 }
 
 export interface DailyReportEntry {
@@ -43,6 +45,8 @@ export const getSummaryReport = async (): Promise<SummaryReport> => {
   const [orderStats] = await OrderModel.aggregate<{
     totalOrders: number;
     totalRevenue: number;
+    takeawayOrders: number;
+    deliveryOrders: number;
   }>([
     { $match: { status: { $in: REVENUE_STATUSES } } },
     {
@@ -50,6 +54,16 @@ export const getSummaryReport = async (): Promise<SummaryReport> => {
         _id: null,
         totalOrders: { $sum: 1 },
         totalRevenue: { $sum: '$total' },
+        takeawayOrders: {
+          $sum: {
+            $cond: [{ $eq: ['$orderTag', 'takeaway'] }, 1, 0],
+          },
+        },
+        deliveryOrders: {
+          $sum: {
+            $cond: [{ $eq: ['$orderTag', 'delivery'] }, 1, 0],
+          },
+        },
       },
     },
   ]);
@@ -80,6 +94,8 @@ export const getSummaryReport = async (): Promise<SummaryReport> => {
   const totalPointsRedeemed = roundTwoDecimals(
     Math.max(totalPointsIssued - totalPointsBalance, 0)
   );
+  const takeawayOrders = orderStats?.takeawayOrders ?? 0;
+  const deliveryOrders = orderStats?.deliveryOrders ?? 0;
 
   return {
     totalOrders,
@@ -88,6 +104,8 @@ export const getSummaryReport = async (): Promise<SummaryReport> => {
     totalCustomers,
     totalPointsIssued,
     totalPointsRedeemed,
+    takeawayOrders,
+    deliveryOrders,
   };
 };
 
