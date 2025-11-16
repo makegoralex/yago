@@ -11,11 +11,12 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const session = useAuthStore.getState().session;
+  const authState = useAuthStore.getState();
+  const accessToken = authState.session?.accessToken ?? authState.accessToken ?? undefined;
 
-  if (session?.accessToken) {
+  if (accessToken) {
     config.headers = config.headers ?? {};
-    config.headers.Authorization = `Bearer ${session.accessToken}`;
+    config.headers.Authorization = `Bearer ${accessToken}`;
   }
 
   return config;
@@ -25,7 +26,16 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    const session = useAuthStore.getState().session;
+    const authState = useAuthStore.getState();
+    const session = authState.session ??
+      (authState.accessToken && authState.refreshToken && authState.user
+        ? {
+            user: authState.user,
+            accessToken: authState.accessToken,
+            refreshToken: authState.refreshToken,
+            remember: authState.remember,
+          }
+        : null);
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
