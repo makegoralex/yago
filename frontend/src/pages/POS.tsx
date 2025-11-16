@@ -72,6 +72,7 @@ const POSPage: React.FC = () => {
   const [isLoyaltyOpen, setLoyaltyOpen] = useState(false);
   const [isPaying, setPaying] = useState(false);
   const [isStartingOrder, setStartingOrder] = useState(false);
+  const [isCompleting, setCompleting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [activeSection, setActiveSection] = useState<'products' | 'customers' | 'reports'>('products');
   const [isRedeemOpen, setRedeemOpen] = useState(false);
@@ -152,6 +153,7 @@ const POSPage: React.FC = () => {
   const earnedPoints = total * 0.05;
   const startOrderButtonLabel = isStartingOrder ? 'Создание…' : 'Создать заказ';
   const shiftStatus = isShiftLoading ? 'loading' : currentShift ? 'open' : 'closed';
+  const shouldShowProductSearch = isTablet || activeSection === 'products';
 
   const handleStartOrder = async () => {
     if (!currentShift) {
@@ -165,7 +167,7 @@ const POSPage: React.FC = () => {
 
     setStartingOrder(true);
     try {
-      await createDraft({ forceNew: Boolean(orderId) });
+      await createDraft({ forceNew: true });
       if (!isTablet) {
         setOrderDrawerOpen(true);
       }
@@ -189,18 +191,40 @@ const POSPage: React.FC = () => {
     setPaying(true);
     try {
       await payOrder(payload);
-      await completeOrder();
       notify({
-        title: 'Заказ завершён',
-        description: 'Оплата проведена и чек закрыт',
+        title: 'Оплата проведена',
+        description: 'Завершите заказ, чтобы отправить его в историю',
         type: 'success',
       });
       setPaymentOpen(false);
-      setOrderDrawerOpen(false);
+      if (!isTablet) {
+        setOrderDrawerOpen(true);
+      }
     } catch (error) {
       notify({ title: 'Ошибка оплаты', description: 'Попробуйте снова', type: 'error' });
     } finally {
       setPaying(false);
+    }
+  };
+
+  const handleCompleteCurrentOrder = async () => {
+    if (!orderId) {
+      return;
+    }
+
+    setCompleting(true);
+    try {
+      await completeOrder();
+      notify({ title: 'Заказ завершён', description: 'Чек отправлен в историю', type: 'success' });
+      if (!isTablet) {
+        setOrderDrawerOpen(false);
+      }
+      await fetchShiftHistory().catch(() => undefined);
+    } catch (error) {
+      const description = error instanceof Error ? error.message : 'Не удалось завершить заказ';
+      notify({ title: 'Ошибка завершения', description, type: 'error' });
+    } finally {
+      setCompleting(false);
     }
   };
 
@@ -321,36 +345,33 @@ const POSPage: React.FC = () => {
           />
         </div>
         <div className="flex-1">
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <ProductSearchBar
-              query={searchQuery}
-              onQueryChange={setSearchQuery}
-              results={searchResults}
-              onSelect={handleProductSearchSelect}
-            />
-            <div className="flex items-center gap-3 lg:hidden">
-              <button
-                type="button"
-                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-500"
-                onClick={() => setOrderDrawerOpen(true)}
-              >
-                Смотреть заказ ({items.length})
-              </button>
-              <button
-                type="button"
-                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-500"
-                onClick={handleRemoveCustomer}
-              >
-                Сбросить клиента
-              </button>
+          {shouldShowProductSearch ? (
+            <div className="mb-4 space-y-3">
+              <ProductSearchBar
+                query={searchQuery}
+                onQueryChange={setSearchQuery}
+                results={searchResults}
+                onSelect={handleProductSearchSelect}
+              />
+              {!isTablet ? (
+                <MobileQuickActions
+                  onShowOrder={() => setOrderDrawerOpen(true)}
+                  onResetCustomer={handleRemoveCustomer}
+                  itemCount={items.length}
+                />
+              ) : null}
             </div>
-            <ProductSearchBar
-              query={searchQuery}
-              onQueryChange={setSearchQuery}
-              results={searchResults}
-              onSelect={handleProductSearchSelect}
-            />
-          </div>
+          ) : (
+            !isTablet && (
+              <div className="mb-4">
+                <MobileQuickActions
+                  onShowOrder={() => setOrderDrawerOpen(true)}
+                  onResetCustomer={handleRemoveCustomer}
+                  itemCount={items.length}
+                />
+              </div>
+            )
+          )}
           <div className="mb-4 rounded-2xl bg-white p-4 shadow-soft">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
@@ -480,6 +501,7 @@ const POSPage: React.FC = () => {
             discount={discount}
             total={total}
             status={status}
+            isCompleting={isCompleting}
             onIncrement={(productId) =>
               void updateItemQty(
                 productId,
@@ -519,6 +541,7 @@ const POSPage: React.FC = () => {
                 })
                 .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
             }
+            onComplete={() => void handleCompleteCurrentOrder()}
             availableDiscounts={availableDiscounts}
             appliedDiscounts={appliedDiscounts}
             selectedDiscountIds={selectedDiscountIds}
@@ -583,6 +606,7 @@ const POSPage: React.FC = () => {
                 discount={discount}
                 total={total}
                 status={status}
+                isCompleting={isCompleting}
                 onIncrement={(productId) =>
                   void updateItemQty(
                     productId,
@@ -620,11 +644,12 @@ const POSPage: React.FC = () => {
                       setOrderDrawerOpen(false);
                       notify({ title: 'Заказ отменён', type: 'info' });
                     })
-                .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
-            }
-            availableDiscounts={availableDiscounts}
-            appliedDiscounts={appliedDiscounts}
-            selectedDiscountIds={selectedDiscountIds}
+                    .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
+                }
+                onComplete={() => void handleCompleteCurrentOrder()}
+                availableDiscounts={availableDiscounts}
+                appliedDiscounts={appliedDiscounts}
+                selectedDiscountIds={selectedDiscountIds}
             onToggleDiscount={(discountId) =>
               void toggleDiscount(discountId).catch(() =>
                 notify({ title: 'Не удалось применить скидку', type: 'error' })
@@ -772,6 +797,31 @@ const ProductSearchBar: React.FC<ProductSearchBarProps> = ({ query, onQueryChang
     </div>
   );
 };
+
+type MobileQuickActionsProps = {
+  onShowOrder: () => void;
+  onResetCustomer: () => void;
+  itemCount: number;
+};
+
+const MobileQuickActions: React.FC<MobileQuickActionsProps> = ({ onShowOrder, onResetCustomer, itemCount }) => (
+  <div className="flex items-center gap-3">
+    <button
+      type="button"
+      className="flex-1 rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-600"
+      onClick={onShowOrder}
+    >
+      Смотреть заказ ({itemCount})
+    </button>
+    <button
+      type="button"
+      className="flex-1 rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-600"
+      onClick={onResetCustomer}
+    >
+      Сбросить клиента
+    </button>
+  </div>
+);
 
 const formatTimeLabel = (value: string): string =>
   new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
