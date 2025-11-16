@@ -93,6 +93,87 @@ type SalesAndShiftStats = {
   };
 };
 
+type LegacySalesAndShiftStats = {
+  orders?: {
+    totalOrders?: number;
+    totalRevenue?: number;
+  } | null;
+  shifts?:
+    | Array<{
+        status?: 'open' | 'closed';
+        totals?: {
+          total?: number;
+        } | null;
+      }>
+    | null;
+};
+
+const normalizeNumber = (value: unknown, fallback = 0): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
+const normalizeSalesAndShiftStats = (
+  payload?: SalesAndShiftStats | LegacySalesAndShiftStats | null
+): SalesAndShiftStats | null => {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  if ('totalRevenue' in payload || 'orderCount' in payload || 'openShiftCount' in payload) {
+    const stats = payload as Partial<SalesAndShiftStats>;
+    return {
+      totalRevenue: normalizeNumber(stats.totalRevenue),
+      orderCount: normalizeNumber(stats.orderCount),
+      averageOrderValue: normalizeNumber(stats.averageOrderValue),
+      openShiftCount: normalizeNumber(stats.openShiftCount),
+      closedShiftCount: normalizeNumber(stats.closedShiftCount),
+      currentOpenShiftCount: normalizeNumber(stats.currentOpenShiftCount),
+      averageRevenuePerClosedShift: normalizeNumber(stats.averageRevenuePerClosedShift),
+      period:
+        stats.period && typeof stats.period === 'object'
+          ? {
+              ...(typeof stats.period.from === 'string' ? { from: stats.period.from } : {}),
+              ...(typeof stats.period.to === 'string' ? { to: stats.period.to } : {}),
+            }
+          : undefined,
+    };
+  }
+
+  if ('orders' in payload || 'shifts' in payload) {
+    const legacy = payload as LegacySalesAndShiftStats;
+    const totalRevenue = normalizeNumber(legacy.orders?.totalRevenue);
+    const orderCount = normalizeNumber(legacy.orders?.totalOrders);
+    let openShiftCount = 0;
+    let closedShiftCount = 0;
+    let totalClosedRevenue = 0;
+
+    for (const shift of legacy.shifts ?? []) {
+      if (!shift || typeof shift !== 'object') {
+        continue;
+      }
+
+      if (shift.status === 'open') {
+        openShiftCount += 1;
+      } else if (shift.status === 'closed') {
+        closedShiftCount += 1;
+        totalClosedRevenue += normalizeNumber(shift.totals?.total);
+      }
+    }
+
+    return {
+      totalRevenue,
+      orderCount,
+      averageOrderValue: orderCount > 0 ? totalRevenue / orderCount : 0,
+      openShiftCount,
+      closedShiftCount,
+      currentOpenShiftCount: openShiftCount,
+      averageRevenuePerClosedShift:
+        closedShiftCount > 0 ? totalClosedRevenue / closedShiftCount : 0,
+    };
+  }
+
+  return null;
+};
+
 type LoyaltyPointSummary = {
   totalPointsIssued: number;
   totalPointsRedeemed: number;
@@ -306,12 +387,12 @@ const AdminPage: React.FC = () => {
           ...(filters?.to ? { to: filters.to } : {}),
         };
 
-        const response = await api.get("/api/admin/stats/sales-and-shifts", {
+        const response = await api.get('/api/admin/stats/sales-and-shifts', {
           params,
         });
 
-        const payload = getResponseData<SalesAndShiftStats>(response);
-        setSalesShiftStats(payload ?? null);
+        const payload = getResponseData<SalesAndShiftStats | LegacySalesAndShiftStats>(response);
+        setSalesShiftStats(normalizeSalesAndShiftStats(payload));
       } catch (error) {
         console.error('Не удалось загрузить статистику смен', error);
         let message = 'Не удалось загрузить статистику смен';
@@ -706,8 +787,13 @@ const AdminPage: React.FC = () => {
     return '';
   };
 
-  const formatCurrency = (value: number) =>
-    value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatCurrency = (value?: number | null) =>
+    normalizeNumber(value).toLocaleString('ru-RU', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+  const formatInteger = (value?: number | null) => normalizeNumber(value).toLocaleString('ru-RU');
 
   const handleCreateCategory = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -1533,19 +1619,19 @@ const AdminPage: React.FC = () => {
                         },
                         {
                           label: 'Заказы',
-                          value: salesShiftStats.orderCount.toLocaleString('ru-RU'),
+                          value: formatInteger(salesShiftStats.orderCount),
                         },
                         {
                           label: 'Открытых смен',
-                          value: salesShiftStats.openShiftCount.toLocaleString('ru-RU'),
+                          value: formatInteger(salesShiftStats.openShiftCount),
                         },
                         {
                           label: 'Закрыто за период',
-                          value: salesShiftStats.closedShiftCount.toLocaleString('ru-RU'),
+                          value: formatInteger(salesShiftStats.closedShiftCount),
                         },
                         {
                           label: 'Активно сейчас',
-                          value: salesShiftStats.currentOpenShiftCount.toLocaleString('ru-RU'),
+                          value: formatInteger(salesShiftStats.currentOpenShiftCount),
                         },
                         {
                           label: 'Выручка на смену',

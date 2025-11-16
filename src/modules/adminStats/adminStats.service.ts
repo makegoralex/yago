@@ -1,28 +1,25 @@
 import { FilterQuery } from 'mongoose';
 
 import { OrderModel } from '../orders/order.model';
-import { ShiftDocument, ShiftModel, ShiftStatus, ShiftTotals } from '../shifts/shift.model';
+import { ShiftDocument, ShiftModel, ShiftTotals } from '../shifts/shift.model';
 
 export interface SalesAndShiftFilter {
   from?: Date;
   to?: Date;
 }
 
-export interface ShiftSummary {
-  id: string;
-  cashierId: string;
-  status: ShiftStatus;
-  openedAt: Date;
-  closedAt?: Date;
-  totals: ShiftTotals;
-}
-
 export interface SalesAndShiftStats {
-  orders: {
-    totalOrders: number;
-    totalRevenue: number;
+  totalRevenue: number;
+  orderCount: number;
+  averageOrderValue: number;
+  openShiftCount: number;
+  closedShiftCount: number;
+  currentOpenShiftCount: number;
+  averageRevenuePerClosedShift: number;
+  period?: {
+    from?: string;
+    to?: string;
   };
-  shifts: ShiftSummary[];
 }
 
 const sanitizeTotals = (totals?: ShiftTotals | null): ShiftTotals => ({
@@ -57,7 +54,9 @@ const buildDateRangeFilter = (
 export const fetchSalesAndShiftStats = async (
   filters: SalesAndShiftFilter
 ): Promise<SalesAndShiftStats> => {
-  const orderMatch: Record<string, unknown> = { status: 'paid' };
+  const orderMatch: Record<string, unknown> = {
+    status: { $in: ['paid', 'completed'] },
+  };
 
   if (filters.from || filters.to) {
     const createdAt: Record<string, Date> = {};
@@ -89,20 +88,45 @@ export const fetchSalesAndShiftStats = async (
       .lean(),
   ]);
 
+  const totalRevenue = Number(orderStats?.totalRevenue ?? 0);
+  const orderCount = orderStats?.totalOrders ?? 0;
+  const averageOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
+
+  let openShiftCount = 0;
+  let closedShiftCount = 0;
+  let totalClosedShiftRevenue = 0;
+
+  for (const shift of shifts) {
+    const totals = sanitizeTotals(shift.totals);
+    if (shift.status === 'open') {
+      openShiftCount += 1;
+    }
+
+    if (shift.status === 'closed') {
+      closedShiftCount += 1;
+      totalClosedShiftRevenue += totals.total;
+    }
+  }
+
+  const averageRevenuePerClosedShift =
+    closedShiftCount > 0 ? totalClosedShiftRevenue / closedShiftCount : 0;
+
+  const period =
+    filters.from || filters.to
+      ? {
+          ...(filters.from ? { from: filters.from.toISOString() } : {}),
+          ...(filters.to ? { to: filters.to.toISOString() } : {}),
+        }
+      : undefined;
+
   return {
-    orders: {
-      totalOrders: orderStats?.totalOrders ?? 0,
-      totalRevenue: Number(orderStats?.totalRevenue ?? 0),
-    },
-    shifts: shifts.map((shift) => ({
-      id: typeof (shift as { id?: string }).id === 'string' && (shift as { id?: string }).id
-        ? (shift as { id: string }).id
-        : shift._id.toString(),
-      cashierId: shift.cashierId?.toString() ?? '',
-      status: shift.status,
-      openedAt: shift.openedAt,
-      closedAt: shift.closedAt,
-      totals: sanitizeTotals(shift.totals),
-    })),
+    totalRevenue,
+    orderCount,
+    averageOrderValue,
+    openShiftCount,
+    closedShiftCount,
+    currentOpenShiftCount: openShiftCount,
+    averageRevenuePerClosedShift,
+    period,
   };
 };
