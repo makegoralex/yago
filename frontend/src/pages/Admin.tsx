@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import api from '../lib/api';
 import { useToast } from '../providers/ToastProvider';
-import type { Category, Product } from '../store/catalog';
+import type { Category, ModifierGroup, Product } from '../store/catalog';
 import { useRestaurantStore } from '../store/restaurant';
 
 const getResponseData = <T,>(response: { data?: unknown }): T | undefined => {
@@ -303,6 +303,7 @@ const AdminPage: React.FC = () => {
   const [menuLoading, setMenuLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customersLoading, setCustomersLoading] = useState(false);
@@ -316,6 +317,7 @@ const AdminPage: React.FC = () => {
     discountValue: '',
     imageUrl: '',
   });
+  const [newProductModifierIds, setNewProductModifierIds] = useState<string[]>([]);
   const [productIngredients, setProductIngredients] = useState<Array<{ ingredientId: string; quantity: string }>>([
     { ingredientId: '', quantity: '' },
   ]);
@@ -334,9 +336,18 @@ const AdminPage: React.FC = () => {
     discountValue: '',
     isActive: true,
   });
+  const [productEditModifiers, setProductEditModifiers] = useState<string[]>([]);
   const [productEditIngredients, setProductEditIngredients] = useState<
     Array<{ ingredientId: string; quantity: string }>
   >([]);
+  const [selectedModifierGroup, setSelectedModifierGroup] = useState<ModifierGroup | null>(null);
+  const [modifierGroupForm, setModifierGroupForm] = useState({
+    name: '',
+    selectionType: 'single' as 'single' | 'multiple',
+    required: false,
+    sortOrder: '',
+    options: [{ name: '', priceChange: '', costChange: '' }],
+  });
   const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null);
   const [ingredientEditForm, setIngredientEditForm] = useState({
     name: '',
@@ -518,23 +529,27 @@ const AdminPage: React.FC = () => {
           categories?: Category[];
           products?: Product[];
           ingredients?: Ingredient[];
+          modifierGroups?: ModifierGroup[];
         }>(response);
 
         setCategories(payload?.categories ?? []);
         setProducts(payload?.products ?? []);
         setIngredients(payload?.ingredients ?? []);
+        setModifierGroups(payload?.modifierGroups ?? []);
         return;
       } catch (primaryError) {
         console.warn('Админский агрегированный каталог недоступен, выполняем поэлементную загрузку', primaryError);
-        const [categoriesRes, productsRes, ingredientsRes] = await Promise.all([
+        const [categoriesRes, productsRes, ingredientsRes, modifierGroupsRes] = await Promise.all([
           api.get('/api/catalog/categories'),
           api.get('/api/catalog/products', { params: { includeInactive: true } }),
           api.get('/api/catalog/ingredients'),
+          api.get('/api/catalog/modifier-groups'),
         ]);
 
         setCategories(getResponseData<Category[]>(categoriesRes) ?? []);
         setProducts(getResponseData<Product[]>(productsRes) ?? []);
         setIngredients(getResponseData<Ingredient[]>(ingredientsRes) ?? []);
+        setModifierGroups(getResponseData<ModifierGroup[]>(modifierGroupsRes) ?? []);
       }
     } catch (error) {
       console.error('Не удалось загрузить меню', error);
@@ -980,10 +995,156 @@ const AdminPage: React.FC = () => {
       Array.isArray(product.ingredients)
         ? product.ingredients.map((entry) => ({
             ingredientId: entry.ingredientId,
-            quantity: entry.quantity.toString(),
-          }))
+          quantity: entry.quantity.toString(),
+        }))
+      : []
+    );
+    setProductEditModifiers(
+      Array.isArray(product.modifierGroups)
+        ? product.modifierGroups.map((group) => group._id).filter(Boolean)
         : []
     );
+  };
+
+  const handleSelectModifierGroup = (group: ModifierGroup) => {
+    setSelectedModifierGroup(group);
+    setModifierGroupForm({
+      name: group.name,
+      selectionType: group.selectionType,
+      required: group.required,
+      sortOrder: group.sortOrder !== undefined && group.sortOrder !== null ? group.sortOrder.toString() : '',
+      options:
+        group.options?.length
+          ? group.options.map((option) => ({
+              name: option.name,
+              priceChange:
+                option.priceChange !== undefined && option.priceChange !== null ? option.priceChange.toString() : '',
+              costChange:
+                option.costChange !== undefined && option.costChange !== null ? option.costChange.toString() : '',
+            }))
+          : [{ name: '', priceChange: '', costChange: '' }],
+    });
+  };
+
+  const resetModifierGroupForm = () => {
+    setSelectedModifierGroup(null);
+    setModifierGroupForm({
+      name: '',
+      selectionType: 'single',
+      required: false,
+      sortOrder: '',
+      options: [{ name: '', priceChange: '', costChange: '' }],
+    });
+  };
+
+  const handleModifierGroupFieldChange = (
+    field: 'name' | 'selectionType' | 'required' | 'sortOrder',
+    value: string | boolean
+  ) => {
+    setModifierGroupForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleModifierOptionChange = (
+    index: number,
+    field: 'name' | 'priceChange' | 'costChange',
+    value: string
+  ) => {
+    setModifierGroupForm((prev) => {
+      const options = [...prev.options];
+      options[index] = { ...options[index], [field]: value };
+      return { ...prev, options };
+    });
+  };
+
+  const addModifierOptionRow = () => {
+    setModifierGroupForm((prev) => ({
+      ...prev,
+      options: [...prev.options, { name: '', priceChange: '', costChange: '' }],
+    }));
+  };
+
+  const removeModifierOptionRow = (index: number) => {
+    setModifierGroupForm((prev) => ({
+      ...prev,
+      options: prev.options.filter((_, optionIndex) => optionIndex !== index),
+    }));
+  };
+
+  const buildModifierGroupPayload = (): Record<string, unknown> | null => {
+    if (!modifierGroupForm.name.trim()) {
+      notify({ title: 'Введите название группы модификаторов', type: 'info' });
+      return null;
+    }
+
+    const payload: Record<string, unknown> = {
+      name: modifierGroupForm.name.trim(),
+      selectionType: modifierGroupForm.selectionType,
+      required: modifierGroupForm.required,
+      options: modifierGroupForm.options
+        .map((option) => ({
+          name: option.name.trim(),
+          priceChange: option.priceChange ? Number(option.priceChange) : 0,
+          costChange: option.costChange ? Number(option.costChange) : 0,
+        }))
+        .filter((option) => option.name),
+    };
+
+    if (modifierGroupForm.sortOrder) {
+      const numeric = Number(modifierGroupForm.sortOrder);
+      if (Number.isNaN(numeric)) {
+        notify({ title: 'Порядок группы должен быть числом', type: 'info' });
+        return null;
+      }
+      payload.sortOrder = numeric;
+    }
+
+    return payload;
+  };
+
+  const handleCreateModifierGroup = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const payload = buildModifierGroupPayload();
+    if (!payload) return;
+
+    try {
+      await api.post('/api/catalog/modifier-groups', payload);
+      notify({ title: 'Группа модификаторов создана', type: 'success' });
+      resetModifierGroupForm();
+      void loadMenuData();
+    } catch (error) {
+      notify({ title: 'Не удалось создать группу', type: 'error' });
+    }
+  };
+
+  const handleUpdateModifierGroup = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedModifierGroup) return;
+    const payload = buildModifierGroupPayload();
+    if (!payload) return;
+
+    try {
+      await api.put(`/api/catalog/modifier-groups/${selectedModifierGroup._id}`, payload);
+      notify({ title: 'Группа обновлена', type: 'success' });
+      void loadMenuData();
+    } catch (error) {
+      notify({ title: 'Не удалось обновить группу', type: 'error' });
+    }
+  };
+
+  const handleDeleteModifierGroup = async (groupId: string) => {
+    const confirmed = window.confirm('Удалить группу модификаторов?');
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/api/catalog/modifier-groups/${groupId}`);
+      notify({ title: 'Группа удалена', type: 'success' });
+      if (selectedModifierGroup?._id === groupId) {
+        resetModifierGroupForm();
+      }
+      void loadMenuData();
+    } catch (error) {
+      notify({ title: 'Не удалось удалить группу', type: 'error' });
+    }
   };
 
   const handleEditIngredientChange = (
@@ -1004,6 +1165,18 @@ const AdminPage: React.FC = () => {
 
   const removeEditIngredientRow = (index: number) => {
     setProductEditIngredients((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const handleToggleNewProductModifier = (groupId: string) => {
+    setNewProductModifierIds((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    );
+  };
+
+  const handleToggleEditProductModifier = (groupId: string) => {
+    setProductEditModifiers((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    );
   };
 
   const handleUpdateProduct = async (event: React.FormEvent) => {
@@ -1044,6 +1217,8 @@ const AdminPage: React.FC = () => {
     } else {
       payload.ingredients = [];
     }
+
+    payload.modifierGroups = productEditModifiers;
 
     try {
       await api.put(`/api/catalog/products/${selectedProduct._id}`, payload);
@@ -1128,9 +1303,22 @@ const AdminPage: React.FC = () => {
         payload.ingredients = normalizedIngredients;
       }
 
+      if (newProductModifierIds.length) {
+        payload.modifierGroups = newProductModifierIds;
+      }
+
       await api.post('/api/catalog/products', payload);
       notify({ title: 'Позиция добавлена', type: 'success' });
-      setNewProduct({ name: '', description: '', categoryId: '', basePrice: '', discountType: '', discountValue: '', imageUrl: '' });
+      setNewProduct({
+        name: '',
+        description: '',
+        categoryId: '',
+        basePrice: '',
+        discountType: '',
+        discountValue: '',
+        imageUrl: '',
+      });
+      setNewProductModifierIds([]);
       setProductIngredients([{ ingredientId: '', quantity: '' }]);
       void loadMenuData();
     } catch (error) {
@@ -1932,7 +2120,7 @@ const AdminPage: React.FC = () => {
 
       {activeTab === 'menu' ? (
         <div className="space-y-6">
-          <section className="grid gap-6 lg:grid-cols-3">
+          <section className="grid gap-6 lg:grid-cols-4">
             <Card title="Категории">
               <form onSubmit={handleCreateCategory} className="mb-4 flex gap-2">
                 <input
@@ -2058,6 +2246,38 @@ const AdminPage: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Модификаторы</p>
+                  {modifierGroups.length ? (
+                    <div className="max-h-32 space-y-2 overflow-y-auto rounded-2xl border border-slate-100 p-3">
+                      {modifierGroups.map((group) => {
+                        const checked = newProductModifierIds.includes(group._id);
+                        return (
+                          <label
+                            key={group._id}
+                            className="flex items-center justify-between rounded-xl px-2 py-1 text-sm transition hover:bg-slate-50"
+                          >
+                            <span className="text-slate-700">
+                              {group.name}
+                              <span className="ml-2 text-[11px] uppercase text-slate-400">
+                                {group.selectionType === 'single' ? '1 вариант' : 'Несколько'}
+                                {group.required ? ' · Обязательная' : ''}
+                              </span>
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => handleToggleNewProductModifier(group._id)}
+                              className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400">Создайте группы модификаторов ниже и привяжите их к позиции.</p>
+                  )}
+                </div>
+                <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase text-slate-500">Ингредиенты</p>
                   {productIngredients.map((row, index) => (
                     <div key={index} className="flex gap-2">
@@ -2106,6 +2326,171 @@ const AdminPage: React.FC = () => {
                   Добавить ингредиент
                 </button>
               </form>
+            </Card>
+            <Card title="Группы модификаторов">
+              <form
+                onSubmit={selectedModifierGroup ? handleUpdateModifierGroup : handleCreateModifierGroup}
+                className="space-y-3 text-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs uppercase text-slate-400">
+                    {selectedModifierGroup ? 'Редактирование группы' : 'Новая группа'}
+                  </p>
+                  {selectedModifierGroup ? (
+                    <button
+                      type="button"
+                      onClick={resetModifierGroupForm}
+                      className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                    >
+                      Очистить
+                    </button>
+                  ) : null}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Название группы"
+                  value={modifierGroupForm.name}
+                  onChange={(event) => handleModifierGroupFieldChange('name', event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                />
+                <div className="grid gap-2 md:grid-cols-2">
+                  <select
+                    value={modifierGroupForm.selectionType}
+                    onChange={(event) => handleModifierGroupFieldChange('selectionType', event.target.value as 'single' | 'multiple')}
+                    className="rounded-2xl border border-slate-200 px-4 py-2"
+                  >
+                    <option value="single">Один вариант</option>
+                    <option value="multiple">Несколько вариантов</option>
+                  </select>
+                  <label className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600">
+                    <span>Обязательная группа</span>
+                    <input
+                      type="checkbox"
+                      checked={modifierGroupForm.required}
+                      onChange={(event) => handleModifierGroupFieldChange('required', event.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                    />
+                  </label>
+                </div>
+                <input
+                  type="number"
+                  placeholder="Порядок сортировки"
+                  value={modifierGroupForm.sortOrder}
+                  onChange={(event) => handleModifierGroupFieldChange('sortOrder', event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase text-slate-400">Опции</p>
+                    <button
+                      type="button"
+                      onClick={addModifierOptionRow}
+                      className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                    >
+                      + Добавить
+                    </button>
+                  </div>
+                  {modifierGroupForm.options.map((option, index) => (
+                    <div key={`${option.name}-${index}`} className="grid gap-2 rounded-2xl border border-slate-200 p-2 md:grid-cols-3">
+                      <input
+                        type="text"
+                        placeholder="Название"
+                        value={option.name}
+                        onChange={(event) => handleModifierOptionChange(index, 'name', event.target.value)}
+                        className="rounded-xl border border-slate-200 px-3 py-2"
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Δ цена"
+                        value={option.priceChange}
+                        onChange={(event) => handleModifierOptionChange(index, 'priceChange', event.target.value)}
+                        className="rounded-xl border border-slate-200 px-3 py-2"
+                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Δ себестоимость"
+                          value={option.costChange}
+                          onChange={(event) => handleModifierOptionChange(index, 'costChange', event.target.value)}
+                          className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                        />
+                        {modifierGroupForm.options.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => removeModifierOptionRow(index)}
+                            className="h-9 w-9 rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300"
+                            aria-label="Удалить опцию"
+                          >
+                            ✕
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="submit"
+                    className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    {selectedModifierGroup ? 'Сохранить изменения' : 'Создать группу'}
+                  </button>
+                  {selectedModifierGroup ? (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteModifierGroup(selectedModifierGroup._id)}
+                      className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+                    >
+                      Удалить
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-semibold uppercase text-slate-400">Список групп</p>
+                <div className="max-h-48 space-y-2 overflow-y-auto">
+                  {modifierGroups.length === 0 ? (
+                    <p className="text-xs text-slate-400">Пока ни одной группы не создано.</p>
+                  ) : null}
+                  {modifierGroups.map((group) => (
+                    <div
+                      key={group._id}
+                      className={`flex items-center justify-between rounded-xl border px-3 py-2 text-sm transition hover:border-emerald-300 ${
+                        selectedModifierGroup?._id === group._id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-semibold text-slate-800">{group.name}</p>
+                        <p className="text-[11px] uppercase text-slate-400">
+                          {group.selectionType === 'single' ? 'Один вариант' : 'Несколько вариантов'}
+                          {group.required ? ' · Обязательная' : ''}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          {group.options.length} опций · Сортировка {group.sortOrder ?? '—'}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectModifierGroup(group)}
+                          className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-600 shadow-inner hover:bg-emerald-50"
+                        >
+                          Редактировать
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteModifierGroup(group._id)}
+                          className="rounded-full px-3 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100"
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </Card>
           </section>
 
@@ -2410,6 +2795,38 @@ const AdminPage: React.FC = () => {
                     />
                     В продаже
                   </label>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase text-slate-400">Модификаторы</p>
+                  {modifierGroups.length ? (
+                    <div className="max-h-32 space-y-2 overflow-y-auto rounded-2xl border border-slate-100 p-3">
+                      {modifierGroups.map((group) => {
+                        const checked = productEditModifiers.includes(group._id);
+                        return (
+                          <label
+                            key={group._id}
+                            className="flex items-center justify-between rounded-xl px-2 py-1 text-sm transition hover:bg-slate-50"
+                          >
+                            <span className="text-slate-700">
+                              {group.name}
+                              <span className="ml-2 text-[11px] uppercase text-slate-400">
+                                {group.selectionType === 'single' ? '1 вариант' : 'Несколько'}
+                                {group.required ? ' · Обязательная' : ''}
+                              </span>
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => handleToggleEditProductModifier(group._id)}
+                              className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400">Группы модификаторов пока не созданы.</p>
+                  )}
                 </div>
                 <div className="md:col-span-2 space-y-2">
                   <div className="flex items-center justify-between">
