@@ -297,15 +297,17 @@ const AdminPage: React.FC = () => {
   }, [notify]);
 
   const loadSalesAndShiftStats = useCallback(
-    async (params?: { from?: string; to?: string }) => {
+    async (filters?: { from?: string; to?: string }) => {
       setSalesStatsLoading(true);
       setSalesStatsError(null);
       try {
-        const response = await api.get('/api/admin/stats/sales-and-shifts', {
-          params: {
-            ...(params?.from ? { from: params.from } : {}),
-            ...(params?.to ? { to: params.to } : {}),
-          },
+        const params = {
+          ...(filters?.from ? { from: filters.from } : {}),
+          ...(filters?.to ? { to: filters.to } : {}),
+        };
+
+        const response = await api.get("/api/admin/stats/sales-and-shifts", {
+          params,
         });
 
         const payload = getResponseData<SalesAndShiftStats>(response);
