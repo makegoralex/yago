@@ -131,11 +131,13 @@ const serveFrontendStatic: express.RequestHandler = (req, res, next) => {
 };
 
 const serveSpaFallback = (req: Request, res: Response, next: NextFunction): void => {
-  if (
-    req.path.startsWith('/api') ||
-    req.path.startsWith('/docs') ||
-    req.path.startsWith('/healthz')
-  ) {
+  if (req.path.startsWith('/api/')) {
+    return next();
+}
+if (req.path.startsWith('/docs') || req.path.startsWith('/healthz')) {
+    return next();
+}
+ {
     next();
     return;
   }
