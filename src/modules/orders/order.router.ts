@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from 'express';
-import { isValidObjectId, Types } from 'mongoose';
+import { FilterQuery, isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
@@ -15,6 +15,7 @@ import {
 import { WarehouseModel } from '../inventory/warehouse.model';
 import { adjustInventoryQuantity } from '../inventory/inventoryCost.service';
 import { calculateOrderTotals } from '../discounts/discount.service';
+import { ShiftDocument, ShiftModel } from '../shifts/shift.model';
 
 const router = Router();
 
@@ -67,6 +68,60 @@ const reloadOrderWithCustomer = async (orderId: Types.ObjectId | string | null |
 };
 
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
+
+const buildShiftHistoryFilter = (
+  shift: ShiftDocument,
+  until?: Date
+): FilterQuery<OrderDocument> => {
+  const range: Record<string, Date> = { $gte: shift.openedAt };
+  const endDate = until ?? shift.closedAt ?? new Date();
+
+  if (endDate) {
+    range.$lte = endDate;
+  }
+
+  return {
+    orgId: shift.orgId,
+    locationId: shift.locationId,
+    registerId: shift.registerId,
+    status: { $in: FULFILLED_ORDER_STATUSES },
+    createdAt: range,
+  } as FilterQuery<OrderDocument>;
+};
+
+const findActiveShiftForRegister = async (
+  registerId: string,
+  cashierId?: string
+): Promise<ShiftDocument | null> => {
+  const filter: FilterQuery<ShiftDocument> = {
+    registerId,
+    status: 'open',
+  };
+
+  if (cashierId && isValidObjectId(cashierId)) {
+    filter.cashierId = new Types.ObjectId(cashierId);
+  }
+
+  return ShiftModel.findOne(filter).sort({ openedAt: -1 });
+};
+
+const resolveDateRange = (candidate?: string | string[]) => {
+  const value = Array.isArray(candidate) ? candidate[0] : candidate;
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const from = new Date(date);
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(date);
+  to.setHours(23, 59, 59, 999);
+  return { from, to };
+};
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {
@@ -263,6 +318,31 @@ const ensureDraftOrder = (order: OrderDocument): void => {
   }
 };
 
+const ensureOrderShiftIsActive = async (
+  order: OrderDocument,
+  cashierId?: string | null
+): Promise<void> => {
+  if (order.shiftId) {
+    const shift = await ShiftModel.findById(order.shiftId);
+    if (shift && shift.status === 'open') {
+      return;
+    }
+
+    if (shift && shift.status === 'closed') {
+      throw new Error('Смена уже закрыта. Откройте новую смену, чтобы продолжить работу с заказами');
+    }
+
+    order.shiftId = undefined;
+  }
+
+  const fallbackShift = await findActiveShiftForRegister(order.registerId, cashierId ?? undefined);
+  if (!fallbackShift) {
+    throw new Error('Сначала откройте смену на кассе');
+  }
+
+  order.shiftId = fallbackShift._id as Types.ObjectId;
+};
+
 router.post(
   '/start',
   requireRole(CASHIER_ROLES),
@@ -310,6 +390,13 @@ router.post(
     const normalizedLocationId = String(locationId).trim();
     const normalizedRegisterId = String(registerId).trim();
 
+    const activeShift = await findActiveShiftForRegister(normalizedRegisterId, cashierId);
+
+    if (!activeShift) {
+      res.status(409).json({ data: null, error: 'Сначала откройте смену на кассе' });
+      return;
+    }
+
     const existingDraft = await OrderModel.findOne({
       orgId: normalizedOrgId,
       locationId: normalizedLocationId,
@@ -321,6 +408,10 @@ router.post(
       .populate('customerId', CUSTOMER_PROJECTION);
 
     if (existingDraft) {
+      if (!existingDraft.shiftId && activeShift?._id) {
+        existingDraft.shiftId = activeShift._id as Types.ObjectId;
+        await existingDraft.save();
+      }
       res.status(200).json({ data: existingDraft, error: null });
       return;
     }
@@ -329,6 +420,7 @@ router.post(
       orgId: normalizedOrgId,
       locationId: normalizedLocationId,
       registerId: normalizedRegisterId,
+      shiftId: activeShift._id,
       cashierId: new Types.ObjectId(cashierId),
       warehouseId: normalizedWarehouseId ?? undefined,
       customerId: normalizedCustomerId,
@@ -370,6 +462,14 @@ router.post(
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Order cannot be modified';
       res.status(400).json({ data: null, error: message });
+      return;
+    }
+
+    try {
+      await ensureOrderShiftIsActive(order, req.user?.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Сначала откройте смену на кассе';
+      res.status(409).json({ data: null, error: message });
       return;
     }
 
@@ -495,6 +595,14 @@ router.post(
       return;
     }
 
+    try {
+      await ensureOrderShiftIsActive(order, req.user?.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Сначала откройте смену на кассе';
+      res.status(409).json({ data: null, error: message });
+      return;
+    }
+
     order.payment = {
       method,
       amount: normalizedAmount,
@@ -540,6 +648,14 @@ router.post(
 
     if (order.status !== 'paid') {
       res.status(400).json({ data: null, error: 'Only paid orders can be completed' });
+      return;
+    }
+
+    try {
+      await ensureOrderShiftIsActive(order, req.user?.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Сначала откройте смену на кассе';
+      res.status(409).json({ data: null, error: message });
       return;
     }
 
@@ -613,6 +729,112 @@ router.get(
       .populate('customerId', CUSTOMER_PROJECTION);
 
     res.json({ data: orders, error: null });
+  })
+);
+
+router.get(
+  '/history/current-shift',
+  requireRole(CASHIER_ROLES),
+  asyncHandler(async (req, res) => {
+    const { registerId, cashierId: cashierParam } = req.query;
+    const normalizedRegisterId = typeof registerId === 'string' && registerId.trim() ? registerId.trim() : undefined;
+    const isAdmin = req.user?.role === 'admin';
+
+    const shiftFilter: FilterQuery<ShiftDocument> = { status: 'open' };
+
+    if (normalizedRegisterId) {
+      shiftFilter.registerId = normalizedRegisterId;
+    }
+
+    if (isAdmin && typeof cashierParam === 'string' && cashierParam.trim()) {
+      if (!isValidObjectId(cashierParam)) {
+        res.status(400).json({ data: null, error: 'cashierId must be a valid identifier' });
+        return;
+      }
+      shiftFilter.cashierId = new Types.ObjectId(cashierParam.trim());
+    } else if (req.user?.id) {
+      shiftFilter.cashierId = new Types.ObjectId(req.user.id);
+    }
+
+    const shift = await ShiftModel.findOne(shiftFilter).sort({ openedAt: -1 });
+
+    if (!shift) {
+      res.json({ data: [], meta: { shift: null }, error: null });
+      return;
+    }
+
+    const orders = await OrderModel.find(buildShiftHistoryFilter(shift))
+      .sort({ createdAt: -1 })
+      .populate('customerId', CUSTOMER_PROJECTION);
+
+    const range = {
+      from: shift.openedAt.toISOString(),
+      to: (shift.closedAt ?? new Date()).toISOString(),
+    };
+
+    res.json({
+      data: orders,
+      meta: {
+        shift: {
+          _id: shift._id,
+          registerId: shift.registerId,
+          openedAt: shift.openedAt,
+          closedAt: shift.closedAt ?? null,
+        },
+        range,
+      },
+      error: null,
+    });
+  })
+);
+
+router.get(
+  '/history/by-date',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    const { date, registerId, cashierId } = req.query;
+
+    const resolvedRange =
+      (typeof date === 'string' && date ? resolveDateRange(date) : null) ??
+      resolveDateRange(new Date().toISOString());
+
+    if (!resolvedRange) {
+      res.status(400).json({ data: null, error: 'Не удалось определить дату' });
+      return;
+    }
+
+    const filter: FilterQuery<OrderDocument> = {
+      status: { $in: FULFILLED_ORDER_STATUSES },
+      createdAt: { $gte: resolvedRange.from, $lte: resolvedRange.to },
+    };
+
+    if (typeof registerId === 'string' && registerId.trim()) {
+      filter.registerId = registerId.trim();
+    }
+
+    if (typeof cashierId === 'string' && cashierId.trim()) {
+      if (!isValidObjectId(cashierId)) {
+        res.status(400).json({ data: null, error: 'cashierId must be a valid identifier' });
+        return;
+      }
+      filter.cashierId = new Types.ObjectId(cashierId.trim());
+    }
+
+    const orders = await OrderModel.find(filter)
+      .sort({ createdAt: -1 })
+      .populate('customerId', CUSTOMER_PROJECTION)
+      .populate('cashierId', 'name email');
+
+    res.json({
+      data: orders,
+      meta: {
+        range: {
+          from: resolvedRange.from.toISOString(),
+          to: resolvedRange.to.toISOString(),
+        },
+      },
+      error: null,
+    });
   })
 );
 

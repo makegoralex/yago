@@ -16,6 +16,7 @@ import suppliersRouter from './modules/suppliers/supplier.router';
 import inventoryRouter from './modules/inventory/inventory.router';
 import discountRouter, { createPosDiscountRouter } from './modules/discounts/discount.router';
 import { appConfig } from './config/env';
+import shiftRouter from './modules/shifts/shift.router';
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/suppliers', suppliersRouter);
 app.use('/api/inventory', inventoryRouter);
 app.use('/api/admin', adminManagementRouter);
+app.use('/api/shifts', shiftRouter);
 
 app.get('/api/protected', authMiddleware, (req, res) => {
   res.json({

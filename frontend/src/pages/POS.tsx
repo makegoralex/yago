@@ -8,9 +8,15 @@ import PaymentModal from '../components/ui/PaymentModal';
 import LoyaltyModal from '../components/ui/LoyaltyModal';
 import RedeemPointsModal from '../components/ui/RedeemPointsModal';
 import { useCatalogStore } from '../store/catalog';
-import { useOrderStore, type PaymentMethod, type CustomerSummary } from '../store/order';
+import {
+  useOrderStore,
+  type PaymentMethod,
+  type CustomerSummary,
+  type OrderHistoryEntry,
+} from '../store/order';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useToast } from '../providers/ToastProvider';
+import { useShiftStore, type ShiftSummary } from '../store/shift';
 
 const POSPage: React.FC = () => {
   const isDesktop = useMediaQuery('(min-width: 1280px)');
@@ -47,6 +53,17 @@ const POSPage: React.FC = () => {
   const selectedDiscountIds = useOrderStore((state) => state.selectedDiscountIds);
   const fetchAvailableDiscounts = useOrderStore((state) => state.fetchAvailableDiscounts);
   const toggleDiscount = useOrderStore((state) => state.toggleDiscount);
+  const shiftHistory = useOrderStore((state) => state.shiftHistory);
+  const shiftHistoryLoading = useOrderStore((state) => state.shiftHistoryLoading);
+  const fetchShiftHistory = useOrderStore((state) => state.fetchShiftHistory);
+  const resetShiftHistory = useOrderStore((state) => state.resetShiftHistory);
+  const currentShift = useShiftStore((state) => state.currentShift);
+  const fetchCurrentShift = useShiftStore((state) => state.fetchCurrentShift);
+  const openShift = useShiftStore((state) => state.openShift);
+  const closeShift = useShiftStore((state) => state.closeShift);
+  const isShiftLoading = useShiftStore((state) => state.loading);
+  const isOpeningShift = useShiftStore((state) => state.opening);
+  const isClosingShift = useShiftStore((state) => state.closing);
 
   const { notify } = useToast();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -91,6 +108,25 @@ const POSPage: React.FC = () => {
     }
   }, [activeSection, fetchActiveOrders]);
 
+  useEffect(() => {
+    void fetchCurrentShift().catch(() =>
+      notify({ title: 'Смена', description: 'Не удалось загрузить состояние смены', type: 'error' })
+    );
+  }, [fetchCurrentShift, notify]);
+
+  const currentShiftId = currentShift?._id;
+
+  useEffect(() => {
+    if (!currentShiftId) {
+      resetShiftHistory();
+      return;
+    }
+
+    void fetchShiftHistory().catch(() =>
+      notify({ title: 'История чеков', description: 'Не удалось обновить историю смены', type: 'error' })
+    );
+  }, [currentShiftId, fetchShiftHistory, resetShiftHistory, notify]);
+
   const filteredProducts = useMemo(() => {
     if (!activeCategoryId) {
       return products;
@@ -101,6 +137,15 @@ const POSPage: React.FC = () => {
   const earnedPoints = total * 0.05;
 
   const handleStartOrder = async () => {
+    if (!currentShift) {
+      notify({
+        title: 'Смена закрыта',
+        description: 'Откройте смену, чтобы начать продажи',
+        type: 'info',
+      });
+      return;
+    }
+
     if (orderId) {
       if (!isTablet) {
         setOrderDrawerOpen(true);
@@ -189,6 +234,48 @@ const POSPage: React.FC = () => {
     }
   };
 
+  const handleOpenShift = async () => {
+    try {
+      await openShift();
+      notify({ title: 'Смена открыта', type: 'success' });
+      await fetchShiftHistory().catch(() => undefined);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Не удалось открыть смену';
+      notify({ title: 'Не удалось открыть смену', description: message, type: 'error' });
+    }
+  };
+
+  const handleCloseShift = async () => {
+    if (!currentShift) {
+      return;
+    }
+
+    const confirmed = window.confirm('Закрыть текущую смену?');
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await closeShift();
+      resetShiftHistory();
+      notify({ title: 'Смена закрыта', type: 'info' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Не удалось закрыть смену';
+      notify({ title: 'Не удалось закрыть смену', description: message, type: 'error' });
+    }
+  };
+
+  const handleRefreshHistory = () => {
+    if (!currentShift) {
+      notify({ title: 'Смена закрыта', description: 'Откройте смену, чтобы просматривать чеки', type: 'info' });
+      return;
+    }
+
+    void fetchShiftHistory().catch(() =>
+      notify({ title: 'История чеков', description: 'Не удалось обновить историю', type: 'error' })
+    );
+  };
+
   const handleAddProduct = (product: typeof products[number]) => {
     void addProduct(product)
       .then(() => {
@@ -205,6 +292,14 @@ const POSPage: React.FC = () => {
   return (
     <div className="flex min-h-screen flex-col gap-4 bg-slate-100 px-4 py-4 pb-32 lg:px-6 lg:pb-6">
       <HeaderBar onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)} isSidebarCollapsed={sidebarCollapsed} />
+      <ShiftStatusCard
+        shift={currentShift}
+        loading={isShiftLoading}
+        isOpening={isOpeningShift}
+        isClosing={isClosingShift}
+        onOpen={handleOpenShift}
+        onClose={handleCloseShift}
+      />
       <div className="flex flex-1 flex-col gap-4 lg:flex-row">
         <div className={`lg:w-auto ${isTablet ? 'flex-shrink-0' : 'hidden lg:flex'}`}>
           <CategorySidebar
@@ -245,9 +340,9 @@ const POSPage: React.FC = () => {
               >
                 {orderId ? 'Открыть заказ' : isStartingOrder ? 'Создание…' : 'Новый заказ'}
               </button>
-            </div>
-            {activeOrders.length > 0 ? (
-              <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          </div>
+          {activeOrders.length > 0 ? (
+            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {activeOrders.map((order) => {
                   const isActive = orderId === order._id;
                   return (
@@ -274,6 +369,14 @@ const POSPage: React.FC = () => {
               <p className="mt-2 text-sm text-slate-500">Нет активных заказов.</p>
             )}
           </div>
+          <ReceiptHistoryCard
+            shift={currentShift}
+            history={shiftHistory}
+            loading={shiftHistoryLoading}
+            shiftLoading={isShiftLoading}
+            onRefresh={handleRefreshHistory}
+            className="mb-4 hidden lg:block"
+          />
           {loading ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -337,6 +440,15 @@ const POSPage: React.FC = () => {
                       ))}
                     </ul>
                   )}
+                  <div className="mt-4 lg:hidden">
+                    <ReceiptHistoryCard
+                      shift={currentShift}
+                      history={shiftHistory}
+                      loading={shiftHistoryLoading}
+                      shiftLoading={isShiftLoading}
+                      onRefresh={handleRefreshHistory}
+                    />
+                  </div>
                 </div>
               ) : null}
               {activeSection !== 'products' && !isTablet ? (
@@ -556,5 +668,154 @@ const TabButton: React.FC<TabButtonProps> = ({ label, active, onClick }) => (
     {label}
   </button>
 );
+
+const formatTimeLabel = (value: string): string =>
+  new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+type ShiftStatusCardProps = {
+  shift: ShiftSummary | null;
+  loading: boolean;
+  isOpening: boolean;
+  isClosing: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+};
+
+const ShiftStatusCard: React.FC<ShiftStatusCardProps> = ({
+  shift,
+  loading,
+  isOpening,
+  isClosing,
+  onOpen,
+  onClose,
+}) => {
+  const actionDisabled = loading || isOpening || isClosing;
+  const shiftOpenedAt = shift ? formatTimeLabel(shift.openedAt) : null;
+
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-soft">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-slate-500">Текущая смена</p>
+          {loading ? (
+            <div className="mt-2 h-5 w-32 animate-pulse rounded-full bg-slate-200" />
+          ) : (
+            <p className="text-lg font-semibold text-slate-900">
+              {shift ? `Открыта с ${shiftOpenedAt}` : 'Смена закрыта'}
+            </p>
+          )}
+          {shift?.registerId ? (
+            <p className="text-xs text-slate-400">Касса {shift.registerId}</p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {shift ? (
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={actionDisabled}
+              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-60"
+            >
+              {isClosing ? 'Закрытие…' : 'Закрыть смену'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpen}
+              disabled={actionDisabled}
+              className="rounded-2xl bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-soft disabled:opacity-60"
+            >
+              {isOpening ? 'Открытие…' : 'Открыть смену'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+type ReceiptHistoryCardProps = {
+  shift: ShiftSummary | null;
+  history: OrderHistoryEntry[];
+  loading: boolean;
+  shiftLoading: boolean;
+  onRefresh: () => void;
+  className?: string;
+};
+
+const ReceiptHistoryCard: React.FC<ReceiptHistoryCardProps> = ({
+  shift,
+  history,
+  loading,
+  shiftLoading,
+  onRefresh,
+  className,
+}) => {
+  const paymentLabel = (method?: PaymentMethod) => {
+    if (method === 'card') return 'Карта';
+    if (method === 'cash') return 'Наличные';
+    return 'Без данных';
+  };
+
+  return (
+    <div className={`rounded-2xl bg-white p-6 shadow-soft ${className ?? ''}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-lg font-semibold text-slate-900">История чеков</p>
+          <p className="text-xs text-slate-500">
+            {shift ? `Смена с ${formatTimeLabel(shift.openedAt)}` : 'Откройте смену, чтобы видеть чеки'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={!shift || loading || shiftLoading}
+          className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 disabled:opacity-50"
+        >
+          Обновить
+        </button>
+      </div>
+      {shiftLoading ? (
+        <div className="mt-4 space-y-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-16 animate-pulse rounded-2xl bg-slate-200/70" />
+          ))}
+        </div>
+      ) : !shift ? (
+        <p className="mt-4 text-sm text-slate-500">Чтобы просматривать историю чеков, откройте смену.</p>
+      ) : loading ? (
+        <div className="mt-4 space-y-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-16 animate-pulse rounded-2xl bg-slate-200/70" />
+          ))}
+        </div>
+      ) : history.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-500">Заказов в этой смене пока нет.</p>
+      ) : (
+        <ul className="mt-4 max-h-80 space-y-3 overflow-y-auto pr-1">
+          {history.map((order) => (
+            <li key={order._id} className="rounded-2xl border border-slate-100 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Чек #{order._id.slice(-5)}</p>
+                  <p className="text-xs text-slate-400">{formatTimeLabel(order.createdAt)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-base font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
+                  <p className="text-xs uppercase text-slate-400">{paymentLabel(order.paymentMethod)}</p>
+                </div>
+              </div>
+              {order.items.length ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  {order.items.map((item) => `${item.qty}× ${item.name}`).join(', ')}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
 
 export default POSPage;
