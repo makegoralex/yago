@@ -5,21 +5,26 @@ export type RestaurantBranding = {
   logoUrl: string;
 };
 
-type RestaurantState = RestaurantBranding & {
-  updateBranding: (payload: Partial<RestaurantBranding>) => void;
+type RestaurantPreferences = RestaurantBranding & {
+  enableOrderTags: boolean;
+};
+
+type RestaurantState = RestaurantPreferences & {
+  updateBranding: (payload: Partial<RestaurantPreferences>) => void;
   resetBranding: () => void;
 };
 
 const STORAGE_KEY = 'yago-restaurant-branding';
 
-const defaultBranding: RestaurantBranding = {
+const defaultBranding: RestaurantPreferences = {
   name: 'Yago Coffee',
   logoUrl: '',
+  enableOrderTags: false,
 };
 
 const isBrowser = typeof window !== 'undefined';
 
-const loadBranding = (): RestaurantBranding => {
+const loadBranding = (): RestaurantPreferences => {
   if (!isBrowser) {
     return defaultBranding;
   }
@@ -38,13 +43,17 @@ const loadBranding = (): RestaurantBranding => {
     return {
       name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name : defaultBranding.name,
       logoUrl: typeof parsed.logoUrl === 'string' ? parsed.logoUrl : defaultBranding.logoUrl,
+      enableOrderTags:
+        typeof parsed.enableOrderTags === 'boolean'
+          ? parsed.enableOrderTags
+          : defaultBranding.enableOrderTags,
     };
   } catch {
     return defaultBranding;
   }
 };
 
-const persistBranding = (branding: RestaurantBranding) => {
+const persistBranding = (branding: RestaurantPreferences) => {
   if (!isBrowser) {
     return;
   }
@@ -60,9 +69,11 @@ export const useRestaurantStore = create<RestaurantState>((set) => ({
   ...loadBranding(),
   updateBranding: (payload) =>
     set((state) => {
-      const updated: RestaurantBranding = {
+      const updated: RestaurantPreferences = {
         name: payload.name !== undefined ? payload.name : state.name,
         logoUrl: payload.logoUrl !== undefined ? payload.logoUrl : state.logoUrl,
+        enableOrderTags:
+          typeof payload.enableOrderTags === 'boolean' ? payload.enableOrderTags : state.enableOrderTags,
       };
 
       persistBranding(updated);

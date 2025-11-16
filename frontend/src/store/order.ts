@@ -14,6 +14,8 @@ export type CustomerSummary = {
 
 export type PaymentMethod = 'cash' | 'card';
 
+export type OrderTag = 'takeaway' | 'delivery';
+
 export type OrderItem = {
   productId: string;
   name: string;
@@ -30,6 +32,7 @@ export type ActiveOrder = {
   total: number;
   status: 'draft' | 'paid';
   updatedAt: string;
+  orderTag?: OrderTag | null;
 };
 
 export type OrderHistoryEntry = {
@@ -80,6 +83,7 @@ type OrderState = {
   status: 'draft' | 'paid' | 'completed' | null;
   customerId: string | null;
   customer: CustomerSummary | null;
+  orderTag: OrderTag | null;
   loading: boolean;
   activeOrders: ActiveOrder[];
   appliedDiscounts: AppliedDiscount[];
@@ -96,7 +100,11 @@ type OrderState = {
   completeOrder: () => Promise<void>;
   cancelOrder: () => Promise<void>;
   reset: () => void;
-  syncItems: (items: OrderItem[], options?: { manualDiscount?: number; customerId?: string | null; discountIds?: string[] }) => Promise<void>;
+  syncItems: (
+    items: OrderItem[],
+    options?: { manualDiscount?: number; customerId?: string | null; discountIds?: string[]; orderTag?: OrderTag | null }
+  ) => Promise<void>;
+  setOrderTag: (tag: OrderTag | null) => Promise<void>;
   fetchActiveOrders: () => Promise<void>;
   loadOrder: (orderId: string) => Promise<void>;
   redeemPoints: (points: number) => Promise<void>;
@@ -352,6 +360,7 @@ const buildOrderState = (order: any): Partial<OrderState> => {
       customerId: null,
       customer: null,
       appliedDiscounts: [],
+      orderTag: null,
     };
   }
 
@@ -369,6 +378,7 @@ const buildOrderState = (order: any): Partial<OrderState> => {
     customerId: customer?._id ?? null,
     customer,
     appliedDiscounts,
+    orderTag: order.orderTag === 'takeaway' || order.orderTag === 'delivery' ? order.orderTag : null,
   };
 };
 
@@ -420,6 +430,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   status: null,
   customerId: null,
   customer: null,
+  orderTag: null,
   loading: false,
   activeOrders: [],
   appliedDiscounts: [],
@@ -594,12 +605,16 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       status: null,
       customerId: null,
       customer: null,
+      orderTag: null,
       loading: false,
       appliedDiscounts: [],
       selectedDiscountIds: [],
     });
   },
-  async syncItems(updatedItems: OrderItem[], options: { manualDiscount?: number; customerId?: string | null; discountIds?: string[] } = {}) {
+  async syncItems(
+    updatedItems: OrderItem[],
+    options: { manualDiscount?: number; customerId?: string | null; discountIds?: string[]; orderTag?: OrderTag | null } = {}
+  ) {
     const { orderId } = get();
     if (!orderId) return;
 
@@ -611,6 +626,12 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     const discountIds = options && Array.isArray(options.discountIds)
       ? options.discountIds
       : get().selectedDiscountIds;
+    const requestedOrderTag =
+      options && Object.prototype.hasOwnProperty.call(options, 'orderTag')
+        ? options.orderTag ?? null
+        : get().orderTag;
+    const normalizedOrderTag =
+      requestedOrderTag === 'takeaway' || requestedOrderTag === 'delivery' ? requestedOrderTag : null;
 
     const payload = {
       items: updatedItems.map((item) => ({
@@ -621,6 +642,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       manualDiscount: manualDiscountOverride,
       discountIds,
       customerId,
+      orderTag: normalizedOrderTag,
     };
 
     set({ loading: true });
@@ -638,6 +660,21 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       set({ loading: false });
     }
   },
+  async setOrderTag(tag) {
+    const previousTag = get().orderTag;
+    set({ orderTag: tag });
+    const { orderId } = get();
+    if (!orderId) {
+      return;
+    }
+
+    try {
+      await get().syncItems(get().items, { orderTag: tag });
+    } catch (error) {
+      set({ orderTag: previousTag });
+      throw error;
+    }
+  },
   async fetchActiveOrders() {
     const response = await api.get('/api/orders/active');
     const orders = Array.isArray(response.data.data)
@@ -646,6 +683,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
           total: order.total ?? 0,
           status: order.status,
           updatedAt: order.updatedAt,
+          orderTag: order.orderTag === 'takeaway' || order.orderTag === 'delivery' ? order.orderTag : null,
         }))
       : [];
     set({ activeOrders: orders });

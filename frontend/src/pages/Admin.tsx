@@ -88,6 +88,8 @@ type SalesAndShiftStats = {
   closedShiftCount: number;
   currentOpenShiftCount: number;
   averageRevenuePerClosedShift: number;
+  takeawayOrders: number;
+  deliveryOrders: number;
   period?: {
     from?: string;
     to?: string;
@@ -129,6 +131,8 @@ const normalizeSalesAndShiftStats = (
       closedShiftCount: normalizeNumber(stats.closedShiftCount),
       currentOpenShiftCount: normalizeNumber(stats.currentOpenShiftCount),
       averageRevenuePerClosedShift: normalizeNumber(stats.averageRevenuePerClosedShift),
+      takeawayOrders: normalizeNumber(stats.takeawayOrders),
+      deliveryOrders: normalizeNumber(stats.deliveryOrders),
       period:
         stats.period && typeof stats.period === 'object'
           ? {
@@ -169,6 +173,8 @@ const normalizeSalesAndShiftStats = (
       currentOpenShiftCount: openShiftCount,
       averageRevenuePerClosedShift:
         closedShiftCount > 0 ? totalClosedRevenue / closedShiftCount : 0,
+      takeawayOrders: 0,
+      deliveryOrders: 0,
     };
   }
 
@@ -1732,6 +1738,14 @@ const AdminPage: React.FC = () => {
                         {
                           label: 'Заказы',
                           value: formatInteger(salesShiftStats.orderCount),
+                        },
+                        {
+                          label: 'С собой',
+                          value: formatInteger(salesShiftStats.takeawayOrders),
+                        },
+                        {
+                          label: 'Доставка',
+                          value: formatInteger(salesShiftStats.deliveryOrders),
                         },
                         {
                           label: 'Открытых смен',

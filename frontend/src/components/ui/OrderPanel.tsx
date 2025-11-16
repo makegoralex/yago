@@ -6,6 +6,7 @@ import type {
   DiscountSummary,
   OrderItem,
   PaymentMethod,
+  OrderTag,
 } from '../../store/order';
 
 type OrderPanelProps = {
@@ -33,6 +34,9 @@ type OrderPanelProps = {
   selectedDiscountIds?: string[];
   onToggleDiscount?: (discountId: string) => void;
   isCompleting?: boolean;
+  orderTagsEnabled?: boolean;
+  orderTag?: OrderTag | null;
+  onChangeOrderTag?: (tag: OrderTag | null) => void;
 };
 
 const statusLabels: Record<NonNullable<OrderPanelProps['status']>, string> = {
@@ -66,6 +70,9 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   selectedDiscountIds = [],
   onToggleDiscount,
   isCompleting = false,
+  orderTagsEnabled = false,
+  orderTag = null,
+  onChangeOrderTag,
 }) => {
   const hasItems = items.length > 0;
   const canPay = status === null || status === 'draft';
@@ -76,6 +83,11 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   const autoAppliedDiscounts = availableDiscounts.filter((discount) => discount.autoApply);
   const hasManualDiscount = appliedDiscounts.some((discount) => discount.application === 'manual');
   const hasResettableDiscounts = hasManualDiscount || selectedDiscountIds.length > 0;
+  const tagOptions: Array<{ value: OrderTag | null; label: string }> = [
+    { value: null, label: 'В заведении' },
+    { value: 'takeaway', label: 'С собой' },
+    { value: 'delivery', label: 'Доставка' },
+  ];
 
   const formatDiscountLabel = (discount: AppliedDiscount): string => {
     const parts: string[] = [discount.name];
@@ -133,6 +145,31 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           ) : null}
         </div>
       </div>
+      {orderTagsEnabled ? (
+        <div className="mx-4 mb-3">
+          <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Тип заказа</p>
+          <div className="flex flex-wrap gap-2">
+            {tagOptions.map((option) => {
+              const isSelected = option.value === (orderTag ?? null);
+              return (
+                <button
+                  key={option.value ?? 'dine-in'}
+                  type="button"
+                  onClick={() => onChangeOrderTag?.(option.value ?? null)}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                    isSelected
+                      ? 'border-secondary bg-secondary/10 text-secondary'
+                      : 'border-slate-200 text-slate-500 hover:border-secondary/40'
+                  } ${onChangeOrderTag ? '' : 'cursor-not-allowed opacity-60'}`}
+                  disabled={!onChangeOrderTag}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
       {customer ? (
         <div className="mx-4 mb-3 rounded-2xl border border-secondary/20 bg-secondary/5 p-4">
           <div className="flex items-center justify-between gap-3">

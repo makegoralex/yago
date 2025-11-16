@@ -13,10 +13,12 @@ import {
   type PaymentMethod,
   type CustomerSummary,
   type OrderHistoryEntry,
+  type OrderTag,
 } from '../store/order';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useToast } from '../providers/ToastProvider';
 import { useShiftStore, type ShiftSummary } from '../store/shift';
+import { useRestaurantStore } from '../store/restaurant';
 
 const POSPage: React.FC = () => {
   const isDesktop = useMediaQuery('(min-width: 1280px)');
@@ -34,6 +36,7 @@ const POSPage: React.FC = () => {
   const total = useOrderStore((state) => state.total);
   const status = useOrderStore((state) => state.status);
   const orderId = useOrderStore((state) => state.orderId);
+  const orderTag = useOrderStore((state) => state.orderTag);
   const customer = useOrderStore((state) => state.customer);
   const addProduct = useOrderStore((state) => state.addProduct);
   const updateItemQty = useOrderStore((state) => state.updateItemQty);
@@ -57,6 +60,7 @@ const POSPage: React.FC = () => {
   const shiftHistoryLoading = useOrderStore((state) => state.shiftHistoryLoading);
   const fetchShiftHistory = useOrderStore((state) => state.fetchShiftHistory);
   const resetShiftHistory = useOrderStore((state) => state.resetShiftHistory);
+  const setOrderTag = useOrderStore((state) => state.setOrderTag);
   const currentShift = useShiftStore((state) => state.currentShift);
   const fetchCurrentShift = useShiftStore((state) => state.fetchCurrentShift);
   const openShift = useShiftStore((state) => state.openShift);
@@ -80,6 +84,7 @@ const POSPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isShiftPanelOpen, setShiftPanelOpen] = useState(false);
+  const orderTagsEnabled = useRestaurantStore((state) => state.enableOrderTags);
 
   useEffect(() => {
     void fetchCatalog();
@@ -249,6 +254,15 @@ const POSPage: React.FC = () => {
     setLoyaltyOpen(false);
   };
 
+  const handleOrderTagChange = async (nextTag: OrderTag | null) => {
+    try {
+      await setOrderTag(nextTag);
+    } catch (error) {
+      const description = error instanceof Error ? error.message : 'Не удалось изменить тип заказа';
+      notify({ title: 'Ошибка метки заказа', description, type: 'error' });
+    }
+  };
+
   const handleRedeemConfirm = async (pointsValue: number) => {
     setRedeeming(true);
     try {
@@ -388,6 +402,7 @@ const POSPage: React.FC = () => {
             <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {activeOrders.map((order) => {
                   const isActive = orderId === order._id;
+                  const tagLabel = getOrderTagLabel(order.orderTag);
                   return (
                     <button
                       type="button"
@@ -399,7 +414,14 @@ const POSPage: React.FC = () => {
                           : 'border-slate-100 text-slate-600 hover:border-secondary/60'
                       }`}
                     >
-                      <p className="font-semibold text-slate-900">#{order._id.slice(-5)}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold text-slate-900">#{order._id.slice(-5)}</p>
+                        {tagLabel ? (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
+                            {tagLabel}
+                          </span>
+                        ) : null}
+                      </div>
                       {order.status === 'paid' ? (
                         <p className="text-xs uppercase text-slate-400">оплачен</p>
                       ) : null}
@@ -461,18 +483,33 @@ const POSPage: React.FC = () => {
                     <p className="mt-2 text-sm text-slate-500">Нет активных заказов кассира.</p>
                   ) : (
                     <ul className="mt-3 space-y-3">
-                      {activeOrders.map((order) => (
-                        <li key={order._id} className="flex items-center justify-between rounded-2xl border border-slate-100 p-3">
-                          <div>
-                            <p className="text-base font-semibold text-slate-900">Заказ #{order._id.slice(-5)}</p>
-                            <p className="text-sm text-slate-500">{new Date(order.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
-                            <p className="text-xs uppercase text-slate-400">{order.status === 'draft' ? 'В работе' : 'Оплачен'}</p>
-                          </div>
-                        </li>
-                      ))}
+                      {activeOrders.map((order) => {
+                        const tagLabel = getOrderTagLabel(order.orderTag);
+                        return (
+                          <li
+                            key={order._id}
+                            className="flex items-center justify-between rounded-2xl border border-slate-100 p-3"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-base font-semibold text-slate-900">Заказ #{order._id.slice(-5)}</p>
+                                {tagLabel ? (
+                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
+                                    {tagLabel}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="text-sm text-slate-500">
+                                {new Date(order.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
+                              <p className="text-xs uppercase text-slate-400">{order.status === 'draft' ? 'В работе' : 'Оплачен'}</p>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -521,6 +558,9 @@ const POSPage: React.FC = () => {
             isProcessing={isPaying}
             earnedPoints={earnedPoints}
             customer={customer}
+            orderTagsEnabled={orderTagsEnabled}
+            orderTag={orderTag}
+            onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
             onRedeemLoyalty={() => {
               if (!customer || customer.points <= 0) {
                 notify({ title: 'Нет доступных баллов', type: 'info' });
@@ -626,6 +666,9 @@ const POSPage: React.FC = () => {
                 isProcessing={isPaying}
                 earnedPoints={earnedPoints}
                 customer={customer}
+                orderTagsEnabled={orderTagsEnabled}
+                orderTag={orderTag}
+                onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
                 onRedeemLoyalty={() => {
                   if (!customer || customer.points <= 0) {
                     notify({ title: 'Нет доступных баллов', type: 'info' });
@@ -650,13 +693,13 @@ const POSPage: React.FC = () => {
                 availableDiscounts={availableDiscounts}
                 appliedDiscounts={appliedDiscounts}
                 selectedDiscountIds={selectedDiscountIds}
-            onToggleDiscount={(discountId) =>
-              void toggleDiscount(discountId).catch(() =>
-                notify({ title: 'Не удалось применить скидку', type: 'error' })
-              )
-            }
-            visible={isOrderDrawerOpen}
-          />
+                onToggleDiscount={(discountId) =>
+                  void toggleDiscount(discountId).catch(() =>
+                    notify({ title: 'Не удалось применить скидку', type: 'error' })
+                  )
+                }
+                visible={isOrderDrawerOpen}
+              />
             </div>
           </div>
         </div>
@@ -825,6 +868,16 @@ const MobileQuickActions: React.FC<MobileQuickActionsProps> = ({ onShowOrder, on
 
 const formatTimeLabel = (value: string): string =>
   new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+const getOrderTagLabel = (tag?: OrderTag | null): string | null => {
+  if (tag === 'takeaway') {
+    return 'С собой';
+  }
+  if (tag === 'delivery') {
+    return 'Доставка';
+  }
+  return null;
+};
 
 type ShiftStatusPanelProps = {
   shift: ShiftSummary | null;
