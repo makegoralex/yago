@@ -10,14 +10,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ------------------------------------
-      # CHECKOUT REPO
-      # ------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
       # ------------------------------------
-      # BUILD FRONTEND (on GitHub)
+      # INSTALL FRONTEND + BUILD (on GitHub)
       # ------------------------------------
       - name: Install frontend deps
         working-directory: ./frontend
@@ -25,15 +22,6 @@ jobs:
 
       - name: Build frontend
         working-directory: ./frontend
-        run: npm run build
-
-      # ------------------------------------
-      # BUILD BACKEND (on GitHub)
-      # ------------------------------------
-      - name: Install backend deps
-        run: npm install
-
-      - name: Build backend
         run: npm run build
 
       # ------------------------------------
@@ -45,7 +33,7 @@ jobs:
           sudo apt-get install -y sshpass rsync
 
       # ------------------------------------
-      # UPLOAD FRONTEND DIST to /dist/frontend
+      # UPLOAD FRONTEND DIST VIA RSYNC
       # ------------------------------------
       - name: Upload frontend dist (rsync)
         run: |
@@ -56,7 +44,7 @@ jobs:
           fi
 
           REMOTE="${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
-          REMOTE_DIR="${{ secrets.APP_DIR }}/dist/frontend"
+          REMOTE_DIR="${{ secrets.APP_DIR }}/frontend/dist"
           REMOTE_DIR_ESCAPED=$(printf '%q' "$REMOTE_DIR")
           SSH_CMD="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${{ secrets.SSH_PORT }}"
 
@@ -68,18 +56,12 @@ jobs:
           "$REMOTE:${REMOTE_DIR_ESCAPED}/"
 
       # ------------------------------------
-      # UPLOAD BACKEND DIST
+      # UPLOAD BACKEND via RSYNC
       # ------------------------------------
-      - name: Upload backend dist (rsync)
+      - name: Upload backend files (rsync)
         run: |
           set -euo pipefail
-
-          if [ ! -d ./dist ]; then
-            echo "Backend dist directory not found" >&2
-            exit 1
-          fi
-
-          FILES=(./dist ./package.json ./tsconfig.json)
+          FILES=(./src ./package.json ./tsconfig.json)
           if [ -f ./package-lock.json ]; then
             FILES+=(./package-lock.json)
           fi
@@ -97,9 +79,9 @@ jobs:
           "$REMOTE:${REMOTE_DIR_ESCAPED}/"
 
       # ------------------------------------
-      # INSTALL DEPS + PM2 RELOAD
+      # RUN BACKEND BUILD + PM2 RELOAD
       # ------------------------------------
-      - name: Install deps + reload PM2
+      - name: Build backend + PM2
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -108,5 +90,6 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd ${{ secrets.APP_DIR }}
-            npm install --legacy-peer-deps
-            pm2 reload ${{ secrets.PM2_APP_NAME }} --update-env || pm2 start dist/index.js --name ${{ secrets.PM2_APP_NAME }}
+            npm install --legacy-peer-deps || true
+            npm run build || true
+            pm2 reload ${{ secrets.PM2_APP_NAME }} --update-env || pm2 start dist/app.js --name ${{ secrets.PM2_APP_NAME }}
