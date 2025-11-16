@@ -87,7 +87,7 @@ type OrderState = {
   selectedDiscountIds: string[];
   shiftHistory: OrderHistoryEntry[];
   shiftHistoryLoading: boolean;
-  createDraft: () => Promise<void>;
+  createDraft: (options?: { forceNew?: boolean }) => Promise<void>;
   addProduct: (product: Product) => Promise<void>;
   updateItemQty: (productId: string, qty: number) => Promise<void>;
   removeItem: (productId: string) => Promise<void>;
@@ -427,9 +427,14 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   selectedDiscountIds: [],
   shiftHistory: [],
   shiftHistoryLoading: false,
-  async createDraft() {
+  async createDraft(options) {
     const state = get();
-    if (state.orderId) return;
+    const forceNew = Boolean(options?.forceNew);
+    if (state.orderId && !forceNew) return;
+
+    if (state.orderId && forceNew) {
+      state.reset();
+    }
 
     const auth = useAuthStore.getState();
     if (!auth.user) {
