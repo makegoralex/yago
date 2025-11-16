@@ -78,6 +78,7 @@ const POSPage: React.FC = () => {
   const [isRedeeming, setRedeeming] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isHistoryOpen, setHistoryOpen] = useState(false);
+  const [isShiftPanelOpen, setShiftPanelOpen] = useState(false);
 
   useEffect(() => {
     void fetchCatalog();
@@ -149,7 +150,8 @@ const POSPage: React.FC = () => {
   }, [products, searchQuery]);
 
   const earnedPoints = total * 0.05;
-  const startOrderButtonLabel = isStartingOrder ? 'Создание…' : orderId ? 'Продолжить заказ' : 'Создать заказ';
+  const startOrderButtonLabel = isStartingOrder ? 'Создание…' : 'Создать заказ';
+  const shiftStatus = isShiftLoading ? 'loading' : currentShift ? 'open' : 'closed';
 
   const handleStartOrder = async () => {
     if (!currentShift) {
@@ -161,16 +163,9 @@ const POSPage: React.FC = () => {
       return;
     }
 
-    if (orderId) {
-      if (!isTablet) {
-        setOrderDrawerOpen(true);
-      }
-      return;
-    }
-
     setStartingOrder(true);
     try {
-      await createDraft();
+      await createDraft({ forceNew: Boolean(orderId) });
       if (!isTablet) {
         setOrderDrawerOpen(true);
       }
@@ -254,6 +249,7 @@ const POSPage: React.FC = () => {
       await openShift();
       notify({ title: 'Смена открыта', type: 'success' });
       await fetchShiftHistory().catch(() => undefined);
+      setShiftPanelOpen(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Не удалось открыть смену';
       notify({ title: 'Не удалось открыть смену', description: message, type: 'error' });
@@ -274,6 +270,7 @@ const POSPage: React.FC = () => {
       await closeShift();
       resetShiftHistory();
       notify({ title: 'Смена закрыта', type: 'info' });
+      setShiftPanelOpen(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Не удалось закрыть смену';
       notify({ title: 'Не удалось закрыть смену', description: message, type: 'error' });
@@ -311,14 +308,8 @@ const POSPage: React.FC = () => {
         onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
         isSidebarCollapsed={sidebarCollapsed}
         onShowHistory={() => setHistoryOpen(true)}
-      />
-      <ShiftStatusCard
-        shift={currentShift}
-        loading={isShiftLoading}
-        isOpening={isOpeningShift}
-        isClosing={isClosingShift}
-        onOpen={handleOpenShift}
-        onClose={handleCloseShift}
+        onShowShift={() => setShiftPanelOpen(true)}
+        shiftStatus={shiftStatus}
       />
       <div className="flex flex-1 flex-col gap-4 lg:flex-row">
         <div className={`lg:w-auto ${isTablet ? 'flex-shrink-0' : 'hidden lg:flex'}`}>
@@ -331,24 +322,27 @@ const POSPage: React.FC = () => {
         </div>
         <div className="flex-1">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-slate-900">Меню</h2>
-              <div className="flex items-center gap-3 lg:hidden">
-                <button
-                  type="button"
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-500"
-                  onClick={() => setOrderDrawerOpen(true)}
-                >
-                  Смотреть заказ ({items.length})
-                </button>
-                <button
-                  type="button"
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-500"
-                  onClick={handleRemoveCustomer}
-                >
-                  Сбросить клиента
-                </button>
-              </div>
+            <ProductSearchBar
+              query={searchQuery}
+              onQueryChange={setSearchQuery}
+              results={searchResults}
+              onSelect={handleProductSearchSelect}
+            />
+            <div className="flex items-center gap-3 lg:hidden">
+              <button
+                type="button"
+                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-500"
+                onClick={() => setOrderDrawerOpen(true)}
+              >
+                Смотреть заказ ({items.length})
+              </button>
+              <button
+                type="button"
+                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-500"
+                onClick={handleRemoveCustomer}
+              >
+                Сбросить клиента
+              </button>
             </div>
             <ProductSearchBar
               query={searchQuery}
@@ -642,7 +636,7 @@ const POSPage: React.FC = () => {
           </div>
         </div>
       ) : null}
-      <HistoryOverlay open={isHistoryOpen} onClose={() => setHistoryOpen(false)}>
+      <FloatingPanelOverlay open={isHistoryOpen} onClose={() => setHistoryOpen(false)}>
         <ReceiptHistoryCard
           shift={currentShift}
           history={shiftHistory}
@@ -651,7 +645,21 @@ const POSPage: React.FC = () => {
           onRefresh={handleRefreshHistory}
           className="mb-0"
         />
-      </HistoryOverlay>
+      </FloatingPanelOverlay>
+      <FloatingPanelOverlay open={isShiftPanelOpen} onClose={() => setShiftPanelOpen(false)}>
+        <ShiftStatusPanel
+          shift={currentShift}
+          loading={isShiftLoading}
+          isOpening={isOpeningShift}
+          isClosing={isClosingShift}
+          onOpen={() => {
+            void handleOpenShift();
+          }}
+          onClose={() => {
+            void handleCloseShift();
+          }}
+        />
+      </FloatingPanelOverlay>
     </div>
   );
 };
@@ -674,13 +682,13 @@ const TabButton: React.FC<TabButtonProps> = ({ label, active, onClick }) => (
   </button>
 );
 
-type HistoryOverlayProps = {
+type FloatingPanelOverlayProps = {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
 };
 
-const HistoryOverlay: React.FC<HistoryOverlayProps> = ({ open, onClose, children }) => {
+const FloatingPanelOverlay: React.FC<FloatingPanelOverlayProps> = ({ open, onClose, children }) => {
   if (!open) {
     return null;
   }
@@ -694,7 +702,7 @@ const HistoryOverlay: React.FC<HistoryOverlayProps> = ({ open, onClose, children
             type="button"
             onClick={onClose}
             className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200"
-            aria-label="Закрыть историю чеков"
+            aria-label="Закрыть окно"
           >
             ✕
           </button>
@@ -716,12 +724,12 @@ const ProductSearchBar: React.FC<ProductSearchBarProps> = ({ query, onQueryChang
   const hasQuery = query.trim().length > 0;
 
   return (
-    <div className="relative w-full lg:max-w-md">
+    <div className="relative w-full">
       <input
         type="search"
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
-        placeholder="Поиск по меню"
+        placeholder="Поиск"
         className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-soft focus:border-primary focus:outline-none"
       />
       {query ? (
@@ -768,7 +776,7 @@ const ProductSearchBar: React.FC<ProductSearchBarProps> = ({ query, onQueryChang
 const formatTimeLabel = (value: string): string =>
   new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
-type ShiftStatusCardProps = {
+type ShiftStatusPanelProps = {
   shift: ShiftSummary | null;
   loading: boolean;
   isOpening: boolean;
@@ -777,7 +785,7 @@ type ShiftStatusCardProps = {
   onClose: () => void;
 };
 
-const ShiftStatusCard: React.FC<ShiftStatusCardProps> = ({
+const ShiftStatusPanel: React.FC<ShiftStatusPanelProps> = ({
   shift,
   loading,
   isOpening,
@@ -789,8 +797,8 @@ const ShiftStatusCard: React.FC<ShiftStatusCardProps> = ({
   const shiftOpenedAt = shift ? formatTimeLabel(shift.openedAt) : null;
 
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-soft">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="rounded-2xl bg-white p-6 shadow-soft">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-slate-500">Текущая смена</p>
           {loading ? (
@@ -826,6 +834,10 @@ const ShiftStatusCard: React.FC<ShiftStatusCardProps> = ({
           )}
         </div>
       </div>
+      <p className="mt-4 text-sm text-slate-500">
+        Управляйте сменой из любого места интерфейса: откройте смену, чтобы начать продавать, или закройте, когда закончили
+        работу.
+      </p>
     </div>
   );
 };

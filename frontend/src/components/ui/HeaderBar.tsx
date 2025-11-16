@@ -2,10 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import { useRestaurantStore } from '../../store/restaurant';
+type ShiftStatus = 'open' | 'closed' | 'loading';
+
 type HeaderBarProps = {
   onToggleSidebar: () => void;
   isSidebarCollapsed: boolean;
   onShowHistory: () => void;
+  onShowShift: () => void;
+  shiftStatus: ShiftStatus;
 };
 
 const formatTime = (date: Date) =>
@@ -14,7 +18,13 @@ const formatTime = (date: Date) =>
     minute: '2-digit',
   });
 
-const HeaderBar: React.FC<HeaderBarProps> = ({ onToggleSidebar, isSidebarCollapsed, onShowHistory }) => {
+const HeaderBar: React.FC<HeaderBarProps> = ({
+  onToggleSidebar,
+  isSidebarCollapsed,
+  onShowHistory,
+  onShowShift,
+  shiftStatus,
+}) => {
   const { user } = useAuthStore();
   const restaurantName = useRestaurantStore((state) => state.name);
   const restaurantLogo = useRestaurantStore((state) => state.logoUrl);
@@ -69,6 +79,29 @@ const HeaderBar: React.FC<HeaderBarProps> = ({ onToggleSidebar, isSidebarCollaps
             Админка
           </button>
         ) : null}
+        <button
+          type="button"
+          onClick={onShowShift}
+          className={`relative flex h-12 w-12 items-center justify-center rounded-2xl transition ${
+            shiftStatus === 'open'
+              ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+              : shiftStatus === 'loading'
+              ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
+          }`}
+          aria-label="Состояние смены"
+        >
+          🕓
+          <span
+            className={`absolute bottom-2 right-2 inline-flex h-2.5 w-2.5 rounded-full ${
+              shiftStatus === 'open'
+                ? 'bg-emerald-500'
+                : shiftStatus === 'loading'
+                ? 'bg-amber-400'
+                : 'bg-rose-500'
+            }`}
+          />
+        </button>
         <button
           type="button"
           onClick={onShowHistory}
