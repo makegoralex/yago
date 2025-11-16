@@ -18,7 +18,6 @@ type OrderPanelProps = {
   onDecrement: (productId: string) => void;
   onRemove: (productId: string) => void;
   onPay: (method: PaymentMethod) => void;
-  onComplete: () => void;
   onAddCustomer: () => void;
   onClearCustomer?: () => void;
   isProcessing: boolean;
@@ -28,10 +27,12 @@ type OrderPanelProps = {
   onRedeemLoyalty?: () => void;
   onClearDiscount?: () => void;
   onCancel?: () => void;
+  onComplete?: () => void;
   availableDiscounts?: DiscountSummary[];
   appliedDiscounts?: AppliedDiscount[];
   selectedDiscountIds?: string[];
   onToggleDiscount?: (discountId: string) => void;
+  isCompleting?: boolean;
 };
 
 const statusLabels: Record<NonNullable<OrderPanelProps['status']>, string> = {
@@ -50,7 +51,6 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   onDecrement,
   onRemove,
   onPay,
-  onComplete,
   onAddCustomer,
   onClearCustomer,
   isProcessing,
@@ -60,15 +60,17 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   onRedeemLoyalty,
   onClearDiscount,
   onCancel,
+  onComplete,
   availableDiscounts = [],
   appliedDiscounts = [],
   selectedDiscountIds = [],
   onToggleDiscount,
+  isCompleting = false,
 }) => {
   const hasItems = items.length > 0;
   const canPay = status === null || status === 'draft';
-  const canComplete = status === 'paid';
   const canCancel = status === null || status === 'draft';
+  const canComplete = status === 'paid';
   const customerPoints = Number(customer?.points ?? 0);
   const selectableDiscounts = availableDiscounts.filter((discount) => !discount.autoApply);
   const autoAppliedDiscounts = availableDiscounts.filter((discount) => discount.autoApply);
@@ -303,14 +305,16 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
             disabled={!hasItems || !canPay || isProcessing}
           />
         </div>
-        <button
-          type="button"
-          disabled={!canComplete || isProcessing}
-          onClick={onComplete}
-          className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-slate-900 text-base font-semibold text-white shadow-soft transition hover:bg-slate-800 disabled:opacity-60"
-        >
-          Завершить заказ
-        </button>
+        {onComplete && canComplete ? (
+          <button
+            type="button"
+            onClick={onComplete}
+            disabled={isProcessing || isCompleting}
+            className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-primary/30 text-sm font-semibold text-primary transition hover:border-primary hover:bg-primary/5 disabled:opacity-60"
+          >
+            {isCompleting ? 'Завершение…' : 'Завершить заказ'}
+          </button>
+        ) : null}
         {onCancel && canCancel ? (
           <button
             type="button"
