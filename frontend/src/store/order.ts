@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import api from '../lib/api';
 import type { Product } from './catalog';
 import { useAuthStore } from './auth';
+import { DEFAULT_POS_CONTEXT } from '../constants/posContext';
 
 export type CustomerSummary = {
   _id: string;
@@ -29,6 +30,16 @@ export type ActiveOrder = {
   total: number;
   status: 'draft' | 'paid';
   updatedAt: string;
+};
+
+export type OrderHistoryEntry = {
+  _id: string;
+  total: number;
+  status: 'paid' | 'completed';
+  createdAt: string;
+  paymentMethod?: PaymentMethod;
+  items: OrderItem[];
+  customer?: CustomerSummary | null;
 };
 
 export type DiscountApplication = 'manual' | 'auto' | 'selected';
@@ -74,6 +85,8 @@ type OrderState = {
   appliedDiscounts: AppliedDiscount[];
   availableDiscounts: DiscountSummary[];
   selectedDiscountIds: string[];
+  shiftHistory: OrderHistoryEntry[];
+  shiftHistoryLoading: boolean;
   createDraft: () => Promise<void>;
   addProduct: (product: Product) => Promise<void>;
   updateItemQty: (productId: string, qty: number) => Promise<void>;
@@ -90,12 +103,8 @@ type OrderState = {
   clearDiscount: () => Promise<void>;
   fetchAvailableDiscounts: () => Promise<void>;
   toggleDiscount: (discountId: string) => Promise<void>;
-};
-
-const DEFAULT_CONTEXT = {
-  orgId: 'yago-coffee',
-  locationId: 'main-store',
-  registerId: 'front-register',
+  fetchShiftHistory: (options?: { registerId?: string }) => Promise<void>;
+  resetShiftHistory: () => void;
 };
 
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
@@ -363,6 +372,44 @@ const buildOrderState = (order: any): Partial<OrderState> => {
   };
 };
 
+const mapOrderHistoryEntry = (order: any): OrderHistoryEntry | null => {
+  if (!order || typeof order !== 'object') {
+    return null;
+  }
+
+  const status: OrderHistoryEntry['status'] | null =
+    order.status === 'paid' || order.status === 'completed' ? order.status : null;
+  if (!status) {
+    return null;
+  }
+  const createdAtValue =
+    typeof order.createdAt === 'string'
+      ? order.createdAt
+      : order.createdAt instanceof Date
+        ? order.createdAt.toISOString()
+        : new Date().toISOString();
+
+  const orderId = order._id ?? order.id;
+  const historyEntry: OrderHistoryEntry = {
+    _id:
+      orderId
+        ? String(orderId)
+        : `history-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    total: typeof order.total === 'number' ? order.total : 0,
+    status,
+    createdAt: createdAtValue,
+    items: mapOrderItems(order.items),
+    customer: mapCustomer(order.customerId),
+  };
+
+  const paymentMethod = order.payment?.method;
+  if (paymentMethod === 'cash' || paymentMethod === 'card') {
+    historyEntry.paymentMethod = paymentMethod;
+  }
+
+  return historyEntry;
+};
+
 export const useOrderStore = create<OrderState>((set, get) => ({
   orderId: null,
   items: [],
@@ -378,6 +425,8 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   appliedDiscounts: [],
   availableDiscounts: [],
   selectedDiscountIds: [],
+  shiftHistory: [],
+  shiftHistoryLoading: false,
   async createDraft() {
     const state = get();
     if (state.orderId) return;
@@ -390,7 +439,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set({ loading: true });
     try {
       const response = await api.post('/api/orders/start', {
-        ...DEFAULT_CONTEXT,
+        ...DEFAULT_POS_CONTEXT,
       });
       const nextState = buildOrderState(response.data.data);
       const selectedDiscountIds = extractSelectedDiscountIds(nextState.appliedDiscounts ?? []);
@@ -693,5 +742,27 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       set({ selectedDiscountIds: current });
       throw error;
     }
+  },
+  async fetchShiftHistory(options) {
+    const registerId = options?.registerId ?? DEFAULT_POS_CONTEXT.registerId;
+    set({ shiftHistoryLoading: true });
+    try {
+      const response = await api.get('/api/orders/history/current-shift', {
+        params: { registerId },
+      });
+      const payload = Array.isArray(response.data?.data) ? response.data.data : [];
+      const mapped = payload
+        .map((entry: unknown) => mapOrderHistoryEntry(entry))
+        .filter((entry: OrderHistoryEntry | null | undefined): entry is OrderHistoryEntry => Boolean(entry));
+      set({ shiftHistory: mapped });
+    } catch (error) {
+      set({ shiftHistory: [] });
+      throw error;
+    } finally {
+      set({ shiftHistoryLoading: false });
+    }
+  },
+  resetShiftHistory() {
+    set({ shiftHistory: [] });
   },
 }));

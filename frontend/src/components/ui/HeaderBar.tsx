@@ -44,6 +44,15 @@ const HeaderBar: React.FC<{ onToggleSidebar: () => void; isSidebarCollapsed: boo
           <span className="text-xs text-slate-400">{user?.role === 'admin' ? 'Администратор' : 'Кассир'}</span>
         </div>
         <div className="hidden text-right text-sm font-medium text-slate-600 lg:block">{now}</div>
+        {user?.role === 'admin' ? (
+          <button
+            type="button"
+            onClick={() => navigate('/admin')}
+            className="hidden h-12 items-center rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-600 transition hover:border-primary/40 hover:text-primary lg:flex"
+          >
+            Админка
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={toggleTheme}

@@ -205,6 +205,57 @@ type AdminDiscount = {
   isActive: boolean;
 };
 
+type ReceiptHistoryOrder = {
+  _id: string;
+  total: number;
+  createdAt: string;
+  paymentMethod?: 'cash' | 'card';
+  items: Array<{ name: string; qty: number; total: number }>;
+  customerName?: string;
+  cashierName?: string;
+};
+
+const formatHistoryTime = (value: string): string =>
+  new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+const mapReceiptHistoryOrder = (payload: any): ReceiptHistoryOrder => {
+  const id = payload?._id ?? payload?.id ?? `${Date.now()}-${Math.random()}`;
+  const createdAt =
+    typeof payload?.createdAt === 'string'
+      ? payload.createdAt
+      : payload?.createdAt
+        ? new Date(payload.createdAt).toISOString()
+        : new Date().toISOString();
+
+  const items = Array.isArray(payload?.items)
+    ? payload.items.map((item: any) => ({
+        name: typeof item?.name === 'string' ? item.name : 'Позиция',
+        qty: typeof item?.qty === 'number' ? item.qty : 0,
+        total: typeof item?.total === 'number' ? item.total : 0,
+      }))
+    : [];
+
+  const paymentMethod = payload?.payment?.method;
+  const customerName =
+    typeof payload?.customerId?.name === 'string'
+      ? payload.customerId.name
+      : typeof payload?.customerName === 'string'
+        ? payload.customerName
+        : undefined;
+  const cashierName =
+    typeof payload?.cashierId?.name === 'string' ? payload.cashierId.name : undefined;
+
+  return {
+    _id: String(id),
+    total: typeof payload?.total === 'number' ? payload.total : 0,
+    createdAt,
+    paymentMethod: paymentMethod === 'cash' || paymentMethod === 'card' ? paymentMethod : undefined,
+    items,
+    customerName,
+    cashierName,
+  };
+};
+
 const DAY_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 1, label: 'Пн' },
   { value: 2, label: 'Вт' },
@@ -237,6 +288,10 @@ const AdminPage: React.FC = () => {
   const [salesStatsError, setSalesStatsError] = useState<string | null>(null);
   const [salesStatsFilters, setSalesStatsFilters] = useState({ from: '', to: '' });
   const [salesStatsLoaded, setSalesStatsLoaded] = useState(false);
+  const [receiptHistoryDate, setReceiptHistoryDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [receiptHistory, setReceiptHistory] = useState<ReceiptHistoryOrder[]>([]);
+  const [receiptHistoryLoading, setReceiptHistoryLoading] = useState(false);
+  const [receiptHistoryError, setReceiptHistoryError] = useState<string | null>(null);
 
   const [menuLoading, setMenuLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -410,6 +465,27 @@ const AdminPage: React.FC = () => {
       } finally {
         setSalesStatsLoading(false);
         setSalesStatsLoaded(true);
+      }
+    },
+    [notify]
+  );
+
+  const loadReceiptHistory = useCallback(
+    async (date: string) => {
+      setReceiptHistoryLoading(true);
+      setReceiptHistoryError(null);
+      try {
+        const response = await api.get('/api/orders/history/by-date', {
+          params: { date },
+        });
+        const data = Array.isArray(response.data?.data) ? response.data.data : [];
+        setReceiptHistory(data.map((order: unknown) => mapReceiptHistoryOrder(order)));
+      } catch (error) {
+        console.error('Не удалось загрузить историю чеков', error);
+        setReceiptHistoryError('Не удалось загрузить историю чеков');
+        notify({ title: 'Не удалось загрузить историю чеков', type: 'error' });
+      } finally {
+        setReceiptHistoryLoading(false);
       }
     },
     [notify]
@@ -664,6 +740,10 @@ const AdminPage: React.FC = () => {
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  useEffect(() => {
+    void loadReceiptHistory(receiptHistoryDate);
+  }, [loadReceiptHistory, receiptHistoryDate]);
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -1650,6 +1730,78 @@ const AdminPage: React.FC = () => {
                   </>
                 ) : (
                   <p className="text-sm text-slate-400">Нет данных за выбранный период</p>
+                )}
+              </Card>
+            </div>
+            <div className="mt-6">
+              <Card title="История чеков по дате">
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void loadReceiptHistory(receiptHistoryDate);
+                  }}
+                  className="mb-4 flex flex-wrap items-end gap-3 text-sm"
+                >
+                  <label className="flex flex-col text-slate-600">
+                    <span className="mb-1 text-xs uppercase text-slate-400">Дата</span>
+                    <input
+                      type="date"
+                      value={receiptHistoryDate}
+                      onChange={(event) => setReceiptHistoryDate(event.target.value)}
+                      className="rounded-2xl border border-slate-200 px-3 py-2"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    disabled={receiptHistoryLoading}
+                  >
+                    Обновить
+                  </button>
+                </form>
+                {receiptHistoryError ? (
+                  <p className="mb-3 text-sm text-red-500">{receiptHistoryError}</p>
+                ) : null}
+                {receiptHistoryLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <div key={index} className="h-16 animate-pulse rounded-2xl bg-slate-200/70" />
+                    ))}
+                  </div>
+                ) : receiptHistory.length === 0 ? (
+                  <p className="text-sm text-slate-500">Чеки за выбранную дату не найдены.</p>
+                ) : (
+                  <ul className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                    {receiptHistory.map((order) => (
+                      <li key={order._id} className="rounded-2xl border border-slate-100 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              #{order._id.slice(-5)} · {formatHistoryTime(order.createdAt)}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {order.customerName ?? 'Гость'} · {order.cashierName ?? 'Кассир'}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-base font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
+                            <p className="text-xs uppercase text-slate-400">
+                              {order.paymentMethod === 'card'
+                                ? 'Карта'
+                                : order.paymentMethod === 'cash'
+                                  ? 'Наличные'
+                                  : '—'}
+                            </p>
+                          </div>
+                        </div>
+                        {order.items.length ? (
+                          <p className="mt-2 text-xs text-slate-500">
+                            {order.items.map((item) => `${item.qty}× ${item.name}`).join(', ')}
+                          </p>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </Card>
             </div>
