@@ -5,37 +5,27 @@ import legacy from '@vitejs/plugin-legacy';
 export default defineConfig({
   plugins: [
     react(),
-
-    // Полный набор для старых браузеров + iOS 10 + Safari 10
     legacy({
       targets: [
         'defaults',
-        'Chrome >= 49',
         'iOS >= 10',
         'Safari >= 10'
       ],
-      modernPolyfills: true,
-
-      // Критично: добавляет Intl и другие полифиллы,
-      // без которых ломается toLocaleString
+      modernPolyfills: true,   // включает Intl частично
       additionalLegacyPolyfills: [
-        'regenerator-runtime/runtime',
-        'core-js/stable',
-        'core-js/features/intl',
-        'core-js/features/array/includes',
-        'core-js/features/object/assign'
+        'regenerator-runtime/runtime',  // нужен React
       ],
-
       renderLegacyChunks: true,
     }),
   ],
 
   build: {
-    target: 'es2015',   // обязательно
+    target: 'es2015',
     sourcemap: false,
   },
 
-  server: {
-    port: 5173,
+  // Подгрузим Intl вручную
+  define: {
+    'process.env': {},
   },
 });
