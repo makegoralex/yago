@@ -523,6 +523,8 @@ const AdminPage: React.FC = () => {
   const loadMenuData = useCallback(async () => {
     setMenuLoading(true);
     try {
+      let aggregatedModifiers: ModifierGroup[] | null = null;
+
       try {
         const response = await api.get('/api/admin/catalog');
         const payload = getResponseData<{
@@ -535,8 +537,10 @@ const AdminPage: React.FC = () => {
         setCategories(payload?.categories ?? []);
         setProducts(payload?.products ?? []);
         setIngredients(payload?.ingredients ?? []);
-        setModifierGroups(payload?.modifierGroups ?? []);
-        return;
+        if (payload?.modifierGroups) {
+          aggregatedModifiers = payload.modifierGroups;
+          setModifierGroups(payload.modifierGroups);
+        }
       } catch (primaryError) {
         console.warn('Админский агрегированный каталог недоступен, выполняем поэлементную загрузку', primaryError);
         const [categoriesRes, productsRes, ingredientsRes, modifierGroupsRes] = await Promise.all([
@@ -550,6 +554,16 @@ const AdminPage: React.FC = () => {
         setProducts(getResponseData<Product[]>(productsRes) ?? []);
         setIngredients(getResponseData<Ingredient[]>(ingredientsRes) ?? []);
         setModifierGroups(getResponseData<ModifierGroup[]>(modifierGroupsRes) ?? []);
+      }
+
+      if (!aggregatedModifiers) {
+        try {
+          const modifierGroupsRes = await api.get('/api/catalog/modifier-groups');
+          setModifierGroups(getResponseData<ModifierGroup[]>(modifierGroupsRes) ?? []);
+        } catch (modifierError) {
+          console.error('Не удалось загрузить модификаторы', modifierError);
+          notify({ title: 'Не удалось загрузить модификаторы', type: 'error' });
+        }
       }
     } catch (error) {
       console.error('Не удалось загрузить меню', error);
