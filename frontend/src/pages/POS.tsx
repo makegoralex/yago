@@ -344,6 +344,12 @@ const POSPage: React.FC = () => {
                 Сбросить клиента
               </button>
             </div>
+            <ProductSearchBar
+              query={searchQuery}
+              onQueryChange={setSearchQuery}
+              results={searchResults}
+              onSelect={handleProductSearchSelect}
+            />
           </div>
           <div className="mb-4 rounded-2xl bg-white p-4 shadow-soft">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
