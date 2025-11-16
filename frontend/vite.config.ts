@@ -6,26 +6,18 @@ export default defineConfig({
   plugins: [
     react(),
     legacy({
-      targets: [
-        'defaults',
-        'iOS >= 10',
-        'Safari >= 10'
-      ],
-      modernPolyfills: true,   // включает Intl частично
-      additionalLegacyPolyfills: [
-        'regenerator-runtime/runtime',  // нужен React
-      ],
-      renderLegacyChunks: true,
+      targets: ['defaults', 'not IE 11'],
+      polyfills: true,
+      renderLegacyChunks: false,
     }),
   ],
 
   build: {
-    target: 'es2015',
+    target: 'es2018',
     sourcemap: false,
   },
 
-  // Подгрузим Intl вручную
-  define: {
-    'process.env': {},
+  server: {
+    port: 5173,
   },
 });
