@@ -155,15 +155,15 @@ const mapSelectedModifiers = (modifiers: any): SelectedModifier[] => {
     }
 
     const options: SelectedModifierOption[] = Array.isArray((modifier as any).options)
-      ? (modifier as any).options
-          .map((option: any) => ({
-            optionId: String(option?.optionId ?? option?._id ?? option?.id ?? ''),
-            name: typeof option?.name === 'string' ? option.name : '',
-            priceChange: typeof option?.priceChange === 'number' ? option.priceChange : 0,
-            costChange: typeof option?.costChange === 'number' ? option.costChange : 0,
-          }))
-          .filter((option) => option.optionId && option.name)
-      : [];
+        ? (modifier as any).options
+            .map((option: any) => ({
+                optionId: String(option?.optionId ?? option?._id ?? option?.id ?? ''),
+                name: typeof option?.name === 'string' ? option.name : '',
+                priceChange: typeof option?.priceChange === 'number' ? option.priceChange : 0,
+                costChange: typeof option?.costChange === 'number' ? option.costChange : 0,
+              }))
+            .filter((option: SelectedModifierOption) => option.optionId && option.name)
+        : [];
 
     result.push({ groupId, groupName, selectionType, required, options });
   }

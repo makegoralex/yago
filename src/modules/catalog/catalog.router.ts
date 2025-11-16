@@ -4,7 +4,7 @@ import { isValidObjectId, Types } from 'mongoose';
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { CategoryModel, ProductModel, type ProductIngredient } from './catalog.model';
 import { IngredientModel } from './ingredient.model';
-import { ModifierGroupModel } from './modifierGroup.model';
+import { ModifierGroupModel, type ModifierOption } from './modifierGroup.model';
 import { recalculateProductCost, recalculateProductsForIngredient } from './productCost.service';
 
 const router = Router();
@@ -205,16 +205,16 @@ router.post(
       return;
     }
 
-    const normalizedOptions = (options ?? []).map((option: any) => ({
-      name: String(option?.name ?? '').trim(),
-      priceChange: Number(option?.priceChange ?? 0),
-      costChange: Number(option?.costChange ?? 0),
-    }));
+      const normalizedOptions: ModifierOption[] = (options ?? []).map((option: any) => ({
+        name: String(option?.name ?? '').trim(),
+        priceChange: Number(option?.priceChange ?? 0),
+        costChange: Number(option?.costChange ?? 0),
+      }));
 
-    if (normalizedOptions.some((option) => !option.name)) {
-      res.status(400).json({ data: null, error: 'Each option must have a name' });
-      return;
-    }
+      if (normalizedOptions.some((option: ModifierOption) => !option.name)) {
+        res.status(400).json({ data: null, error: 'Each option must have a name' });
+        return;
+      }
 
     const group = new ModifierGroupModel({
       name: name.trim(),

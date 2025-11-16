@@ -298,17 +298,15 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
 
   const productMap = new Map<string, typeof products[number]>();
   const categoryIds = new Set<string>();
-  for (const product of products) {
-    const productCategoryId = product.categoryId ? new Types.ObjectId(product.categoryId) : null;
-    if (productCategoryId) {
+    for (const product of products) {
+      const productCategoryId = new Types.ObjectId(product.categoryId);
       categoryIds.add(productCategoryId.toString());
-    }
 
-    productMap.set(product._id.toString(), {
-      ...product,
-      categoryId: productCategoryId ?? undefined,
-    });
-  }
+      productMap.set(product._id.toString(), {
+        ...product,
+        categoryId: productCategoryId,
+      });
+    }
 
   let categoryMap: Map<string, string> = new Map();
   if (categoryIds.size) {
@@ -375,9 +373,11 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
           throw new Error('Only one option can be selected for this modifier group');
         }
 
-        const optionMap = new Map(
-          (group.options ?? []).map((option: any) => [String(option._id ?? option.id ?? ''), option])
-        );
+          type OptionMapValue = { name?: string; priceChange?: number; costChange?: number };
+
+          const optionMap = new Map<string, OptionMapValue>(
+            (group.options ?? []).map((option: any) => [String(option._id ?? option.id ?? ''), option])
+          );
 
         const resolvedOptions = uniqueOptionIds
           .map((optionId) => {
@@ -386,14 +386,19 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
               throw new Error('Selected modifier option not found');
             }
 
-            return {
-              optionId: new Types.ObjectId(optionId),
-              name: option.name,
-              priceChange: Number(option.priceChange ?? 0),
-              costChange: Number(option.costChange ?? 0),
-            };
-          })
-          .filter(Boolean);
+              const optionName = typeof option.name === 'string' ? option.name : '';
+              if (!optionName) {
+                throw new Error('Selected modifier option not found');
+              }
+
+              return {
+                optionId: new Types.ObjectId(optionId),
+                name: optionName,
+                priceChange: Number(option.priceChange ?? 0),
+                costChange: Number(option.costChange ?? 0),
+              };
+            })
+            .filter(Boolean);
 
         if (group.required && resolvedOptions.length === 0) {
           throw new Error(`Выберите вариант для модификатора «${group.name}»`);
