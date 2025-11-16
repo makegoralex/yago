@@ -54,7 +54,9 @@ const buildDateRangeFilter = (
 export const fetchSalesAndShiftStats = async (
   filters: SalesAndShiftFilter
 ): Promise<SalesAndShiftStats> => {
-  const orderMatch: Record<string, unknown> = { status: 'paid' };
+  const orderMatch: Record<string, unknown> = {
+    status: { $in: ['paid', 'completed'] },
+  };
 
   if (filters.from || filters.to) {
     const createdAt: Record<string, Date> = {};
