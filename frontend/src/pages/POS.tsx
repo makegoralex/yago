@@ -335,7 +335,7 @@ const POSPage: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col gap-4 bg-slate-100 px-4 py-4 pb-32 lg:px-6 lg:pb-6">
+    <div className="flex min-h-screen flex-col gap-3 bg-slate-100 px-3 py-3 pb-28 lg:px-4 lg:pb-5">
       <HeaderBar
         onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
         isSidebarCollapsed={sidebarCollapsed}
@@ -343,7 +343,7 @@ const POSPage: React.FC = () => {
         onShowShift={() => setShiftPanelOpen(true)}
         shiftStatus={shiftStatus}
       />
-      <div className="flex flex-1 flex-col gap-4 lg:flex-row">
+      <div className="flex flex-1 flex-col gap-3 lg:flex-row">
         <div className={`lg:w-auto ${isTablet ? 'flex-shrink-0' : 'hidden lg:flex'}`}>
           <CategorySidebar
             categories={categories}
@@ -354,7 +354,7 @@ const POSPage: React.FC = () => {
         </div>
         <div className="flex-1">
           {shouldShowProductSearch ? (
-            <div className="mb-4 space-y-3">
+            <div className="mb-3 flex flex-col gap-2">
               <ProductSearchBar
                 query={searchQuery}
                 onQueryChange={setSearchQuery}
@@ -380,20 +380,20 @@ const POSPage: React.FC = () => {
               </div>
             )
           )}
-          <div className="mb-4 rounded-2xl bg-white p-4 shadow-soft">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-3 rounded-xl bg-white p-3 shadow-soft">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
               <button
                 type="button"
                 onClick={() => void handleStartOrder()}
                 disabled={isStartingOrder}
-                className="w-full rounded-3xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
+                className="w-full rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
               >
                 {startOrderButtonLabel}
               </button>
             </div>
           {activeOrders.length > 0 ? (
-            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                 {activeOrders.map((order) => {
                   const isActive = orderId === order._id;
                   const tagLabel = getOrderTagLabel(order.orderTag);
@@ -402,10 +402,10 @@ const POSPage: React.FC = () => {
                       type="button"
                       key={order._id}
                       onClick={() => void loadOrder(order._id)}
-                      className={`w-full rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                      className={`w-full rounded-lg border px-3 py-2.5 text-left text-sm transition ${
                         isActive
-                          ? 'border-secondary bg-secondary/10 text-secondary'
-                          : 'border-slate-100 text-slate-600 hover:border-secondary/60'
+                          ? 'border-2 border-secondary/70 bg-secondary/10 text-secondary shadow-sm'
+                          : 'border-slate-100 bg-white text-slate-700 hover:border-secondary/50'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -429,15 +429,17 @@ const POSPage: React.FC = () => {
             )}
           </div>
           {loading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
                 <div key={index} className="h-36 animate-pulse rounded-2xl bg-slate-200/70" />
               ))}
             </div>
           ) : (
             <div
-              className={`grid gap-4 ${
-                isDesktop ? 'xl:grid-cols-3' : isTablet ? 'lg:grid-cols-2' : activeSection === 'products' ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1'
+              className={`grid gap-3 ${
+                activeSection === 'products'
+                  ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4'
+                  : 'grid-cols-1'
               }`}
             >
               {activeSection === 'products'
@@ -786,13 +788,13 @@ const ProductSearchBar: React.FC<ProductSearchBarProps> = ({ query, onQueryChang
   const hasQuery = query.trim().length > 0;
 
   return (
-    <div className="relative w-full">
+    <div className="relative w-full max-w-4xl">
       <input
         type="search"
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
         placeholder="Поиск"
-        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-soft focus:border-primary focus:outline-none"
+        className="h-12 w-full rounded-xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-800 placeholder:text-slate-500 shadow-soft transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
       />
       {query ? (
         <button
