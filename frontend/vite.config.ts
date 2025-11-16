@@ -6,18 +6,28 @@ export default defineConfig({
   plugins: [
     react(),
     legacy({
-      targets: ['defaults', 'not IE 11'],
-      polyfills: true,
-      renderLegacyChunks: false,
-    }),
+      targets: [
+        'defaults',
+        'iOS >= 10',
+        'Safari >= 10'
+      ],
+      additionalLegacyPolyfills: [
+        'regenerator-runtime/runtime'
+      ],
+      renderLegacyChunks: true,
+      modernPolyfills: false
+    })
   ],
+
+  server: {
+    port: 5173
+  },
 
   build: {
     target: 'es2018',
     sourcemap: false,
-  },
-
-  server: {
-    port: 5173,
-  },
+    rollupOptions: {
+      external: ['core-js/features/intl']
+    }
+  }
 });
