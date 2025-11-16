@@ -39,6 +39,7 @@ export interface Order {
   orgId: string;
   locationId: string;
   registerId: string;
+  shiftId?: Types.ObjectId;
   cashierId: Types.ObjectId;
   warehouseId?: Types.ObjectId;
   customerId?: Types.ObjectId;
@@ -107,6 +108,7 @@ const orderSchema = new Schema<OrderDocument>(
     orgId: { type: String, required: true, trim: true },
     locationId: { type: String, required: true, trim: true },
     registerId: { type: String, required: true, trim: true },
+    shiftId: { type: Schema.Types.ObjectId, ref: 'Shift' },
     cashierId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     warehouseId: { type: Schema.Types.ObjectId, ref: 'Warehouse' },
     customerId: { type: Schema.Types.ObjectId, ref: 'Customer' },
@@ -132,5 +134,6 @@ orderSchema.index({ 'items.productId': 1 });
 orderSchema.index({ customerId: 1 });
 orderSchema.index({ cashierId: 1, status: 1 });
 orderSchema.index({ warehouseId: 1 });
+orderSchema.index({ registerId: 1, createdAt: -1 });
 
 export const OrderModel = model<OrderDocument>('Order', orderSchema);
