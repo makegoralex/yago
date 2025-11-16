@@ -543,15 +543,17 @@ const AdminPage: React.FC = () => {
         }
       } catch (primaryError) {
         console.warn('Админский агрегированный каталог недоступен, выполняем поэлементную загрузку', primaryError);
-        const [categoriesRes, productsRes, ingredientsRes] = await Promise.all([
+        const [categoriesRes, productsRes, ingredientsRes, modifierGroupsRes] = await Promise.all([
           api.get('/api/catalog/categories'),
           api.get('/api/catalog/products', { params: { includeInactive: true } }),
           api.get('/api/catalog/ingredients'),
+          api.get('/api/catalog/modifier-groups'),
         ]);
 
         setCategories(getResponseData<Category[]>(categoriesRes) ?? []);
         setProducts(getResponseData<Product[]>(productsRes) ?? []);
         setIngredients(getResponseData<Ingredient[]>(ingredientsRes) ?? []);
+        setModifierGroups(getResponseData<ModifierGroup[]>(modifierGroupsRes) ?? []);
       }
 
       if (!aggregatedModifiers) {
