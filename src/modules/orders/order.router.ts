@@ -318,6 +318,31 @@ const ensureDraftOrder = (order: OrderDocument): void => {
   }
 };
 
+const ensureOrderShiftIsActive = async (
+  order: OrderDocument,
+  cashierId?: string | null
+): Promise<void> => {
+  if (order.shiftId) {
+    const shift = await ShiftModel.findById(order.shiftId);
+    if (shift && shift.status === 'open') {
+      return;
+    }
+
+    if (shift && shift.status === 'closed') {
+      throw new Error('Смена уже закрыта. Откройте новую смену, чтобы продолжить работу с заказами');
+    }
+
+    order.shiftId = undefined;
+  }
+
+  const fallbackShift = await findActiveShiftForRegister(order.registerId, cashierId ?? undefined);
+  if (!fallbackShift) {
+    throw new Error('Сначала откройте смену на кассе');
+  }
+
+  order.shiftId = fallbackShift._id as Types.ObjectId;
+};
+
 router.post(
   '/start',
   requireRole(CASHIER_ROLES),
@@ -437,6 +462,14 @@ router.post(
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Order cannot be modified';
       res.status(400).json({ data: null, error: message });
+      return;
+    }
+
+    try {
+      await ensureOrderShiftIsActive(order, req.user?.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Сначала откройте смену на кассе';
+      res.status(409).json({ data: null, error: message });
       return;
     }
 
@@ -562,6 +595,14 @@ router.post(
       return;
     }
 
+    try {
+      await ensureOrderShiftIsActive(order, req.user?.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Сначала откройте смену на кассе';
+      res.status(409).json({ data: null, error: message });
+      return;
+    }
+
     order.payment = {
       method,
       amount: normalizedAmount,
@@ -607,6 +648,14 @@ router.post(
 
     if (order.status !== 'paid') {
       res.status(400).json({ data: null, error: 'Only paid orders can be completed' });
+      return;
+    }
+
+    try {
+      await ensureOrderShiftIsActive(order, req.user?.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Сначала откройте смену на кассе';
+      res.status(409).json({ data: null, error: message });
       return;
     }
 

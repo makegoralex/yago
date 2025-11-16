@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { create } from 'zustand';
 
 import api from '../lib/api';
@@ -70,15 +71,29 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
   async openShift(payload) {
     set({ opening: true });
     try {
-      const response = await api.post('/api/shifts/open', {
+      const requestBody = {
         ...DEFAULT_POS_CONTEXT,
         ...(payload ?? {}),
-      });
+      };
+
+      const tryOpen = async (path: string) => api.post(path, requestBody);
+
+      let response;
+      try {
+        response = await tryOpen('/api/shifts/open');
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          response = await tryOpen('/api/shifts');
+        } else {
+          throw error;
+        }
+      }
       const mapped = mapShift(response.data?.data);
       const nextShift = mapped?.status === 'open' ? mapped : null;
       set({ currentShift: nextShift, error: null });
       return nextShift;
     } catch (error) {
+      set({ error: 'Не удалось открыть смену' });
       throw error;
     } finally {
       set({ opening: false });
