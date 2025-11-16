@@ -7,6 +7,7 @@ import OrderPanel from '../components/ui/OrderPanel';
 import PaymentModal from '../components/ui/PaymentModal';
 import LoyaltyModal from '../components/ui/LoyaltyModal';
 import RedeemPointsModal from '../components/ui/RedeemPointsModal';
+import ModifierModal from '../components/ui/ModifierModal';
 import { useCatalogStore, type Product } from '../store/catalog';
 import {
   useOrderStore,
@@ -14,6 +15,7 @@ import {
   type CustomerSummary,
   type OrderHistoryEntry,
   type OrderTag,
+  type SelectedModifier,
 } from '../store/order';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useToast } from '../providers/ToastProvider';
@@ -84,6 +86,7 @@ const POSPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isShiftPanelOpen, setShiftPanelOpen] = useState(false);
+  const [modifierProduct, setModifierProduct] = useState<Product | null>(null);
   const orderTagsEnabled = useRestaurantStore((state) => state.enableOrderTags);
 
   useEffect(() => {
@@ -321,6 +324,14 @@ const POSPage: React.FC = () => {
   };
 
   const handleAddProduct = (product: typeof products[number]) => {
+    if (product.modifierGroups?.length) {
+      setModifierProduct(product);
+      if (!isTablet) {
+        setOrderDrawerOpen(true);
+      }
+      return;
+    }
+
     void addProduct(product).catch(() => {
       notify({ title: 'Не удалось добавить товар', type: 'error' });
     });
@@ -328,6 +339,20 @@ const POSPage: React.FC = () => {
       setOrderDrawerOpen(true);
     }
   };
+
+  const handleModifierConfirm = (modifiers: SelectedModifier[]) => {
+    if (!modifierProduct) return;
+
+    void addProduct(modifierProduct, modifiers).catch(() => {
+      notify({ title: 'Не удалось добавить товар', type: 'error' });
+    });
+    setModifierProduct(null);
+    if (!isTablet) {
+      setOrderDrawerOpen(true);
+    }
+  };
+
+  const handleModifierClose = () => setModifierProduct(null);
 
   const handleProductSearchSelect = (product: Product) => {
     handleAddProduct(product);
@@ -535,19 +560,13 @@ const POSPage: React.FC = () => {
             total={total}
             status={status}
             isCompleting={isCompleting}
-            onIncrement={(productId) =>
-              void updateItemQty(
-                productId,
-                (items.find((item) => item.productId === productId)?.qty || 0) + 1
-              )
+            onIncrement={(lineId) =>
+              void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) + 1)
             }
-            onDecrement={(productId) =>
-              void updateItemQty(
-                productId,
-                (items.find((item) => item.productId === productId)?.qty || 0) - 1
-              )
+            onDecrement={(lineId) =>
+              void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) - 1)
             }
-            onRemove={(productId) => void removeItem(productId)}
+            onRemove={(lineId) => void removeItem(lineId)}
             onPay={(method) => openPaymentModal(method)}
             onAddCustomer={() => setLoyaltyOpen(true)}
             onClearCustomer={handleRemoveCustomer}
@@ -598,6 +617,13 @@ const POSPage: React.FC = () => {
         onConfirm={handlePayConfirm}
         isProcessing={isPaying}
       />
+      {modifierProduct ? (
+        <ModifierModal
+          product={modifierProduct}
+          onClose={handleModifierClose}
+          onConfirm={handleModifierConfirm}
+        />
+      ) : null}
       <LoyaltyModal
         open={isLoyaltyOpen}
         onClose={() => setLoyaltyOpen(false)}
@@ -643,19 +669,13 @@ const POSPage: React.FC = () => {
                 total={total}
                 status={status}
                 isCompleting={isCompleting}
-                onIncrement={(productId) =>
-                  void updateItemQty(
-                    productId,
-                    (items.find((item) => item.productId === productId)?.qty || 0) + 1
-                  )
+                onIncrement={(lineId) =>
+                  void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) + 1)
                 }
-                onDecrement={(productId) =>
-                  void updateItemQty(
-                    productId,
-                    (items.find((item) => item.productId === productId)?.qty || 0) - 1
-                  )
+                onDecrement={(lineId) =>
+                  void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) - 1)
                 }
-                onRemove={(productId) => void removeItem(productId)}
+                onRemove={(lineId) => void removeItem(lineId)}
                 onPay={(method) => openPaymentModal(method)}
                 onAddCustomer={() => setLoyaltyOpen(true)}
                 onClearCustomer={handleRemoveCustomer}

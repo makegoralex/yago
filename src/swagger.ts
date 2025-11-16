@@ -118,9 +118,9 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           },
           discountType: { type: 'string', enum: ['percentage', 'fixed'], example: 'percentage' },
           discountValue: { type: 'number', example: 10 },
-          modifiers: {
+          modifierGroups: {
             type: 'array',
-            items: { type: 'string', example: 'Овсяное молоко' },
+            items: { $ref: '#/components/schemas/ModifierGroup' },
           },
           ingredients: {
             type: 'array',
@@ -150,9 +150,9 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           price: { type: 'number', example: 260 },
           discountType: { type: 'string', enum: ['percentage', 'fixed'] },
           discountValue: { type: 'number', example: 10 },
-          modifiers: {
+          modifierGroups: {
             type: 'array',
-            items: { type: 'string', example: 'Овсяное молоко' },
+            items: { type: 'string', example: '665c2ba2d6f42e4a3c8f9911' },
           },
           ingredients: {
             type: 'array',
@@ -172,15 +172,54 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           price: { type: 'number', example: 260 },
           discountType: { type: 'string', enum: ['percentage', 'fixed'] },
           discountValue: { type: 'number', example: 10 },
-          modifiers: {
+          modifierGroups: {
             type: 'array',
-            items: { type: 'string', example: 'Овсяное молоко' },
+            items: { type: 'string', example: '665c2ba2d6f42e4a3c8f9911' },
           },
           ingredients: {
             type: 'array',
             items: { $ref: '#/components/schemas/ProductIngredient' },
           },
           isActive: { type: 'boolean', example: true },
+        },
+      },
+      ModifierOption: {
+        type: 'object',
+        properties: {
+          _id: { type: 'string', example: '665c2ba2d6f42e4a3c8f9930' },
+          name: { type: 'string', example: '0.3 л' },
+          priceChange: { type: 'number', example: 30 },
+          costChange: { type: 'number', example: 12 },
+        },
+      },
+      ModifierGroup: {
+        type: 'object',
+        properties: {
+          _id: { type: 'string', example: '665c2ba2d6f42e4a3c8f9921' },
+          name: { type: 'string', example: 'Объём' },
+          selectionType: { type: 'string', enum: ['single', 'multiple'], example: 'single' },
+          required: { type: 'boolean', example: true },
+          sortOrder: { type: 'number', example: 10 },
+          options: { type: 'array', items: { $ref: '#/components/schemas/ModifierOption' } },
+        },
+      },
+      SelectedModifierOption: {
+        type: 'object',
+        properties: {
+          optionId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9930' },
+          name: { type: 'string', example: '0.3 л' },
+          priceChange: { type: 'number', example: 30 },
+          costChange: { type: 'number', example: 12 },
+        },
+      },
+      SelectedModifier: {
+        type: 'object',
+        properties: {
+          groupId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9921' },
+          groupName: { type: 'string', example: 'Объём' },
+          selectionType: { type: 'string', enum: ['single', 'multiple'], example: 'single' },
+          required: { type: 'boolean', example: true },
+          options: { type: 'array', items: { $ref: '#/components/schemas/SelectedModifierOption' } },
         },
       },
       CatalogIngredient: {
@@ -417,13 +456,15 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
       OrderItem: {
         type: 'object',
         properties: {
+          lineId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9942:665c2ba2d6f42e4a3c8f9921:665c2ba2d6f42e4a3c8f9930' },
           productId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9942' },
           name: { type: 'string', example: 'Flat White' },
           qty: { type: 'number', example: 2 },
           price: { type: 'number', example: 4.5 },
+          costPrice: { type: 'number', example: 2.1 },
           modifiersApplied: {
             type: 'array',
-            items: { type: 'string', example: 'Extra shot' },
+            items: { $ref: '#/components/schemas/SelectedModifier' },
           },
           total: { type: 'number', example: 9 },
         },
@@ -433,12 +474,19 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
         required: ['productId', 'qty'],
         properties: {
           productId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9942' },
-          name: { type: 'string', example: 'Flat White w/ oat milk' },
-          qty: { type: 'number', example: 1 },
-          price: { type: 'number', example: 4.5 },
+          qty: { type: 'number', example: 2 },
           modifiersApplied: {
             type: 'array',
-            items: { type: 'string', example: 'Oat Milk' },
+            items: {
+              type: 'object',
+              properties: {
+                groupId: { type: 'string', example: '665c2ba2d6f42e4a3c8f9921' },
+                optionIds: {
+                  type: 'array',
+                  items: { type: 'string', example: '665c2ba2d6f42e4a3c8f9930' },
+                },
+              },
+            },
           },
         },
       },
