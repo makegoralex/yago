@@ -15,9 +15,9 @@ type OrderPanelProps = {
   discount: number;
   total: number;
   status: 'draft' | 'paid' | 'completed' | null;
-  onIncrement: (productId: string) => void;
-  onDecrement: (productId: string) => void;
-  onRemove: (productId: string) => void;
+  onIncrement: (lineId: string) => void;
+  onDecrement: (lineId: string) => void;
+  onRemove: (lineId: string) => void;
   onPay: (method: PaymentMethod) => void;
   onAddCustomer: () => void;
   onClearCustomer?: () => void;
@@ -258,16 +258,26 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
         ) : (
           <ul className="space-y-2.5">
             {items.map((item) => (
-              <li key={item.productId} className="rounded-xl border border-slate-100 p-2.5 shadow-sm">
+              <li key={item.lineId} className="rounded-xl border border-slate-100 p-2.5 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{item.name}</p>
                     <p className="text-xs text-slate-500">{item.price.toFixed(2)} ₽</p>
+                    {item.modifiersApplied?.length ? (
+                      <ul className="mt-1 space-y-0.5 text-[11px] text-slate-500">
+                        {item.modifiersApplied.map((modifier) => (
+                          <li key={`${item.lineId}-${modifier.groupId}`}>
+                            <span className="font-semibold text-slate-600">{modifier.groupName}:</span>{' '}
+                            {modifier.options.map((option) => option.name).join(', ')}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => onDecrement(item.productId)}
+                      onClick={() => onDecrement(item.lineId)}
                       className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-base font-semibold text-slate-700 transition hover:border-slate-300"
                     >
                       −
@@ -275,7 +285,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
                     <span className="w-7 text-center text-sm font-semibold text-slate-900">{item.qty}</span>
                     <button
                       type="button"
-                      onClick={() => onIncrement(item.productId)}
+                      onClick={() => onIncrement(item.lineId)}
                       className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-base font-semibold text-slate-700 transition hover:border-slate-300"
                     >
                       +
@@ -288,7 +298,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
                     <span className="text-sm font-semibold text-slate-900">{item.total.toFixed(2)} ₽</span>
                     <button
                       type="button"
-                      onClick={() => onRemove(item.productId)}
+                      onClick={() => onRemove(item.lineId)}
                       className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-xs text-slate-400 transition hover:border-red-200 hover:text-red-500"
                       aria-label="Удалить позицию"
                     >
