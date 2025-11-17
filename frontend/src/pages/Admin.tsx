@@ -565,6 +565,16 @@ const AdminPage: React.FC = () => {
           notify({ title: 'Не удалось загрузить модификаторы', type: 'error' });
         }
       }
+
+      if (!aggregatedModifiers) {
+        try {
+          const modifierGroupsRes = await api.get('/api/catalog/modifier-groups');
+          setModifierGroups(getResponseData<ModifierGroup[]>(modifierGroupsRes) ?? []);
+        } catch (modifierError) {
+          console.error('Не удалось загрузить модификаторы', modifierError);
+          notify({ title: 'Не удалось загрузить модификаторы', type: 'error' });
+        }
+      }
     } catch (error) {
       console.error('Не удалось загрузить меню', error);
       notify({ title: 'Не удалось загрузить меню', type: 'error' });
