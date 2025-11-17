@@ -369,7 +369,7 @@ const POSPage: React.FC = () => {
         shiftStatus={shiftStatus}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
-        <div className="hidden min-h-0 flex-shrink-0 overflow-hidden lg:flex lg:h-full lg:w-auto">
+        <div className="hidden min-h-0 flex-shrink-0 lg:flex lg:h-full lg:w-auto lg:overflow-y-auto">
           <CategorySidebar
             categories={categories}
             activeCategoryId={activeCategoryId}
@@ -554,7 +554,7 @@ const POSPage: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="hidden min-h-0 overflow-hidden lg:flex lg:h-full lg:w-[360px]">
+        <div className="hidden min-h-0 lg:flex lg:h-full lg:w-[360px] lg:overflow-y-auto">
           <OrderPanel
             items={items}
             subtotal={subtotal}
