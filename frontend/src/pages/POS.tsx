@@ -464,7 +464,7 @@ const POSPage: React.FC = () => {
               <div
                 className={`grid gap-3 ${
                   activeSection === 'products'
-                    ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4'
+                    ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
                     : 'grid-cols-1'
                 }`}
               >
@@ -554,7 +554,7 @@ const POSPage: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="hidden min-h-0 lg:flex lg:w-[360px] lg:flex-shrink-0 lg:flex-col lg:overflow-hidden lg:pr-1">
+        <div className="hidden min-h-0 lg:flex lg:min-w-[320px] lg:max-w-[360px] lg:w-[320px] xl:w-[360px] lg:flex-shrink-0 lg:flex-col lg:overflow-hidden lg:pr-1">
           <OrderPanel
             items={items}
             subtotal={subtotal}
