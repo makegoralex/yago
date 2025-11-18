@@ -16,7 +16,7 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
 }) => {
   return (
     <aside
-      className={`flex h-full flex-col gap-2 rounded-xl bg-white p-2 shadow-soft transition-all ${
+      className={`flex h-full min-h-0 flex-col gap-2 rounded-xl bg-white p-2 shadow-soft transition-all ${
         collapsed ? 'w-20' : 'w-56'
       }`}
     >
