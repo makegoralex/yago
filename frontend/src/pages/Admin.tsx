@@ -565,6 +565,16 @@ const AdminPage: React.FC = () => {
           notify({ title: 'Не удалось загрузить модификаторы', type: 'error' });
         }
       }
+
+      if (!aggregatedModifiers) {
+        try {
+          const modifierGroupsRes = await api.get('/api/catalog/modifier-groups');
+          setModifierGroups(getResponseData<ModifierGroup[]>(modifierGroupsRes) ?? []);
+        } catch (modifierError) {
+          console.error('Не удалось загрузить модификаторы', modifierError);
+          notify({ title: 'Не удалось загрузить модификаторы', type: 'error' });
+        }
+      }
     } catch (error) {
       console.error('Не удалось загрузить меню', error);
       notify({ title: 'Не удалось загрузить меню', type: 'error' });
@@ -1803,34 +1813,53 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const handleSubmitBranding = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmitBranding = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const normalizedName = brandingForm.name.trim() || 'Yago Coffee';
     setBrandingSaving(true);
     try {
-      updateRestaurantBranding({ name: normalizedName, logoUrl: brandingForm.logoUrl.trim() });
+      await updateRestaurantBranding({ name: normalizedName, logoUrl: brandingForm.logoUrl.trim() });
       notify({ title: 'Брендинг обновлён', description: 'Новые данные уже применены на кассе', type: 'success' });
+    } catch (error) {
+      console.error('Не удалось обновить брендинг', error);
+      notify({ title: 'Не удалось сохранить брендинг', type: 'error' });
     } finally {
       setBrandingSaving(false);
     }
   };
 
-  const handleResetBranding = () => {
-    resetRestaurantBranding();
-    notify({ title: 'Настройки сброшены', description: 'Возвращено название Yago Coffee', type: 'info' });
+  const handleResetBranding = async () => {
+    setBrandingSaving(true);
+    try {
+      await resetRestaurantBranding();
+      notify({ title: 'Настройки сброшены', description: 'Возвращено название Yago Coffee', type: 'info' });
+    } catch (error) {
+      console.error('Не удалось сбросить брендинг', error);
+      notify({ title: 'Не удалось сбросить настройки', type: 'error' });
+    } finally {
+      setBrandingSaving(false);
+    }
   };
 
-  const handleToggleOrderTags = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleToggleOrderTags = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const checked = event.target.checked;
-    updateRestaurantBranding({ enableOrderTags: checked });
-    notify({
-      title: checked ? 'Метки включены' : 'Метки отключены',
-      description: checked
-        ? 'Кассиры увидят переключатели «С собой» и «Доставка» в POS'
-        : 'Переключатели скрыты до повторного включения',
-      type: 'info',
-    });
+    setBrandingSaving(true);
+    try {
+      await updateRestaurantBranding({ enableOrderTags: checked });
+      notify({
+        title: checked ? 'Метки включены' : 'Метки отключены',
+        description: checked
+          ? 'Кассиры увидят переключатели «С собой» и «Доставка» в POS'
+          : 'Переключатели скрыты до повторного включения',
+        type: 'info',
+      });
+    } catch (error) {
+      console.error('Не удалось обновить метки заказов', error);
+      notify({ title: 'Не удалось сохранить настройки меток', type: 'error' });
+    } finally {
+      setBrandingSaving(false);
+    }
   };
 
   return (
