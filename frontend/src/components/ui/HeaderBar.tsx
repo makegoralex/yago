@@ -5,8 +5,6 @@ import { useRestaurantStore } from '../../store/restaurant';
 type ShiftStatus = 'open' | 'closed' | 'loading';
 
 type HeaderBarProps = {
-  onToggleSidebar: () => void;
-  isSidebarCollapsed: boolean;
   onShowHistory: () => void;
   onShowShift: () => void;
   shiftStatus: ShiftStatus;
@@ -18,13 +16,7 @@ const formatTime = (date: Date) =>
     minute: '2-digit',
   });
 
-const HeaderBar: React.FC<HeaderBarProps> = ({
-  onToggleSidebar,
-  isSidebarCollapsed,
-  onShowHistory,
-  onShowShift,
-  shiftStatus,
-}) => {
+const HeaderBar: React.FC<HeaderBarProps> = ({ onShowHistory, onShowShift, shiftStatus }) => {
   const { user } = useAuthStore();
   const restaurantName = useRestaurantStore((state) => state.name);
   const restaurantLogo = useRestaurantStore((state) => state.logoUrl);
@@ -39,13 +31,6 @@ const HeaderBar: React.FC<HeaderBarProps> = ({
   return (
     <header className="flex items-center justify-between rounded-xl bg-white px-4 py-3 shadow-soft">
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onToggleSidebar}
-          className="hidden h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-secondary hover:text-secondary lg:flex"
-        >
-          {isSidebarCollapsed ? '☰' : '⟨'}
-        </button>
         <div className="flex items-center gap-2">
           {restaurantLogo ? (
             <img

@@ -31,7 +31,7 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
       >
         {collapsed ? 'Все' : 'Все товары'}
       </button>
-      <div className="flex-1 space-y-1.5 overflow-y-auto pr-1">
+      <div className="custom-scrollbar flex-1 space-y-1.5 overflow-y-auto pr-1">
         {categories.map((category) => {
           const isActive = category._id === activeCategoryId;
           return (
