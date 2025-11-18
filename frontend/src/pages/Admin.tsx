@@ -195,6 +195,18 @@ type Customer = {
   totalSpent: number;
 };
 
+type ModifierIngredientDelta = {
+  ingredientId: string;
+  delta: string;
+};
+
+type ModifierOptionForm = {
+  name: string;
+  priceChange: string;
+  costChange: string;
+  ingredientDeltas: ModifierIngredientDelta[];
+};
+
 type AdminDiscount = {
   _id: string;
   name: string;
@@ -278,6 +290,9 @@ const AdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     'dashboard' | 'menu' | 'inventory' | 'suppliers' | 'discounts' | 'staff' | 'branding'
   >('dashboard');
+  const [menuSection, setMenuSection] = useState<'products' | 'categories' | 'ingredients' | 'modifiers'>(
+    'products'
+  );
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [summary, setSummary] = useState({
     totalOrders: 0,
@@ -346,7 +361,14 @@ const AdminPage: React.FC = () => {
     selectionType: 'single' as 'single' | 'multiple',
     required: false,
     sortOrder: '',
-    options: [{ name: '', priceChange: '', costChange: '' }],
+    options: [
+      {
+        name: '',
+        priceChange: '',
+        costChange: '',
+        ingredientDeltas: [] as ModifierOptionForm['ingredientDeltas'],
+      },
+    ],
   });
   const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null);
   const [ingredientEditForm, setIngredientEditForm] = useState({
@@ -932,6 +954,72 @@ const AdminPage: React.FC = () => {
 
   const formatInteger = (value?: number | null) => normalizeNumber(value).toLocaleString('ru-RU');
 
+  const ingredientCostMap = useMemo(
+    () =>
+      ingredients.reduce<Record<string, number>>((acc, ingredient) => {
+        acc[ingredient._id] = ingredient.costPerUnit ?? 0;
+        return acc;
+      }, {}),
+    [ingredients]
+  );
+
+  const baseIngredientDeltas = useMemo(
+    () =>
+      (selectedProduct ? productEditIngredients : productIngredients)
+        .filter((item) => item.ingredientId)
+        .map((item) => ({ ingredientId: item.ingredientId, delta: '' })),
+    [productEditIngredients, productIngredients, selectedProduct]
+  );
+
+  const baseIngredientsForCost = useMemo(
+    () =>
+      (selectedProduct ? productEditIngredients : productIngredients)
+        .filter((item) => item.ingredientId && item.quantity)
+        .map((item) => {
+          const ingredient = ingredients.find((entry) => entry._id === item.ingredientId);
+          return {
+            ingredientId: item.ingredientId,
+            quantity: Number(item.quantity) || 0,
+            unit: ingredient?.unit ?? '',
+            name: ingredient?.name ?? 'Ингредиент',
+            costPerUnit: ingredient?.costPerUnit ?? 0,
+          };
+        }),
+    [ingredients, productEditIngredients, productIngredients, selectedProduct]
+  );
+
+  const mergeOptionWithBaseIngredients = useCallback(
+    (option: ModifierOptionForm): ModifierOptionForm => {
+      if (!baseIngredientDeltas.length) {
+        return { ...option, ingredientDeltas: option.ingredientDeltas ?? [] };
+      }
+
+      const merged = baseIngredientDeltas.map((base) => {
+        const existing = option.ingredientDeltas?.find((entry) => entry.ingredientId === base.ingredientId);
+        return { ...base, delta: existing?.delta ?? '' };
+      });
+
+      return { ...option, ingredientDeltas: merged };
+    },
+    [baseIngredientDeltas]
+  );
+
+  useEffect(() => {
+    setModifierGroupForm((prev) => ({
+      ...prev,
+      options: prev.options.map((option) => mergeOptionWithBaseIngredients(option)),
+    }));
+  }, [mergeOptionWithBaseIngredients]);
+
+  const calculateCostChangeFromDeltas = useCallback(
+    (deltas: ModifierIngredientDelta[]) =>
+      deltas.reduce(
+        (sum, entry) => sum + (Number(entry.delta) || 0) * (ingredientCostMap[entry.ingredientId] ?? 0),
+        0
+      ),
+    [ingredientCostMap]
+  );
+
   const handleCreateCategory = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!newCategoryName.trim()) {
@@ -1039,14 +1127,17 @@ const AdminPage: React.FC = () => {
       sortOrder: group.sortOrder !== undefined && group.sortOrder !== null ? group.sortOrder.toString() : '',
       options:
         group.options?.length
-          ? group.options.map((option) => ({
-              name: option.name,
-              priceChange:
-                option.priceChange !== undefined && option.priceChange !== null ? option.priceChange.toString() : '',
-              costChange:
-                option.costChange !== undefined && option.costChange !== null ? option.costChange.toString() : '',
-            }))
-          : [{ name: '', priceChange: '', costChange: '' }],
+          ? group.options.map((option) =>
+              mergeOptionWithBaseIngredients({
+                name: option.name,
+                priceChange:
+                  option.priceChange !== undefined && option.priceChange !== null ? option.priceChange.toString() : '',
+                costChange:
+                  option.costChange !== undefined && option.costChange !== null ? option.costChange.toString() : '',
+                ingredientDeltas: [],
+              })
+            )
+          : [mergeOptionWithBaseIngredients({ name: '', priceChange: '', costChange: '', ingredientDeltas: [] })],
     });
   };
 
@@ -1057,7 +1148,7 @@ const AdminPage: React.FC = () => {
       selectionType: 'single',
       required: false,
       sortOrder: '',
-      options: [{ name: '', priceChange: '', costChange: '' }],
+      options: [mergeOptionWithBaseIngredients({ name: '', priceChange: '', costChange: '', ingredientDeltas: [] })],
     });
   };
 
@@ -1075,7 +1166,28 @@ const AdminPage: React.FC = () => {
   ) => {
     setModifierGroupForm((prev) => {
       const options = [...prev.options];
-      options[index] = { ...options[index], [field]: value };
+      options[index] = mergeOptionWithBaseIngredients({ ...options[index], [field]: value });
+      return { ...prev, options };
+    });
+  };
+
+  const handleModifierOptionIngredientDeltaChange = (
+    index: number,
+    ingredientId: string,
+    delta: string
+  ) => {
+    setModifierGroupForm((prev) => {
+      const options = [...prev.options];
+      const normalizedOption = mergeOptionWithBaseIngredients(options[index]);
+      const deltas = normalizedOption.ingredientDeltas.map((entry) =>
+        entry.ingredientId === ingredientId ? { ...entry, delta } : entry
+      );
+      const costChange = calculateCostChangeFromDeltas(deltas);
+      options[index] = {
+        ...normalizedOption,
+        ingredientDeltas: deltas,
+        costChange: costChange ? costChange.toFixed(2) : '',
+      };
       return { ...prev, options };
     });
   };
@@ -1083,7 +1195,10 @@ const AdminPage: React.FC = () => {
   const addModifierOptionRow = () => {
     setModifierGroupForm((prev) => ({
       ...prev,
-      options: [...prev.options, { name: '', priceChange: '', costChange: '' }],
+      options: [
+        ...prev.options,
+        mergeOptionWithBaseIngredients({ name: '', priceChange: '', costChange: '', ingredientDeltas: [] }),
+      ],
     }));
   };
 
@@ -2162,787 +2277,832 @@ const AdminPage: React.FC = () => {
       ) : null}
 
       {activeTab === 'menu' ? (
-        <div className="space-y-6">
-          <section className="grid gap-6 lg:grid-cols-4">
-            <Card title="Категории">
-              <form onSubmit={handleCreateCategory} className="mb-4 flex gap-2">
-                <input
-                  type="text"
-                  value={newCategoryName}
-                  onChange={(event) => setNewCategoryName(event.target.value)}
-                  placeholder="Новая категория"
-                  className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm"
-                />
-                <button type="submit" className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-                  Добавить
-                </button>
-              </form>
-              <ul className="space-y-2">
-                {categories.map((category) => (
-                  <li
-                    key={category._id}
-                    onClick={() => handleSelectCategory(category)}
-                    className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 transition hover:bg-emerald-50 ${
-                      selectedCategory?._id === category._id ? 'bg-emerald-100' : 'bg-slate-50'
+        <div className="lg:flex lg:items-start lg:gap-6">
+          <aside className="mb-4 w-full lg:mb-0 lg:w-64">
+            <Card title="Раздел меню">
+              <div className="mt-2 flex flex-col gap-2">
+                {[
+                  { id: 'products', label: 'Позиции', description: 'Создание и настройка блюд' },
+                  { id: 'categories', label: 'Категории', description: 'Группировка и порядок' },
+                  { id: 'ingredients', label: 'Ингредиенты', description: 'Себестоимость и закупки' },
+                  { id: 'modifiers', label: 'Модификаторы', description: 'Дополнения и опции' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setMenuSection(item.id as typeof menuSection)}
+                    className={`flex flex-col rounded-xl border px-3 py-2 text-left transition hover:border-emerald-300 ${
+                      menuSection === item.id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'
                     }`}
                   >
-                    <span className="text-sm font-medium text-slate-700">{category.name}</span>
-                    <span className="text-xs text-slate-400">
-                      {products.filter((product) => product.categoryId === category._id).length} позиций
-                    </span>
-                  </li>
+                    <span className="text-sm font-semibold text-slate-800">{item.label}</span>
+                    <span className="text-xs text-slate-500">{item.description}</span>
+                  </button>
                 ))}
-              </ul>
-              {selectedCategory ? (
-                <form onSubmit={handleUpdateCategory} className="mt-4 space-y-3 text-sm">
-                  <div className="grid gap-2">
-                    <label className="text-xs font-semibold uppercase text-slate-400">Название</label>
-                    <input
-                      type="text"
-                      value={categoryEditName}
-                      onChange={(event) => setCategoryEditName(event.target.value)}
-                      className="rounded-2xl border border-slate-200 px-3 py-2"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <label className="text-xs font-semibold uppercase text-slate-400">Порядок</label>
-                    <input
-                      type="number"
-                      value={categorySortOrder}
-                      onChange={(event) => setCategorySortOrder(event.target.value)}
-                      className="rounded-2xl border border-slate-200 px-3 py-2"
-                    />
-                  </div>
+              </div>
+            </Card>
+          </aside>
+          <div className="flex-1 space-y-6">
+            {menuSection === 'categories' ? (
+              <Card title="Категории">
+                <form onSubmit={handleCreateCategory} className="mb-4 flex gap-2">
+                  <input
+                    type="text"
+                    value={newCategoryName}
+                    onChange={(event) => setNewCategoryName(event.target.value)}
+                    placeholder="Новая категория"
+                    className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm"
+                  />
                   <button
                     type="submit"
-                    className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
+                    className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
                   >
-                    Сохранить изменения
+                    Добавить
                   </button>
                 </form>
-              ) : (
-                <p className="mt-4 text-xs text-slate-400">Выберите категорию для редактирования</p>
-              )}
-            </Card>
-            <Card title="Новая позиция">
-              <form onSubmit={handleCreateProduct} className="space-y-3 text-sm">
-                <input
-                  type="text"
-                  placeholder="Название"
-                  value={newProduct.name}
-                  onChange={(event) => setNewProduct((prev) => ({ ...prev, name: event.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                />
-                <textarea
-                  placeholder="Описание"
-                  value={newProduct.description}
-                  onChange={(event) => setNewProduct((prev) => ({ ...prev, description: event.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                  rows={3}
-                />
-                <input
-                  type="url"
-                  placeholder="Ссылка на фото"
-                  value={newProduct.imageUrl}
-                  onChange={(event) => setNewProduct((prev) => ({ ...prev, imageUrl: event.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                />
-                <select
-                  value={newProduct.categoryId}
-                  onChange={(event) => setNewProduct((prev) => ({ ...prev, categoryId: event.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                >
-                  <option value="">Категория</option>
-                  {categories.map((category) => (
-                    <option key={category._id} value={category._id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Базовая цена"
-                    value={newProduct.basePrice}
-                    onChange={(event) => setNewProduct((prev) => ({ ...prev, basePrice: event.target.value }))}
-                    className="rounded-2xl border border-slate-200 px-4 py-2"
-                  />
-                  <select
-                    value={newProduct.discountType}
-                    onChange={(event) => setNewProduct((prev) => ({ ...prev, discountType: event.target.value as typeof prev.discountType }))}
-                    className="rounded-2xl border border-slate-200 px-4 py-2"
-                  >
-                    <option value="">Без скидки</option>
-                    <option value="percentage">Скидка %</option>
-                    <option value="fixed">Фикс. скидка</option>
-                  </select>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Значение скидки"
-                    value={newProduct.discountValue}
-                    onChange={(event) => setNewProduct((prev) => ({ ...prev, discountValue: event.target.value }))}
-                    className="rounded-2xl border border-slate-200 px-4 py-2"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Модификаторы</p>
-                  {modifierGroups.length ? (
-                    <div className="max-h-32 space-y-2 overflow-y-auto rounded-2xl border border-slate-100 p-3">
-                      {modifierGroups.map((group) => {
-                        const checked = newProductModifierIds.includes(group._id);
-                        return (
-                          <label
-                            key={group._id}
-                            className="flex items-center justify-between rounded-xl px-2 py-1 text-sm transition hover:bg-slate-50"
-                          >
-                            <span className="text-slate-700">
-                              {group.name}
-                              <span className="ml-2 text-[11px] uppercase text-slate-400">
-                                {group.selectionType === 'single' ? '1 вариант' : 'Несколько'}
-                                {group.required ? ' · Обязательная' : ''}
-                              </span>
-                            </span>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => handleToggleNewProductModifier(group._id)}
-                              className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-                            />
-                          </label>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400">Создайте группы модификаторов ниже и привяжите их к позиции.</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Ингредиенты</p>
-                  {productIngredients.map((row, index) => (
-                    <div key={index} className="flex gap-2">
-                      <select
-                        value={row.ingredientId}
-                        onChange={(event) => handleIngredientChange(index, 'ingredientId', event.target.value)}
-                        className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
-                      >
-                        <option value="">Ингредиент</option>
-                        {ingredients.map((ingredient) => (
-                          <option key={ingredient._id} value={ingredient._id}>
-                            {ingredient.name}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={row.quantity}
-                        onChange={(event) => handleIngredientChange(index, 'quantity', event.target.value)}
-                        className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
-                        placeholder="Кол-во"
-                      />
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={handleAddIngredientRow}
-                    className="text-xs font-semibold text-slate-500 hover:text-slate-700"
-                  >
-                    + Добавить ингредиент
-                  </button>
-                </div>
-                <button type="submit" className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white">
-                  Сохранить позицию
-                </button>
-              </form>
-            </Card>
-            <Card title="Добавить ингредиент">
-              <form onSubmit={handleCreateIngredient} className="space-y-3 text-sm">
-                <input name="name" type="text" placeholder="Название" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
-                <input name="unit" type="text" placeholder="Единица (грамм, мл)" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
-                <input name="costPerUnit" type="number" step="0.01" min="0" placeholder="Цена за единицу" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
-                <button type="submit" className="w-full rounded-2xl bg-slate-900 py-2 text-sm font-semibold text-white">
-                  Добавить ингредиент
-                </button>
-              </form>
-            </Card>
-            <Card title="Группы модификаторов">
-              <form
-                onSubmit={selectedModifierGroup ? handleUpdateModifierGroup : handleCreateModifierGroup}
-                className="space-y-3 text-sm"
-              >
-                <div className="flex items-center justify-between">
-                  <p className="text-xs uppercase text-slate-400">
-                    {selectedModifierGroup ? 'Редактирование группы' : 'Новая группа'}
-                  </p>
-                  {selectedModifierGroup ? (
-                    <button
-                      type="button"
-                      onClick={resetModifierGroupForm}
-                      className="text-xs font-semibold text-slate-500 hover:text-slate-700"
-                    >
-                      Очистить
-                    </button>
-                  ) : null}
-                </div>
-                <input
-                  type="text"
-                  placeholder="Название группы"
-                  value={modifierGroupForm.name}
-                  onChange={(event) => handleModifierGroupFieldChange('name', event.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                />
-                <div className="grid gap-2 md:grid-cols-2">
-                  <select
-                    value={modifierGroupForm.selectionType}
-                    onChange={(event) => handleModifierGroupFieldChange('selectionType', event.target.value as 'single' | 'multiple')}
-                    className="rounded-2xl border border-slate-200 px-4 py-2"
-                  >
-                    <option value="single">Один вариант</option>
-                    <option value="multiple">Несколько вариантов</option>
-                  </select>
-                  <label className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600">
-                    <span>Обязательная группа</span>
-                    <input
-                      type="checkbox"
-                      checked={modifierGroupForm.required}
-                      onChange={(event) => handleModifierGroupFieldChange('required', event.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-                    />
-                  </label>
-                </div>
-                <input
-                  type="number"
-                  placeholder="Порядок сортировки"
-                  value={modifierGroupForm.sortOrder}
-                  onChange={(event) => handleModifierGroupFieldChange('sortOrder', event.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                />
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase text-slate-400">Опции</p>
-                    <button
-                      type="button"
-                      onClick={addModifierOptionRow}
-                      className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
-                    >
-                      + Добавить
-                    </button>
-                  </div>
-                  {modifierGroupForm.options.map((option, index) => (
-                    <div key={`${option.name}-${index}`} className="grid gap-2 rounded-2xl border border-slate-200 p-2 md:grid-cols-3">
-                      <input
-                        type="text"
-                        placeholder="Название"
-                        value={option.name}
-                        onChange={(event) => handleModifierOptionChange(index, 'name', event.target.value)}
-                        className="rounded-xl border border-slate-200 px-3 py-2"
-                      />
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Δ цена"
-                        value={option.priceChange}
-                        onChange={(event) => handleModifierOptionChange(index, 'priceChange', event.target.value)}
-                        className="rounded-xl border border-slate-200 px-3 py-2"
-                      />
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="Δ себестоимость"
-                          value={option.costChange}
-                          onChange={(event) => handleModifierOptionChange(index, 'costChange', event.target.value)}
-                          className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                        />
-                        {modifierGroupForm.options.length > 1 ? (
-                          <button
-                            type="button"
-                            onClick={() => removeModifierOptionRow(index)}
-                            className="h-9 w-9 rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300"
-                            aria-label="Удалить опцию"
-                          >
-                            ✕
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="submit"
-                    className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    {selectedModifierGroup ? 'Сохранить изменения' : 'Создать группу'}
-                  </button>
-                  {selectedModifierGroup ? (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteModifierGroup(selectedModifierGroup._id)}
-                      className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
-                    >
-                      Удалить
-                    </button>
-                  ) : null}
-                </div>
-              </form>
-              <div className="mt-4 space-y-2">
-                <p className="text-xs font-semibold uppercase text-slate-400">Список групп</p>
-                <div className="max-h-48 space-y-2 overflow-y-auto">
-                  {modifierGroups.length === 0 ? (
-                    <p className="text-xs text-slate-400">Пока ни одной группы не создано.</p>
-                  ) : null}
-                  {modifierGroups.map((group) => (
-                    <div
-                      key={group._id}
-                      className={`flex items-center justify-between rounded-xl border px-3 py-2 text-sm transition hover:border-emerald-300 ${
-                        selectedModifierGroup?._id === group._id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200'
-                      }`}
-                    >
-                      <div>
-                        <p className="font-semibold text-slate-800">{group.name}</p>
-                        <p className="text-[11px] uppercase text-slate-400">
-                          {group.selectionType === 'single' ? 'Один вариант' : 'Несколько вариантов'}
-                          {group.required ? ' · Обязательная' : ''}
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          {group.options.length} опций · Сортировка {group.sortOrder ?? '—'}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectModifierGroup(group)}
-                          className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-600 shadow-inner hover:bg-emerald-50"
-                        >
-                          Редактировать
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteModifierGroup(group._id)}
-                          className="rounded-full px-3 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100"
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Card>
-          </section>
-
-          <Card title="Позиции меню">
-            {menuLoading ? (
-              <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead>
-                    <tr className="text-xs uppercase text-slate-400">
-                      <th className="px-3 py-2">Название</th>
-                      <th className="px-3 py-2">Категория</th>
-                      <th className="px-3 py-2">Цена</th>
-                      <th className="px-3 py-2">Себестоимость</th>
-                      <th className="px-3 py-2">Скидка</th>
-                      <th className="px-3 py-2">Статус</th>
-                      <th className="px-3 py-2 text-right">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {products.map((product) => {
-                      const categoryName = categories.find((cat) => cat._id === product.categoryId)?.name || '—';
-                      const discountLabel = product.discountType
-                        ? product.discountType === 'percentage'
-                          ? `${product.discountValue ?? 0}%`
-                          : `${product.discountValue?.toFixed(2)} ₽`
-                        : '—';
-                      return (
-                        <tr key={product._id} className="align-middle">
-                          <td className="px-3 py-2 font-medium text-slate-800">{product.name}</td>
-                          <td className="px-3 py-2 text-slate-500">{categoryName}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                defaultValue={product.basePrice ?? product.price}
-                                className="w-24 rounded-xl border border-slate-200 px-2 py-1 text-sm"
-                                onBlur={(event) =>
-                                  handleProductPriceChange(product._id, { basePrice: Number(event.target.value) })
-                                }
-                              />
-                              <span className="text-sm text-slate-400">({product.price.toFixed(2)} ₽)</span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-slate-500">
-                            {product.costPrice !== undefined
-                              ? `${product.costPrice.toFixed(2)} ₽`
-                              : '—'}
-                          </td>
-                          <td className="px-3 py-2 text-slate-500">{discountLabel}</td>
-                          <td className="px-3 py-2">
-                            <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-500">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-                                checked={product.isActive !== false}
-                                onChange={(event) =>
-                                  handleProductPriceChange(product._id, { isActive: event.target.checked })
-                                }
-                              />
-                              В продаже
-                            </label>
-                          </td>
-                          <td className="px-3 py-2 text-right text-xs text-slate-400">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleSelectProduct(product)}
-                                className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-600 shadow-inner hover:bg-emerald-50"
-                              >
-                                Настроить
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleProductPriceChange(product._id, {
-                                    discountType: null,
-                                    discountValue: null,
-                                    basePrice: product.basePrice ?? product.price,
-                                    price: product.basePrice ?? product.price,
-                                  })
-                                }
-                                className="rounded-full px-3 py-1 transition hover:bg-slate-200"
-                              >
-                                Сбросить скидку
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-          <Card title="Ингредиенты">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
                 <ul className="space-y-2">
-                  {ingredients.map((ingredient) => (
+                  {categories.map((category) => (
                     <li
-                      key={ingredient._id}
-                      onClick={() => handleSelectIngredient(ingredient)}
+                      key={category._id}
+                      onClick={() => handleSelectCategory(category)}
                       className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 transition hover:bg-emerald-50 ${
-                        selectedIngredient?._id === ingredient._id ? 'bg-emerald-100' : 'bg-slate-50'
+                        selectedCategory?._id === category._id ? 'bg-emerald-100' : 'bg-slate-50'
                       }`}
                     >
-                      <span className="text-sm font-medium text-slate-700">{ingredient.name}</span>
+                      <span className="text-sm font-medium text-slate-700">{category.name}</span>
                       <span className="text-xs text-slate-400">
-                        {ingredient.costPerUnit !== undefined ? `${ingredient.costPerUnit.toFixed(2)} ₽ / ${ingredient.unit}` : ingredient.unit}
+                        {products.filter((product) => product.categoryId === category._id).length} позиций
                       </span>
                     </li>
                   ))}
                 </ul>
-              </div>
-              <div>
-                {selectedIngredient ? (
-                  <form onSubmit={handleUpdateIngredient} className="space-y-3 text-sm">
+                {selectedCategory ? (
+                  <form onSubmit={handleUpdateCategory} className="mt-4 space-y-3 text-sm">
                     <div className="grid gap-2">
                       <label className="text-xs font-semibold uppercase text-slate-400">Название</label>
                       <input
                         type="text"
-                        value={ingredientEditForm.name}
-                        onChange={(event) =>
-                          setIngredientEditForm((prev) => ({ ...prev, name: event.target.value }))
-                        }
+                        value={categoryEditName}
+                        onChange={(event) => setCategoryEditName(event.target.value)}
                         className="rounded-2xl border border-slate-200 px-3 py-2"
                       />
                     </div>
                     <div className="grid gap-2">
-                      <label className="text-xs font-semibold uppercase text-slate-400">Единица</label>
-                      <input
-                        type="text"
-                        value={ingredientEditForm.unit}
-                        onChange={(event) =>
-                          setIngredientEditForm((prev) => ({ ...prev, unit: event.target.value }))
-                        }
-                        className="rounded-2xl border border-slate-200 px-3 py-2"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <label className="text-xs font-semibold uppercase text-slate-400">Стоимость за единицу</label>
+                      <label className="text-xs font-semibold uppercase text-slate-400">Порядок</label>
                       <input
                         type="number"
-                        min="0"
-                        step="0.01"
-                        value={ingredientEditForm.costPerUnit}
-                        onChange={(event) =>
-                          setIngredientEditForm((prev) => ({ ...prev, costPerUnit: event.target.value }))
-                        }
+                        value={categorySortOrder}
+                        onChange={(event) => setCategorySortOrder(event.target.value)}
                         className="rounded-2xl border border-slate-200 px-3 py-2"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <label className="text-xs font-semibold uppercase text-slate-400">Поставщик</label>
-                      <select
-                        value={ingredientEditForm.supplierId}
-                        onChange={(event) =>
-                          setIngredientEditForm((prev) => ({ ...prev, supplierId: event.target.value }))
-                        }
-                        className="rounded-2xl border border-slate-200 px-3 py-2"
-                      >
-                        <option value="">Не указан</option>
-                        {suppliers.map((supplier) => (
-                          <option key={supplier._id} value={supplier._id}>
-                            {supplier.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="grid gap-2">
-                      <label className="text-xs font-semibold uppercase text-slate-400">Описание</label>
-                      <textarea
-                        value={ingredientEditForm.description}
-                        onChange={(event) =>
-                          setIngredientEditForm((prev) => ({ ...prev, description: event.target.value }))
-                        }
-                        className="rounded-2xl border border-slate-200 px-3 py-2"
-                        rows={3}
                       />
                     </div>
                     <button
                       type="submit"
                       className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
                     >
-                      Сохранить ингредиент
+                      Сохранить изменения
                     </button>
                   </form>
                 ) : (
-                  <p className="text-xs text-slate-400">Выберите ингредиент, чтобы скорректировать себестоимость.</p>
+                  <p className="mt-4 text-xs text-slate-400">Выберите категорию для редактирования</p>
                 )}
-              </div>
-            </div>
-          </Card>
-          <Card title="Настройка выбранной позиции">
-            {selectedProduct ? (
-              <form onSubmit={handleUpdateProduct} className="grid gap-4 text-sm md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase text-slate-400">Название</label>
-                  <input
-                    type="text"
-                    value={productEditForm.name}
-                    onChange={(event) =>
-                      setProductEditForm((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase text-slate-400">Категория</label>
-                  <select
-                    value={productEditForm.categoryId}
-                    onChange={(event) =>
-                      setProductEditForm((prev) => ({ ...prev, categoryId: event.target.value }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                  >
-                    <option value="">Выберите категорию</option>
-                    {categories.map((category) => (
-                      <option key={category._id} value={category._id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase text-slate-400">Описание</label>
-                  <textarea
-                    value={productEditForm.description}
-                    onChange={(event) =>
-                      setProductEditForm((prev) => ({ ...prev, description: event.target.value }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                    rows={3}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase text-slate-400">Изображение</label>
-                  <input
-                    type="url"
-                    value={productEditForm.imageUrl}
-                    onChange={(event) =>
-                      setProductEditForm((prev) => ({ ...prev, imageUrl: event.target.value }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase text-slate-400">Базовая цена</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={productEditForm.basePrice}
-                    onChange={(event) =>
-                      setProductEditForm((prev) => ({ ...prev, basePrice: event.target.value }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase text-slate-400">Тип скидки</label>
-                  <select
-                    value={productEditForm.discountType}
-                    onChange={(event) =>
-                      setProductEditForm((prev) => ({ ...prev, discountType: event.target.value as typeof prev.discountType }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                  >
-                    <option value="">Нет</option>
-                    <option value="percentage">Процент</option>
-                    <option value="fixed">Фиксированная</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase text-slate-400">Значение скидки</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={productEditForm.discountValue}
-                    onChange={(event) =>
-                      setProductEditForm((prev) => ({ ...prev, discountValue: event.target.value }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase text-slate-400">Статус</label>
-                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500">
+              </Card>
+            ) : null}
+
+            {menuSection === 'products' ? (
+              <>
+                <Card title="Новая позиция">
+                  <form onSubmit={handleCreateProduct} className="space-y-3 text-sm">
                     <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-                      checked={productEditForm.isActive}
-                      onChange={(event) =>
-                        setProductEditForm((prev) => ({ ...prev, isActive: event.target.checked }))
-                      }
+                      type="text"
+                      placeholder="Название"
+                      value={newProduct.name}
+                      onChange={(event) => setNewProduct((prev) => ({ ...prev, name: event.target.value }))}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
                     />
-                    В продаже
-                  </label>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase text-slate-400">Модификаторы</p>
-                  {modifierGroups.length ? (
-                    <div className="max-h-32 space-y-2 overflow-y-auto rounded-2xl border border-slate-100 p-3">
-                      {modifierGroups.map((group) => {
-                        const checked = productEditModifiers.includes(group._id);
-                        return (
-                          <label
-                            key={group._id}
-                            className="flex items-center justify-between rounded-xl px-2 py-1 text-sm transition hover:bg-slate-50"
-                          >
-                            <span className="text-slate-700">
-                              {group.name}
-                              <span className="ml-2 text-[11px] uppercase text-slate-400">
-                                {group.selectionType === 'single' ? '1 вариант' : 'Несколько'}
-                                {group.required ? ' · Обязательная' : ''}
-                              </span>
-                            </span>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => handleToggleEditProductModifier(group._id)}
-                              className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-                            />
-                          </label>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400">Группы модификаторов пока не созданы.</p>
-                  )}
-                </div>
-                <div className="md:col-span-2 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase text-slate-400">Ингредиенты</p>
-                    <button
-                      type="button"
-                      onClick={addEditIngredientRow}
-                      className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                    <textarea
+                      placeholder="Описание"
+                      value={newProduct.description}
+                      onChange={(event) => setNewProduct((prev) => ({ ...prev, description: event.target.value }))}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                      rows={3}
+                    />
+                    <input
+                      type="url"
+                      placeholder="Ссылка на фото"
+                      value={newProduct.imageUrl}
+                      onChange={(event) => setNewProduct((prev) => ({ ...prev, imageUrl: event.target.value }))}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    />
+                    <select
+                      value={newProduct.categoryId}
+                      onChange={(event) => setNewProduct((prev) => ({ ...prev, categoryId: event.target.value }))}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
                     >
-                      + Добавить
-                    </button>
-                  </div>
-                  {productEditIngredients.length === 0 ? (
-                    <p className="text-xs text-slate-400">Ингредиенты не указаны, позиция считается самостоятельной.</p>
-                  ) : null}
-                  {productEditIngredients.map((row, index) => (
-                    <div key={index} className="flex flex-wrap items-center gap-2">
+                      <option value="">Категория</option>
+                      {categories.map((category) => (
+                        <option key={category._id} value={category._id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Базовая цена"
+                        value={newProduct.basePrice}
+                        onChange={(event) => setNewProduct((prev) => ({ ...prev, basePrice: event.target.value }))}
+                        className="rounded-2xl border border-slate-200 px-4 py-2"
+                      />
                       <select
-                        value={row.ingredientId}
+                        value={newProduct.discountType}
                         onChange={(event) =>
-                          handleEditIngredientChange(index, 'ingredientId', event.target.value)
+                          setNewProduct((prev) => ({ ...prev, discountType: event.target.value as typeof prev.discountType }))
                         }
-                        className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
+                        className="rounded-2xl border border-slate-200 px-4 py-2"
                       >
-                        <option value="">Ингредиент</option>
-                        {ingredients.map((ingredient) => (
-                          <option key={ingredient._id} value={ingredient._id}>
-                            {ingredient.name}
-                          </option>
-                        ))}
+                        <option value="">Без скидки</option>
+                        <option value="percentage">Скидка %</option>
+                        <option value="fixed">Фикс. скидка</option>
                       </select>
                       <input
                         type="number"
                         step="0.01"
                         min="0"
-                        value={row.quantity}
-                        onChange={(event) =>
-                          handleEditIngredientChange(index, 'quantity', event.target.value)
-                        }
-                        className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
-                        placeholder="Кол-во"
+                        placeholder="Значение скидки"
+                        value={newProduct.discountValue}
+                        onChange={(event) => setNewProduct((prev) => ({ ...prev, discountValue: event.target.value }))}
+                        className="rounded-2xl border border-slate-200 px-4 py-2"
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase text-slate-500">Модификаторы</p>
+                      {modifierGroups.length ? (
+                        <div className="max-h-32 space-y-2 overflow-y-auto rounded-2xl border border-slate-100 p-3">
+                          {modifierGroups.map((group) => {
+                            const checked = newProductModifierIds.includes(group._id);
+                            return (
+                              <label
+                                key={group._id}
+                                className="flex items-center justify-between rounded-xl px-2 py-1 text-sm transition hover:bg-slate-50"
+                              >
+                                <span className="text-slate-700">
+                                  {group.name}
+                                  <span className="ml-2 text-[11px] uppercase text-slate-400">
+                                    {group.selectionType === 'single' ? '1 вариант' : 'Несколько'}
+                                    {group.required ? ' · Обязательная' : ''}
+                                  </span>
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => handleToggleNewProductModifier(group._id)}
+                                  className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400">Создайте группы модификаторов и привяжите их к позиции.</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase text-slate-500">Ингредиенты</p>
+                      {productIngredients.map((row, index) => (
+                        <div key={index} className="flex gap-2">
+                          <select
+                            value={row.ingredientId}
+                            onChange={(event) => handleIngredientChange(index, 'ingredientId', event.target.value)}
+                            className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
+                          >
+                            <option value="">Ингредиент</option>
+                            {ingredients.map((ingredient) => (
+                              <option key={ingredient._id} value={ingredient._id}>
+                                {ingredient.name}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={row.quantity}
+                            onChange={(event) => handleIngredientChange(index, 'quantity', event.target.value)}
+                            className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
+                            placeholder="Кол-во"
+                          />
+                        </div>
+                      ))}
                       <button
                         type="button"
-                        onClick={() => removeEditIngredientRow(index)}
-                        className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-200"
+                        onClick={handleAddIngredientRow}
+                        className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                      >
+                        + Добавить ингредиент
+                      </button>
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
+                    >
+                      Сохранить позицию
+                    </button>
+                  </form>
+                </Card>
+                <Card title="Позиции меню">
+                  {menuLoading ? (
+                    <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-left text-sm">
+                        <thead>
+                          <tr className="text-xs uppercase text-slate-400">
+                            <th className="px-3 py-2">Название</th>
+                            <th className="px-3 py-2">Категория</th>
+                            <th className="px-3 py-2">Цена</th>
+                            <th className="px-3 py-2">Себестоимость</th>
+                            <th className="px-3 py-2">Скидка</th>
+                            <th className="px-3 py-2">Статус</th>
+                            <th className="px-3 py-2 text-right">Действия</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {products.map((product) => {
+                            const categoryName = categories.find((cat) => cat._id === product.categoryId)?.name || '—';
+                            const discountLabel = product.discountType
+                              ? product.discountType === 'percentage'
+                                ? `${product.discountValue ?? 0}%`
+                                : `${product.discountValue?.toFixed(2)} ₽`
+                              : '—';
+                            return (
+                              <tr key={product._id} className="align-middle">
+                                <td className="px-3 py-2 font-medium text-slate-800">{product.name}</td>
+                                <td className="px-3 py-2 text-slate-500">{categoryName}</td>
+                                <td className="px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      defaultValue={product.basePrice ?? product.price}
+                                      className="w-24 rounded-xl border border-slate-200 px-2 py-1 text-sm"
+                                      onBlur={(event) =>
+                                        handleProductPriceChange(product._id, { basePrice: Number(event.target.value) })
+                                      }
+                                    />
+                                    <span className="text-sm text-slate-400">({product.price.toFixed(2)} ₽)</span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 text-slate-500">
+                                  {product.costPrice !== undefined ? `${product.costPrice.toFixed(2)} ₽` : '—'}
+                                </td>
+                                <td className="px-3 py-2 text-slate-500">{discountLabel}</td>
+                                <td className="px-3 py-2">
+                                  <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-500">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                                      checked={product.isActive !== false}
+                                      onChange={(event) =>
+                                        handleProductPriceChange(product._id, { isActive: event.target.checked })
+                                      }
+                                    />
+                                    В продаже
+                                  </label>
+                                </td>
+                                <td className="px-3 py-2 text-right text-xs text-slate-400">
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSelectProduct(product)}
+                                      className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-600 shadow-inner hover:bg-emerald-50"
+                                    >
+                                      Настроить
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleProductPriceChange(product._id, {
+                                          discountType: null,
+                                          discountValue: null,
+                                          basePrice: product.basePrice ?? product.price,
+                                          price: product.basePrice ?? product.price,
+                                        })
+                                      }
+                                      className="rounded-full px-3 py-1 transition hover:bg-slate-200"
+                                    >
+                                      Сбросить скидку
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+                <Card title="Настройка выбранной позиции">
+                  {selectedProduct ? (
+                    <form onSubmit={handleUpdateProduct} className="grid gap-4 text-sm md:grid-cols-2">
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase text-slate-400">Название</label>
+                        <input
+                          type="text"
+                          value={productEditForm.name}
+                          onChange={(event) => setProductEditForm((prev) => ({ ...prev, name: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase text-slate-400">Категория</label>
+                        <select
+                          value={productEditForm.categoryId}
+                          onChange={(event) =>
+                            setProductEditForm((prev) => ({ ...prev, categoryId: event.target.value }))
+                          }
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                        >
+                          <option value="">Выберите категорию</option>
+                          {categories.map((category) => (
+                            <option key={category._id} value={category._id}>
+                              {category.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase text-slate-400">Описание</label>
+                        <textarea
+                          value={productEditForm.description}
+                          onChange={(event) => setProductEditForm((prev) => ({ ...prev, description: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                          rows={3}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase text-slate-400">Изображение</label>
+                        <input
+                          type="url"
+                          value={productEditForm.imageUrl}
+                          onChange={(event) => setProductEditForm((prev) => ({ ...prev, imageUrl: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase text-slate-400">Базовая цена</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={productEditForm.basePrice}
+                          onChange={(event) => setProductEditForm((prev) => ({ ...prev, basePrice: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase text-slate-400">Тип скидки</label>
+                        <select
+                          value={productEditForm.discountType}
+                          onChange={(event) =>
+                            setProductEditForm((prev) => ({ ...prev, discountType: event.target.value as typeof prev.discountType }))
+                          }
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                        >
+                          <option value="">Нет</option>
+                          <option value="percentage">Процент</option>
+                          <option value="fixed">Фиксированная</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase text-slate-400">Значение скидки</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={productEditForm.discountValue}
+                          onChange={(event) => setProductEditForm((prev) => ({ ...prev, discountValue: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase text-slate-400">Статус</label>
+                        <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                            checked={productEditForm.isActive}
+                            onChange={(event) => setProductEditForm((prev) => ({ ...prev, isActive: event.target.checked }))}
+                          />
+                          В продаже
+                        </label>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase text-slate-400">Модификаторы</p>
+                        {modifierGroups.length ? (
+                          <div className="max-h-32 space-y-2 overflow-y-auto rounded-2xl border border-slate-100 p-3">
+                            {modifierGroups.map((group) => {
+                              const checked = productEditModifiers.includes(group._id);
+                              return (
+                                <label
+                                  key={group._id}
+                                  className="flex items-center justify-between rounded-xl px-2 py-1 text-sm transition hover:bg-slate-50"
+                                >
+                                  <span className="text-slate-700">
+                                    {group.name}
+                                    <span className="ml-2 text-[11px] uppercase text-slate-400">
+                                      {group.selectionType === 'single' ? '1 вариант' : 'Несколько'}
+                                      {group.required ? ' · Обязательная' : ''}
+                                    </span>
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => handleToggleEditProductModifier(group._id)}
+                                    className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                                  />
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400">Группы модификаторов пока не созданы.</p>
+                        )}
+                      </div>
+                      <div className="md:col-span-2 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold uppercase text-slate-400">Ингредиенты</p>
+                          <button
+                            type="button"
+                            onClick={addEditIngredientRow}
+                            className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                          >
+                            + Добавить
+                          </button>
+                        </div>
+                        {productEditIngredients.length === 0 ? (
+                          <p className="text-xs text-slate-400">Ингредиенты не указаны, позиция считается самостоятельной.</p>
+                        ) : null}
+                        {productEditIngredients.map((row, index) => (
+                          <div key={index} className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={row.ingredientId}
+                              onChange={(event) => handleEditIngredientChange(index, 'ingredientId', event.target.value)}
+                              className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
+                            >
+                              <option value="">Ингредиент</option>
+                              {ingredients.map((ingredient) => (
+                                <option key={ingredient._id} value={ingredient._id}>
+                                  {ingredient.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={row.quantity}
+                              onChange={(event) => handleEditIngredientChange(index, 'quantity', event.target.value)}
+                              className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
+                              placeholder="Кол-во"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeEditIngredientRow(index)}
+                              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-200"
+                            >
+                              Удалить
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="md:col-span-2 flex items-center justify-between">
+                        <span className="text-xs text-slate-400">
+                          Себестоимость: {selectedProduct.costPrice !== undefined ? `${selectedProduct.costPrice.toFixed(2)} ₽` : '—'}
+                        </span>
+                        <button
+                          type="submit"
+                          className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
+                        >
+                          Сохранить изменения
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <p className="text-xs text-slate-400">Выберите позицию из списка, чтобы изменить описание, цену или состав.</p>
+                  )}
+                </Card>
+              </>
+            ) : null}
+
+            {menuSection === 'ingredients' ? (
+              <>
+                <Card title="Добавить ингредиент">
+                  <form onSubmit={handleCreateIngredient} className="space-y-3 text-sm">
+                    <input name="name" type="text" placeholder="Название" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
+                    <input name="unit" type="text" placeholder="Единица (грамм, мл)" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
+                    <input name="costPerUnit" type="number" step="0.01" min="0" placeholder="Цена за единицу" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
+                    <button type="submit" className="w-full rounded-2xl bg-slate-900 py-2 text-sm font-semibold text-white">
+                      Добавить ингредиент
+                    </button>
+                  </form>
+                </Card>
+                <Card title="Ингредиенты">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <ul className="space-y-2">
+                        {ingredients.map((ingredient) => (
+                          <li
+                            key={ingredient._id}
+                            onClick={() => handleSelectIngredient(ingredient)}
+                            className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 transition hover:bg-emerald-50 ${
+                              selectedIngredient?._id === ingredient._id ? 'bg-emerald-100' : 'bg-slate-50'
+                            }`}
+                          >
+                            <span className="text-sm font-medium text-slate-700">{ingredient.name}</span>
+                            <span className="text-xs text-slate-400">
+                              {ingredient.costPerUnit !== undefined ? `${ingredient.costPerUnit.toFixed(2)} ₽ / ${ingredient.unit}` : ingredient.unit}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      {selectedIngredient ? (
+                        <form onSubmit={handleUpdateIngredient} className="space-y-3 text-sm">
+                          <div className="grid gap-2">
+                            <label className="text-xs font-semibold uppercase text-slate-400">Название</label>
+                            <input
+                              type="text"
+                              value={ingredientEditForm.name}
+                              onChange={(event) => setIngredientEditForm((prev) => ({ ...prev, name: event.target.value }))}
+                              className="rounded-2xl border border-slate-200 px-3 py-2"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <label className="text-xs font-semibold uppercase text-slate-400">Единица</label>
+                            <input
+                              type="text"
+                              value={ingredientEditForm.unit}
+                              onChange={(event) => setIngredientEditForm((prev) => ({ ...prev, unit: event.target.value }))}
+                              className="rounded-2xl border border-slate-200 px-3 py-2"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <label className="text-xs font-semibold uppercase text-slate-400">Стоимость за единицу</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={ingredientEditForm.costPerUnit}
+                              onChange={(event) => setIngredientEditForm((prev) => ({ ...prev, costPerUnit: event.target.value }))}
+                              className="rounded-2xl border border-slate-200 px-3 py-2"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <label className="text-xs font-semibold uppercase text-slate-400">Поставщик</label>
+                            <select
+                              value={ingredientEditForm.supplierId}
+                              onChange={(event) => setIngredientEditForm((prev) => ({ ...prev, supplierId: event.target.value }))}
+                              className="rounded-2xl border border-slate-200 px-3 py-2"
+                            >
+                              <option value="">Не указан</option>
+                              {suppliers.map((supplier) => (
+                                <option key={supplier._id} value={supplier._id}>
+                                  {supplier.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="grid gap-2">
+                            <label className="text-xs font-semibold uppercase text-slate-400">Описание</label>
+                            <textarea
+                              value={ingredientEditForm.description}
+                              onChange={(event) => setIngredientEditForm((prev) => ({ ...prev, description: event.target.value }))}
+                              className="rounded-2xl border border-slate-200 px-3 py-2"
+                              rows={3}
+                            />
+                          </div>
+                          <button type="submit" className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white">
+                            Сохранить ингредиент
+                          </button>
+                        </form>
+                      ) : (
+                        <p className="text-xs text-slate-400">Выберите ингредиент, чтобы скорректировать себестоимость.</p>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              </>
+            ) : null}
+
+            {menuSection === 'modifiers' ? (
+              <Card title="Группы модификаторов">
+                <form
+                  onSubmit={selectedModifierGroup ? handleUpdateModifierGroup : handleCreateModifierGroup}
+                  className="space-y-3 text-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs uppercase text-slate-400">
+                      {selectedModifierGroup ? 'Редактирование группы' : 'Новая группа'}
+                    </p>
+                    {selectedModifierGroup ? (
+                      <button
+                        type="button"
+                        onClick={resetModifierGroupForm}
+                        className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                      >
+                        Очистить
+                      </button>
+                    ) : null}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Название группы"
+                    value={modifierGroupForm.name}
+                    onChange={(event) => handleModifierGroupFieldChange('name', event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                  />
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <select
+                      value={modifierGroupForm.selectionType}
+                      onChange={(event) => handleModifierGroupFieldChange('selectionType', event.target.value as 'single' | 'multiple')}
+                      className="rounded-2xl border border-slate-200 px-4 py-2"
+                    >
+                      <option value="single">Один вариант</option>
+                      <option value="multiple">Несколько вариантов</option>
+                    </select>
+                    <label className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600">
+                      <span>Обязательная группа</span>
+                      <input
+                        type="checkbox"
+                        checked={modifierGroupForm.required}
+                        onChange={(event) => handleModifierGroupFieldChange('required', event.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                      />
+                    </label>
+                  </div>
+                  <input
+                    type="number"
+                    placeholder="Порядок сортировки"
+                    value={modifierGroupForm.sortOrder}
+                    onChange={(event) => handleModifierGroupFieldChange('sortOrder', event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                  />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase text-slate-400">Опции</p>
+                      <button
+                        type="button"
+                        onClick={addModifierOptionRow}
+                        className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                      >
+                        + Добавить
+                      </button>
+                    </div>
+                    {modifierGroupForm.options.map((option, index) => (
+                      <div key={`${option.name || 'option'}-${index}`} className="space-y-3 rounded-2xl border border-slate-200 p-3">
+                        <div className="grid gap-2 md:grid-cols-3">
+                          <input
+                            type="text"
+                            placeholder="Название"
+                            value={option.name}
+                            onChange={(event) => handleModifierOptionChange(index, 'name', event.target.value)}
+                            className="rounded-xl border border-slate-200 px-3 py-2"
+                          />
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="Δ цена"
+                            value={option.priceChange}
+                            onChange={(event) => handleModifierOptionChange(index, 'priceChange', event.target.value)}
+                            className="rounded-xl border border-slate-200 px-3 py-2"
+                          />
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="Δ себестоимость"
+                              value={option.costChange}
+                              onChange={(event) => handleModifierOptionChange(index, 'costChange', event.target.value)}
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                            />
+                            {modifierGroupForm.options.length > 1 ? (
+                              <button
+                                type="button"
+                                onClick={() => removeModifierOptionRow(index)}
+                                className="h-9 w-9 rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300"
+                                aria-label="Удалить опцию"
+                              >
+                                ✕
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="space-y-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-slate-800">Состав позиции</span>
+                            <span className="text-[11px] text-slate-500">Δ себестоимость: {option.costChange || '0'} ₽</span>
+                          </div>
+                          {baseIngredientsForCost.length ? (
+                            baseIngredientsForCost.map((ingredient) => {
+                              const deltaEntry = option.ingredientDeltas?.find((entry) => entry.ingredientId === ingredient.ingredientId);
+                              const deltaValue = deltaEntry?.delta ?? '';
+                              const estimatedCost = (Number(deltaValue) || 0) * (ingredient.costPerUnit ?? 0);
+                              return (
+                                <div key={`${ingredient.ingredientId}-${index}`} className="flex flex-wrap items-center gap-2 rounded-lg bg-white p-2">
+                                  <div className="min-w-[160px] flex-1">
+                                    <p className="text-xs font-semibold text-slate-800">{ingredient.name}</p>
+                                    <p className="text-[11px] text-slate-500">
+                                      Базово: {ingredient.quantity} {ingredient.unit} · {ingredient.costPerUnit ? `${ingredient.costPerUnit.toFixed(2)} ₽/${ingredient.unit}` : 'нет цены'}
+                                    </p>
+                                  </div>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={deltaValue}
+                                    onChange={(event) =>
+                                      handleModifierOptionIngredientDeltaChange(index, ingredient.ingredientId, event.target.value)
+                                    }
+                                    className="w-32 rounded-xl border border-slate-200 px-2 py-1"
+                                    placeholder="Изменение"
+                                  />
+                                  <span className="text-[11px] text-slate-500">≈ {estimatedCost.toFixed(2)} ₽</span>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <p className="text-[11px] text-slate-500">Добавьте ингредиенты к позиции, чтобы считать себестоимость автоматически.</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="submit" className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white">
+                      {selectedModifierGroup ? 'Сохранить изменения' : 'Создать группу'}
+                    </button>
+                    {selectedModifierGroup ? (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteModifierGroup(selectedModifierGroup._id)}
+                        className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
                       >
                         Удалить
                       </button>
-                    </div>
-                  ))}
+                    ) : null}
+                  </div>
+                </form>
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-semibold uppercase text-slate-400">Список групп</p>
+                  <div className="max-h-48 space-y-2 overflow-y-auto">
+                    {modifierGroups.length === 0 ? (
+                      <p className="text-xs text-slate-400">Пока ни одной группы не создано.</p>
+                    ) : null}
+                    {modifierGroups.map((group) => (
+                      <div
+                        key={group._id}
+                        className={`flex items-center justify-between rounded-xl border px-3 py-2 text-sm transition hover:border-emerald-300 ${
+                          selectedModifierGroup?._id === group._id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200'
+                        }`}
+                      >
+                        <div>
+                          <p className="font-semibold text-slate-800">{group.name}</p>
+                          <p className="text-[11px] uppercase text-slate-400">
+                            {group.selectionType === 'single' ? 'Один вариант' : 'Несколько вариантов'}
+                            {group.required ? ' · Обязательная' : ''}
+                          </p>
+                          <p className="text-[11px] text-slate-500">{group.options.length} опций · Сортировка {group.sortOrder ?? '—'}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSelectModifierGroup(group)}
+                            className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-600 shadow-inner hover:bg-emerald-50"
+                          >
+                            Редактировать
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteModifierGroup(group._id)}
+                            className="rounded-full px-3 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="md:col-span-2 flex items-center justify-between">
-                  <span className="text-xs text-slate-400">
-                    Себестоимость: {selectedProduct.costPrice !== undefined
-                      ? `${selectedProduct.costPrice.toFixed(2)} ₽`
-                      : '—'}
-                  </span>
-                  <button
-                    type="submit"
-                    className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    Сохранить изменения
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <p className="text-xs text-slate-400">Выберите позицию из списка, чтобы изменить описание, цену или состав.</p>
-            )}
-          </Card>
+              </Card>
+            ) : null}
+          </div>
         </div>
       ) : null}
-
       {activeTab === 'inventory' ? (
         <div className="space-y-6">
           <section className="grid gap-6 lg:grid-cols-3">
