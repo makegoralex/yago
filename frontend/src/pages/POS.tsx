@@ -554,7 +554,7 @@ const POSPage: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="hidden min-h-0 lg:flex lg:h-full lg:w-[360px] lg:flex-col lg:overflow-hidden">
+        <div className="hidden min-h-0 lg:flex lg:h-full lg:w-[360px] lg:flex-col lg:overflow-y-auto lg:pr-1">
           <OrderPanel
             items={items}
             subtotal={subtotal}
