@@ -72,7 +72,6 @@ const POSPage: React.FC = () => {
   const isClosingShift = useShiftStore((state) => state.closing);
 
   const { notify } = useToast();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isOrderDrawerOpen, setOrderDrawerOpen] = useState(false);
   const [isPaymentOpen, setPaymentOpen] = useState(false);
   const [isLoyaltyOpen, setLoyaltyOpen] = useState(false);
@@ -360,24 +359,21 @@ const POSPage: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col gap-3 bg-slate-100 px-3 py-3 pb-28 lg:px-4 lg:pb-5">
+    <div className="flex h-screen min-h-0 flex-col gap-3 overflow-hidden bg-slate-100 px-3 py-3 pb-28 lg:px-4 lg:pb-5">
       <HeaderBar
-        onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
-        isSidebarCollapsed={sidebarCollapsed}
         onShowHistory={() => setHistoryOpen(true)}
         onShowShift={() => setShiftPanelOpen(true)}
         shiftStatus={shiftStatus}
       />
-      <div className="flex flex-1 flex-col gap-3 lg:flex-row">
-        <div className={`lg:w-auto ${isTablet ? 'flex-shrink-0' : 'hidden lg:flex'}`}>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
+        <div className="custom-scrollbar hidden min-h-0 flex-shrink-0 lg:flex lg:h-full lg:w-auto lg:overflow-y-auto">
           <CategorySidebar
             categories={categories}
             activeCategoryId={activeCategoryId}
             onSelectCategory={(categoryId) => setActiveCategory(categoryId)}
-            collapsed={!isDesktop && (sidebarCollapsed || !isTablet)}
           />
         </div>
-        <div className="flex-1">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {shouldShowProductSearch ? (
             <div className="mb-3 flex flex-col gap-2">
               <ProductSearchBar
@@ -405,154 +401,156 @@ const POSPage: React.FC = () => {
               </div>
             )
           )}
-          <div className="mb-3 rounded-xl bg-white p-3 shadow-soft">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
-              <button
-                type="button"
-                onClick={() => void handleStartOrder()}
-                disabled={isStartingOrder}
-                className="w-full rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
-              >
-                {startOrderButtonLabel}
-              </button>
-            </div>
-          {activeOrders.length > 0 ? (
-            <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                {activeOrders.map((order) => {
-                  const isActive = orderId === order._id;
-                  const tagLabel = getOrderTagLabel(order.orderTag);
-                  return (
-                    <button
-                      type="button"
-                      key={order._id}
-                      onClick={() => void loadOrder(order._id)}
-                      className={`w-full rounded-lg border px-3 py-2.5 text-left text-sm transition ${
-                        isActive
-                          ? 'border-2 border-secondary/70 bg-secondary/10 text-secondary shadow-sm'
-                          : 'border-slate-100 bg-white text-slate-700 hover:border-secondary/50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-semibold text-slate-900">#{order._id.slice(-5)}</p>
-                        {tagLabel ? (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
-                            {tagLabel}
-                          </span>
-                        ) : null}
-                      </div>
-                      {order.status === 'paid' ? (
-                        <p className="text-xs uppercase text-slate-400">оплачен</p>
-                      ) : null}
-                      <p className="mt-2 text-base font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-slate-500">Нет активных заказов.</p>
-            )}
-          </div>
-          {loading ? (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div key={index} className="h-36 animate-pulse rounded-2xl bg-slate-200/70" />
-              ))}
-            </div>
-          ) : (
-            <div
-              className={`grid gap-3 ${
-                activeSection === 'products'
-                  ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4'
-                  : 'grid-cols-1'
-              }`}
-            >
-              {activeSection === 'products'
-                ? filteredProducts.map((product) => (
-                    <ProductCard
-                      key={product._id}
-                      product={product}
-                      onSelect={(selectedProduct) => handleAddProduct(selectedProduct)}
-                    />
-                  ))
-                : null}
-              {activeSection === 'customers' ? (
-                <div className="col-span-full rounded-2xl bg-white p-6 shadow-soft">
-                  <p className="text-lg font-semibold text-slate-900">Быстрые действия</p>
-                  <div className="mt-4 flex flex-col gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setLoyaltyOpen(true)}
-                      className="min-h-[56px] rounded-2xl bg-secondary text-base font-semibold text-white shadow-soft transition hover:bg-secondary/80"
-                    >
-                      Найти или добавить клиента
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleRemoveCustomer}
-                      className="min-h-[56px] rounded-2xl border border-slate-200 text-base font-semibold text-slate-600"
-                    >
-                      Очистить клиента
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              {activeSection === 'reports' ? (
-                <div className="col-span-full rounded-2xl bg-white p-6 shadow-soft">
-                  <p className="text-lg font-semibold text-slate-900">Активные заказы</p>
-                  {activeOrders.length === 0 ? (
-                    <p className="mt-2 text-sm text-slate-500">Нет активных заказов кассира.</p>
-                  ) : (
-                    <ul className="mt-3 space-y-3">
-                      {activeOrders.map((order) => {
-                        const tagLabel = getOrderTagLabel(order.orderTag);
-                        return (
-                          <li
-                            key={order._id}
-                            className="flex items-center justify-between rounded-2xl border border-slate-100 p-3"
-                          >
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="text-base font-semibold text-slate-900">Заказ #{order._id.slice(-5)}</p>
-                                {tagLabel ? (
-                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
-                                    {tagLabel}
-                                  </span>
-                                ) : null}
-                              </div>
-                              <p className="text-sm text-slate-500">
-                                {new Date(order.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
-                              <p className="text-xs uppercase text-slate-400">{order.status === 'draft' ? 'В работе' : 'Оплачен'}</p>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              ) : null}
-              {activeSection !== 'products' && !isTablet ? (
+        <div className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-3 overflow-y-auto pr-1">
+            <div className="rounded-xl bg-white p-3 shadow-soft">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
                 <button
                   type="button"
-                  onClick={() => setActiveSection('products')}
-                  className="col-span-full rounded-2xl border border-slate-200 py-4 text-sm font-semibold text-slate-600"
+                  onClick={() => void handleStartOrder()}
+                  disabled={isStartingOrder}
+                  className="w-full rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
                 >
-                  Вернуться к товарам
+                  {startOrderButtonLabel}
                 </button>
-              ) : null}
-              {filteredProducts.length === 0 && activeSection === 'products' ? (
-                <div className="col-span-full rounded-2xl bg-white p-6 text-center text-slate-400 shadow-soft">
-                  Нет товаров в категории
+              </div>
+              {activeOrders.length > 0 ? (
+                <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                  {activeOrders.map((order) => {
+                    const isActive = orderId === order._id;
+                    const tagLabel = getOrderTagLabel(order.orderTag);
+                    return (
+                      <button
+                        type="button"
+                        key={order._id}
+                        onClick={() => void loadOrder(order._id)}
+                        className={`w-full rounded-lg border px-3 py-2.5 text-left text-sm transition ${
+                          isActive
+                            ? 'border-2 border-secondary/70 bg-secondary/10 text-secondary shadow-sm'
+                            : 'border-slate-100 bg-white text-slate-700 hover:border-secondary/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-slate-900">#{order._id.slice(-5)}</p>
+                          {tagLabel ? (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
+                              {tagLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                        {order.status === 'paid' ? (
+                          <p className="text-xs uppercase text-slate-400">оплачен</p>
+                        ) : null}
+                        <p className="mt-2 text-base font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
+                      </button>
+                    );
+                  })}
                 </div>
-              ) : null}
+              ) : (
+                <p className="mt-2 text-sm text-slate-500">Нет активных заказов.</p>
+              )}
             </div>
-          )}
+            {loading ? (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div key={index} className="h-36 animate-pulse rounded-2xl bg-slate-200/70" />
+                ))}
+              </div>
+            ) : (
+              <div
+                className={`grid gap-3 ${
+                  activeSection === 'products'
+                    ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
+                    : 'grid-cols-1'
+                }`}
+              >
+                {activeSection === 'products'
+                  ? filteredProducts.map((product) => (
+                      <ProductCard
+                        key={product._id}
+                        product={product}
+                        onSelect={(selectedProduct) => handleAddProduct(selectedProduct)}
+                      />
+                    ))
+                  : null}
+                {activeSection === 'customers' ? (
+                  <div className="col-span-full rounded-2xl bg-white p-6 shadow-soft">
+                    <p className="text-lg font-semibold text-slate-900">Быстрые действия</p>
+                    <div className="mt-4 flex flex-col gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setLoyaltyOpen(true)}
+                        className="min-h-[56px] rounded-2xl bg-secondary text-base font-semibold text-white shadow-soft transition hover:bg-secondary/80"
+                      >
+                        Найти или добавить клиента
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemoveCustomer}
+                        className="min-h-[56px] rounded-2xl border border-slate-200 text-base font-semibold text-slate-600"
+                      >
+                        Очистить клиента
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {activeSection === 'reports' ? (
+                  <div className="col-span-full rounded-2xl bg-white p-6 shadow-soft">
+                    <p className="text-lg font-semibold text-slate-900">Активные заказы</p>
+                    {activeOrders.length === 0 ? (
+                      <p className="mt-2 text-sm text-slate-500">Нет активных заказов кассира.</p>
+                    ) : (
+                      <ul className="mt-3 space-y-3">
+                        {activeOrders.map((order) => {
+                          const tagLabel = getOrderTagLabel(order.orderTag);
+                          return (
+                            <li
+                              key={order._id}
+                              className="flex items-center justify-between rounded-2xl border border-slate-100 p-3"
+                            >
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-base font-semibold text-slate-900">Заказ #{order._id.slice(-5)}</p>
+                                  {tagLabel ? (
+                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
+                                      {tagLabel}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p className="text-sm text-slate-500">
+                                  {new Date(order.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
+                                <p className="text-xs uppercase text-slate-400">{order.status === 'draft' ? 'В работе' : 'Оплачен'}</p>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                ) : null}
+                {activeSection !== 'products' && !isTablet ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection('products')}
+                    className="col-span-full rounded-2xl border border-slate-200 py-4 text-sm font-semibold text-slate-600"
+                  >
+                    Вернуться к товарам
+                  </button>
+                ) : null}
+                {filteredProducts.length === 0 && activeSection === 'products' ? (
+                  <div className="col-span-full rounded-2xl bg-white p-6 text-center text-slate-400 shadow-soft">
+                    Нет товаров в категории
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="hidden lg:block lg:w-[360px]">
+        <div className="hidden min-h-0 lg:flex lg:h-full lg:min-w-[320px] lg:max-w-[360px] lg:w-[320px] xl:w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
           <OrderPanel
             items={items}
             subtotal={subtotal}
@@ -584,9 +582,7 @@ const POSPage: React.FC = () => {
               setRedeemOpen(true);
             }}
             onClearDiscount={() =>
-              void clearDiscount().catch(() =>
-                notify({ title: 'Не удалось сбросить скидку', type: 'error' })
-              )
+              void clearDiscount().catch(() => notify({ title: 'Не удалось сбросить скидку', type: 'error' }))
             }
             onCancel={() =>
               void cancelOrder()

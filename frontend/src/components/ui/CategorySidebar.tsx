@@ -16,7 +16,7 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
 }) => {
   return (
     <aside
-      className={`flex h-full flex-col gap-2 rounded-xl bg-white p-2 shadow-soft transition-all ${
+      className={`flex h-full min-h-0 flex-col gap-2 rounded-xl bg-white p-2 shadow-soft transition-all ${
         collapsed ? 'w-20' : 'w-56'
       }`}
     >
@@ -31,7 +31,7 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
       >
         {collapsed ? 'Все' : 'Все товары'}
       </button>
-      <div className="flex-1 space-y-1.5 overflow-y-auto pr-1">
+      <div className="custom-scrollbar flex-1 space-y-1.5 overflow-y-auto pr-1">
         {categories.map((category) => {
           const isActive = category._id === activeCategoryId;
           return (
