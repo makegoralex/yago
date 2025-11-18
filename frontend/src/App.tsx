@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import LoginPage from './pages/Login';
 import POSPage from './pages/POS';
@@ -7,9 +7,19 @@ import SettingsPage from './pages/Settings';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import { useAuthStore } from './store/auth';
 import MobileNav from './components/ui/MobileNav';
+import { useRestaurantStore } from './store/restaurant';
 
 const App: React.FC = () => {
   const { user } = useAuthStore();
+  const fetchBranding = useRestaurantStore((state) => state.fetchBranding);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    fetchBranding().catch((error) => console.error('Failed to sync restaurant branding', error));
+  }, [fetchBranding, user]);
 
   return (
     <>
