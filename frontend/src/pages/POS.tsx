@@ -405,7 +405,7 @@ const POSPage: React.FC = () => {
               </div>
             )
           )}
-          <div className="flex min-h-0 flex-1 flex-col space-y-3 overflow-y-auto pr-1">
+        <div className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-3 overflow-y-auto pr-1">
             <div className="rounded-xl bg-white p-3 shadow-soft">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
@@ -554,7 +554,7 @@ const POSPage: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="hidden min-h-0 lg:flex lg:min-w-[320px] lg:max-w-[360px] lg:w-[320px] xl:w-[360px] lg:flex-shrink-0 lg:flex-col lg:overflow-hidden lg:pr-1">
+        <div className="hidden min-h-0 lg:flex lg:h-full lg:min-w-[320px] lg:max-w-[360px] lg:w-[320px] xl:w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
           <OrderPanel
             items={items}
             subtotal={subtotal}

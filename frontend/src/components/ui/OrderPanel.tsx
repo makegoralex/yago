@@ -112,7 +112,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
 
   return (
     <aside
-      className={`flex h-full w-full min-h-0 flex-col overflow-hidden rounded-xl bg-white shadow-soft transition-transform lg:w-[360px] ${
+      className={`custom-scrollbar flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-xl bg-white shadow-soft transition-transform lg:w-[360px] ${
         visible ? 'translate-x-0' : 'translate-x-full'
       }`}
     >
@@ -250,7 +250,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           ) : null}
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4">
+      <div className="flex-1 px-4">
         {!hasItems ? (
           <div className="flex h-full items-center justify-center text-center text-sm text-slate-400">
             Добавьте товары из каталога
