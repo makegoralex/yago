@@ -751,9 +751,12 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       const response = await api.post(`/api/orders/${orderId}/items`, payload);
       const nextState = buildOrderState(response.data.data);
       const selectedDiscountIds = extractSelectedDiscountIds(nextState.appliedDiscounts ?? []);
+      const resolvedItems =
+        (nextState.items && nextState.items.length > 0 ? nextState.items : updatedItems) ?? [];
       set((prev) => ({
         ...prev,
         ...nextState,
+        items: resolvedItems,
         selectedDiscountIds,
       }));
       void get().fetchActiveOrders();
