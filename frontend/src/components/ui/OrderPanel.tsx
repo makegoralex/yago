@@ -112,7 +112,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
 
   return (
     <aside
-      className={`flex h-full w-full min-h-0 flex-col rounded-xl bg-white shadow-soft transition-transform lg:w-[360px] ${
+      className={`flex h-full w-full min-h-0 flex-col overflow-hidden rounded-xl bg-white shadow-soft transition-transform lg:w-[360px] ${
         visible ? 'translate-x-0' : 'translate-x-full'
       }`}
     >

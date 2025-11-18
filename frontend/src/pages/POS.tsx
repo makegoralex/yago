@@ -554,61 +554,63 @@ const POSPage: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="hidden min-h-0 lg:flex lg:h-full lg:w-[360px] lg:flex-col lg:overflow-y-auto lg:pr-1">
-          <OrderPanel
-            items={items}
-            subtotal={subtotal}
-            discount={discount}
-            total={total}
-            status={status}
-            isCompleting={isCompleting}
-            onIncrement={(lineId) =>
-              void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) + 1)
-            }
-            onDecrement={(lineId) =>
-              void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) - 1)
-            }
-            onRemove={(lineId) => void removeItem(lineId)}
-            onPay={(method) => openPaymentModal(method)}
-            onAddCustomer={() => setLoyaltyOpen(true)}
-            onClearCustomer={handleRemoveCustomer}
-            isProcessing={isPaying}
-            earnedPoints={earnedPoints}
-            customer={customer}
-            orderTagsEnabled={orderTagsEnabled}
-            orderTag={orderTag}
-            onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
-            onRedeemLoyalty={() => {
-              if (!customer || customer.points <= 0) {
-                notify({ title: 'Нет доступных баллов', type: 'info' });
-                return;
+        <div className="hidden min-h-0 lg:flex lg:w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <OrderPanel
+              items={items}
+              subtotal={subtotal}
+              discount={discount}
+              total={total}
+              status={status}
+              isCompleting={isCompleting}
+              onIncrement={(lineId) =>
+                void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) + 1)
               }
-              setRedeemOpen(true);
-            }}
-            onClearDiscount={() =>
-              void clearDiscount().catch(() =>
-                notify({ title: 'Не удалось сбросить скидку', type: 'error' })
-              )
-            }
-            onCancel={() =>
-              void cancelOrder()
-                .then(() => {
-                  setOrderDrawerOpen(false);
-                  notify({ title: 'Заказ отменён', type: 'info' });
-                })
-                .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
-            }
-            onComplete={() => void handleCompleteCurrentOrder()}
-            availableDiscounts={availableDiscounts}
-            appliedDiscounts={appliedDiscounts}
-            selectedDiscountIds={selectedDiscountIds}
-            onToggleDiscount={(discountId) =>
-              void toggleDiscount(discountId).catch(() =>
-                notify({ title: 'Не удалось применить скидку', type: 'error' })
-              )
-            }
-            visible
-          />
+              onDecrement={(lineId) =>
+                void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) - 1)
+              }
+              onRemove={(lineId) => void removeItem(lineId)}
+              onPay={(method) => openPaymentModal(method)}
+              onAddCustomer={() => setLoyaltyOpen(true)}
+              onClearCustomer={handleRemoveCustomer}
+              isProcessing={isPaying}
+              earnedPoints={earnedPoints}
+              customer={customer}
+              orderTagsEnabled={orderTagsEnabled}
+              orderTag={orderTag}
+              onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
+              onRedeemLoyalty={() => {
+                if (!customer || customer.points <= 0) {
+                  notify({ title: 'Нет доступных баллов', type: 'info' });
+                  return;
+                }
+                setRedeemOpen(true);
+              }}
+              onClearDiscount={() =>
+                void clearDiscount().catch(() =>
+                  notify({ title: 'Не удалось сбросить скидку', type: 'error' })
+                )
+              }
+              onCancel={() =>
+                void cancelOrder()
+                  .then(() => {
+                    setOrderDrawerOpen(false);
+                    notify({ title: 'Заказ отменён', type: 'info' });
+                  })
+                  .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
+              }
+              onComplete={() => void handleCompleteCurrentOrder()}
+              availableDiscounts={availableDiscounts}
+              appliedDiscounts={appliedDiscounts}
+              selectedDiscountIds={selectedDiscountIds}
+              onToggleDiscount={(discountId) =>
+                void toggleDiscount(discountId).catch(() =>
+                  notify({ title: 'Не удалось применить скидку', type: 'error' })
+                )
+              }
+              visible
+            />
+          </div>
         </div>
       </div>
       <PaymentModal
