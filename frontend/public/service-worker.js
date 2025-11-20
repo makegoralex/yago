@@ -39,13 +39,24 @@ self.addEventListener('fetch', (event) => {
           if (cached) {
             return cached;
           }
-          throw error;
+          return new Response('Offline', { status: 503 });
         }
       })
     );
   } else {
     event.respondWith(
-      caches.match(request).then((cached) => cached || fetch(request))
+      (async () => {
+        const cached = await caches.match(request);
+        if (cached) {
+          return cached;
+        }
+
+        try {
+          return await fetch(request);
+        } catch (error) {
+          return new Response('Offline', { status: 503 });
+        }
+      })()
     );
   }
 });
