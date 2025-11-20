@@ -14,6 +14,7 @@ export interface ModifierGroup {
   required: boolean;
   sortOrder?: number;
   options: ModifierOption[];
+  organizationId?: Schema.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +33,12 @@ const modifierOptionSchema = new Schema<ModifierOption>(
 const modifierGroupSchema = new Schema<ModifierGroupDocument>(
   {
     name: { type: String, required: true, trim: true },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: false,
+      index: true,
+    },
     selectionType: { type: String, enum: ['single', 'multiple'], required: true, default: 'single' },
     required: { type: Boolean, required: true, default: false },
     sortOrder: { type: Number, required: false },

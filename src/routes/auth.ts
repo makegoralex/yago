@@ -26,7 +26,7 @@ const resolveUserId = (user: { id?: string; _id?: unknown } | { id?: string } | 
 
 authRouter.post('/register', async (req: Request, res: Response) => {
   try {
-    const { name, email, password, role } = req.body ?? {};
+    const { name, email, password, role, organizationId } = req.body ?? {};
 
     const allowedRoles: UserRole[] = ['admin', 'manager', 'cashier', 'barista'];
     const normalizedRole =
@@ -46,6 +46,7 @@ authRouter.post('/register', async (req: Request, res: Response) => {
       name,
       email,
       password,
+      organizationId,
       role: normalizedRole,
     });
 
@@ -56,6 +57,7 @@ authRouter.post('/register', async (req: Request, res: Response) => {
           name: user.name,
           email: user.email,
           role: user.role,
+          organizationId: user.organizationId ? String(user.organizationId) : undefined,
         },
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
@@ -71,14 +73,14 @@ authRouter.post('/register', async (req: Request, res: Response) => {
 
 authRouter.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body ?? {};
+    const { email, password, organizationId } = req.body ?? {};
 
     if (!email || !password) {
       res.status(400).json({ data: null, error: 'email and password are required' });
       return;
     }
 
-    const { user, tokens } = await authenticateUser(email, password);
+    const { user, tokens } = await authenticateUser(email, password, organizationId);
 
     res.json({
       data: {
@@ -87,6 +89,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
           name: user.name,
           email: user.email,
           role: user.role,
+          organizationId: user.organizationId ? String(user.organizationId) : undefined,
         },
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
