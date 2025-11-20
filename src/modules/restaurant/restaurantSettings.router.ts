@@ -31,13 +31,14 @@ router.put(
   '/branding',
   requireRole('admin'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { name, logoUrl, enableOrderTags, measurementUnits } = req.body ?? {};
+    const { name, logoUrl, enableOrderTags, measurementUnits, loyaltyRate } = req.body ?? {};
 
     const branding = await updateRestaurantBranding({
       name: typeof name === 'string' ? name : undefined,
       logoUrl: typeof logoUrl === 'string' ? logoUrl : undefined,
       enableOrderTags: typeof enableOrderTags === 'boolean' ? enableOrderTags : undefined,
       measurementUnits: Array.isArray(measurementUnits) ? measurementUnits : undefined,
+      loyaltyRate: typeof loyaltyRate === 'number' ? loyaltyRate : undefined,
     });
 
     res.json({ data: { branding }, error: null });
@@ -47,7 +48,7 @@ router.put(
 router.patch('/branding', requireRole('admin'), asyncHandler(updateRestaurantBrandingHandler));
 
 async function updateRestaurantBrandingHandler(req: Request, res: Response): Promise<void> {
-  const { name, logoUrl, enableOrderTags, measurementUnits, reset } = req.body ?? {};
+  const { name, logoUrl, enableOrderTags, measurementUnits, loyaltyRate, reset } = req.body ?? {};
 
   if (reset === true) {
     const branding = await resetRestaurantBranding();
@@ -60,6 +61,7 @@ async function updateRestaurantBrandingHandler(req: Request, res: Response): Pro
     logoUrl: typeof logoUrl === 'string' ? logoUrl : undefined,
     enableOrderTags: typeof enableOrderTags === 'boolean' ? enableOrderTags : undefined,
     measurementUnits: Array.isArray(measurementUnits) ? measurementUnits : undefined,
+    loyaltyRate: typeof loyaltyRate === 'number' ? loyaltyRate : undefined,
   });
 
   res.json({ data: { branding }, error: null });

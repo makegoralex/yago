@@ -6,6 +6,7 @@ export interface IRestaurantSettings extends Document {
   logoUrl?: string;
   enableOrderTags: boolean;
   measurementUnits: string[];
+  loyaltyRate: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,6 +38,12 @@ const restaurantSettingsSchema = new Schema<IRestaurantSettings>(
     measurementUnits: {
       type: [String],
       default: ['гр', 'кг', 'мл', 'л', 'шт'],
+    },
+    loyaltyRate: {
+      type: Number,
+      default: 5,
+      min: 0,
+      max: 100,
     },
   },
   { timestamps: true }

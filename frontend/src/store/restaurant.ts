@@ -10,6 +10,7 @@ export type RestaurantBranding = {
 
 type RestaurantPreferences = RestaurantBranding & {
   enableOrderTags: boolean;
+  loyaltyRate: number;
 };
 
 type RestaurantState = RestaurantPreferences & {
@@ -26,6 +27,7 @@ const defaultBranding: RestaurantPreferences = {
   logoUrl: '',
   measurementUnits: ['гр', 'кг', 'мл', 'л', 'шт'],
   enableOrderTags: false,
+  loyaltyRate: 5,
 };
 
 const isBrowser = typeof window !== 'undefined';
@@ -63,6 +65,10 @@ const normalizeBranding = (payload: unknown): RestaurantPreferences => {
       source && typeof source === 'object' && typeof (source as any).enableOrderTags === 'boolean'
         ? (source as any).enableOrderTags
         : defaultBranding.enableOrderTags,
+    loyaltyRate:
+      source && typeof source === 'object' && typeof (source as any).loyaltyRate === 'number'
+        ? Math.min(Math.max((source as any).loyaltyRate, 0), 100)
+        : defaultBranding.loyaltyRate,
   };
 };
 
@@ -84,6 +90,10 @@ const mergeBranding = (
       : current.measurementUnits,
   enableOrderTags:
     typeof payload?.enableOrderTags === 'boolean' ? payload.enableOrderTags : current.enableOrderTags,
+  loyaltyRate:
+    typeof payload?.loyaltyRate === 'number'
+      ? Math.min(Math.max(Number(payload.loyaltyRate.toFixed(2)), 0), 100)
+      : current.loyaltyRate,
 });
 
 const loadBranding = (): RestaurantPreferences => {
@@ -145,6 +155,7 @@ export const useRestaurantStore = create<RestaurantState>((set, get) => ({
       logoUrl: get().logoUrl,
       measurementUnits: get().measurementUnits,
       enableOrderTags: get().enableOrderTags,
+      loyaltyRate: get().loyaltyRate,
     };
 
     const merged = mergeBranding(current, payload);
