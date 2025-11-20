@@ -6,6 +6,7 @@ import { CategoryModel, ProductModel, type ProductIngredient } from './catalog.m
 import { IngredientModel } from './ingredient.model';
 import { ModifierGroupModel, type ModifierOption } from './modifierGroup.model';
 import { recalculateProductCost, recalculateProductsForIngredient } from './productCost.service';
+import { canConvertUnit } from './unitConversion';
 
 const router = Router();
 
@@ -36,17 +37,18 @@ const normalizeIngredients = async (
     return [];
   }
 
-  const normalized: ProductIngredient[] = [];
   const ingredientIds = new Set<string>();
+  const collected: Array<{ ingredientId: string; quantity: number; unit?: string }> = [];
 
   for (const entry of ingredients) {
     if (!entry || typeof entry !== 'object') {
       throw new Error('Invalid ingredient entry');
     }
 
-    const { ingredientId, quantity } = entry as {
+    const { ingredientId, quantity, unit } = entry as {
       ingredientId?: string;
       quantity?: number;
+      unit?: string;
     };
 
     if (!ingredientId || !isValidObjectId(ingredientId)) {
@@ -61,15 +63,39 @@ const normalizeIngredients = async (
       throw new Error('Ingredient quantity must be a positive number');
     }
 
-    const exists = await IngredientModel.exists({ _id: ingredientId });
+    ingredientIds.add(ingredientId);
+    collected.push({ ingredientId, quantity, unit: typeof unit === 'string' ? unit.trim() : undefined });
+  }
 
-    if (!exists) {
-      throw new Error('Ingredient not found');
+  const ingredientsData = await IngredientModel.find({ _id: { $in: Array.from(ingredientIds) } })
+    .select('_id unit')
+    .lean();
+
+  if (ingredientsData.length !== ingredientIds.size) {
+    throw new Error('Ingredient not found');
+  }
+
+  const ingredientUnitMap = new Map(ingredientsData.map((entry) => [entry._id.toString(), entry.unit]));
+
+  const normalized: ProductIngredient[] = collected.map(({ ingredientId, quantity, unit }) => {
+    const ingredientUnit = ingredientUnitMap.get(ingredientId);
+
+    if (!ingredientUnit) {
+      throw new Error('Ingredient unit is missing');
     }
 
-    ingredientIds.add(ingredientId);
-    normalized.push({ ingredientId: new Types.ObjectId(ingredientId), quantity });
-  }
+    const effectiveUnit = unit?.trim() || ingredientUnit;
+
+    if (!canConvertUnit(effectiveUnit, ingredientUnit)) {
+      throw new Error('Ingredient unit is not compatible');
+    }
+
+    return {
+      ingredientId: new Types.ObjectId(ingredientId),
+      quantity,
+      unit: effectiveUnit,
+    };
+  });
 
   return normalized;
 };

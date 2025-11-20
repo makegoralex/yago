@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { InventoryItemModel } from '../inventory/inventoryItem.model';
 import { IngredientModel } from './ingredient.model';
 import { ProductModel } from './catalog.model';
+import { convertQuantity } from './unitConversion';
 
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 
@@ -62,7 +63,9 @@ const sumIngredientsCost = async (
   }
 
   const ingredientIds = ingredientRefs.map((entry) => entry.ingredientId);
-  const ingredients = await IngredientModel.find({ _id: { $in: ingredientIds } }).lean();
+  const ingredients = await IngredientModel.find({ _id: { $in: ingredientIds } })
+    .select('_id costPerUnit unit')
+    .lean();
 
   if (!ingredients.length) {
     return 0;
@@ -71,10 +74,14 @@ const sumIngredientsCost = async (
   const ingredientCostMap = new Map(
     ingredients.map((ingredient) => [ingredient._id.toString(), ingredient.costPerUnit ?? 0])
   );
+  const ingredientUnitMap = new Map(ingredients.map((ingredient) => [ingredient._id.toString(), ingredient.unit]));
 
   const cost = ingredientRefs.reduce((acc, entry) => {
     const unitCost = ingredientCostMap.get(entry.ingredientId.toString()) ?? 0;
-    return acc + unitCost * entry.quantity;
+    const ingredientUnit = ingredientUnitMap.get(entry.ingredientId.toString());
+    const normalizedQuantity = convertQuantity(entry.quantity, entry.unit, ingredientUnit);
+
+    return acc + unitCost * normalizedQuantity;
   }, 0);
 
   return roundCurrency(cost);
@@ -98,6 +105,7 @@ export const recalculateProductCost = async (
     ? product.ingredients.map((entry) => ({
         ingredientId: new Types.ObjectId(entry.ingredientId),
         quantity: entry.quantity,
+        unit: entry.unit,
       }))
     : [];
 
