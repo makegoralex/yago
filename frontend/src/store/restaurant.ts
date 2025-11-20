@@ -48,7 +48,7 @@ const normalizeBranding = (payload: unknown): RestaurantPreferences => {
     measurementUnits:
       source && typeof source === 'object' && Array.isArray((source as any).measurementUnits)
         ? (() => {
-            const normalizedUnits = Array.from(
+            const normalizedUnits: string[] = Array.from(
               new Set(
                 (source as any).measurementUnits
                   .map((unit: unknown) => (typeof unit === 'string' ? unit.trim() : ''))
