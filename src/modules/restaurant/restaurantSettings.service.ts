@@ -66,53 +66,40 @@ export const getRestaurantBranding = async (): Promise<RestaurantBranding> => {
 };
 
 export const updateRestaurantBranding = async (payload: Partial<RestaurantBranding>): Promise<RestaurantBranding> => {
-  const updatePayload: Partial<RestaurantBranding> = {};
+  const existing = await RestaurantSettingsModel.findOne({ singletonKey: 'singleton' });
+  const brandingDoc = existing ?? new RestaurantSettingsModel({ ...DEFAULT_BRANDING, singletonKey: 'singleton' });
 
-  if (payload.name !== undefined) {
+  if (!brandingDoc.singletonKey) {
+    brandingDoc.singletonKey = 'singleton';
+  }
+
+  if (typeof payload.name === 'string') {
     const name = payload.name.trim();
-    updatePayload.name = name || DEFAULT_BRANDING.name;
+    brandingDoc.name = name || DEFAULT_BRANDING.name;
   }
 
-  if (payload.logoUrl !== undefined) {
-    updatePayload.logoUrl = payload.logoUrl.trim();
+  if (typeof payload.logoUrl === 'string') {
+    brandingDoc.logoUrl = payload.logoUrl.trim();
   }
 
-  if (payload.enableOrderTags !== undefined) {
-    updatePayload.enableOrderTags = Boolean(payload.enableOrderTags);
+  if (typeof payload.enableOrderTags === 'boolean') {
+    brandingDoc.enableOrderTags = Boolean(payload.enableOrderTags);
   }
 
-  if (payload.measurementUnits !== undefined) {
-    const normalizedUnits = Array.isArray(payload.measurementUnits)
-      ? Array.from(
-          new Set(
-            payload.measurementUnits
-              .map((unit) => (typeof unit === 'string' ? unit.trim() : ''))
-              .filter((unit) => unit.length > 0)
-          )
-        )
-      : DEFAULT_BRANDING.measurementUnits;
+  if (Array.isArray(payload.measurementUnits)) {
+    const normalizedUnits = Array.from(
+      new Set(payload.measurementUnits.map((unit) => (typeof unit === 'string' ? unit.trim() : '')).filter((unit) => unit.length > 0))
+    );
 
-    updatePayload.measurementUnits = normalizedUnits.length > 0 ? normalizedUnits : DEFAULT_BRANDING.measurementUnits;
+    brandingDoc.measurementUnits = normalizedUnits.length > 0 ? normalizedUnits : DEFAULT_BRANDING.measurementUnits;
   }
 
-  if (payload.loyaltyRate !== undefined) {
-    updatePayload.loyaltyRate = clampLoyaltyRate(payload.loyaltyRate);
+  if (typeof payload.loyaltyRate === 'number') {
+    brandingDoc.loyaltyRate = clampLoyaltyRate(payload.loyaltyRate);
   }
 
-  const updated = await RestaurantSettingsModel.findOneAndUpdate(
-    { singletonKey: 'singleton' },
-    {
-      $setOnInsert: { ...DEFAULT_BRANDING, singletonKey: 'singleton' },
-      ...(Object.keys(updatePayload).length ? { $set: updatePayload } : {}),
-    },
-    {
-      new: true,
-      upsert: true,
-      setDefaultsOnInsert: true,
-    }
-  );
-
-  return normalizeBranding(updated);
+  const saved = await brandingDoc.save();
+  return normalizeBranding(saved);
 };
 
 export const resetRestaurantBranding = async (): Promise<RestaurantBranding> => {
