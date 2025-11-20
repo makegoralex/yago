@@ -5,6 +5,7 @@ import api from '../lib/api';
 export type RestaurantBranding = {
   name: string;
   logoUrl: string;
+  measurementUnits: string[];
 };
 
 type RestaurantPreferences = RestaurantBranding & {
@@ -23,6 +24,7 @@ const STORAGE_KEY = 'yago-restaurant-branding';
 const defaultBranding: RestaurantPreferences = {
   name: 'Yago Coffee',
   logoUrl: '',
+  measurementUnits: ['гр', 'кг', 'мл', 'л', 'шт'],
   enableOrderTags: false,
 };
 
@@ -43,6 +45,20 @@ const normalizeBranding = (payload: unknown): RestaurantPreferences => {
       source && typeof source === 'object' && typeof (source as any).logoUrl === 'string'
         ? (source as any).logoUrl
         : defaultBranding.logoUrl,
+    measurementUnits:
+      source && typeof source === 'object' && Array.isArray((source as any).measurementUnits)
+        ? (() => {
+            const normalizedUnits = Array.from(
+              new Set(
+                (source as any).measurementUnits
+                  .map((unit: unknown) => (typeof unit === 'string' ? unit.trim() : ''))
+                  .filter((unit: string) => unit.length > 0)
+              )
+            );
+
+            return normalizedUnits.length > 0 ? normalizedUnits : defaultBranding.measurementUnits;
+          })()
+        : defaultBranding.measurementUnits,
     enableOrderTags:
       source && typeof source === 'object' && typeof (source as any).enableOrderTags === 'boolean'
         ? (source as any).enableOrderTags
@@ -57,6 +73,15 @@ const mergeBranding = (
   name:
     typeof payload?.name === 'string' && payload.name.trim() ? payload.name.trim() : current.name,
   logoUrl: typeof payload?.logoUrl === 'string' ? payload.logoUrl : current.logoUrl,
+  measurementUnits:
+    Array.isArray(payload?.measurementUnits)
+      ? (() => {
+          const normalized = Array.from(
+            new Set(payload?.measurementUnits?.map((unit) => unit.trim()).filter((unit) => unit.length > 0))
+          );
+          return normalized.length > 0 ? normalized : defaultBranding.measurementUnits;
+        })()
+      : current.measurementUnits,
   enableOrderTags:
     typeof payload?.enableOrderTags === 'boolean' ? payload.enableOrderTags : current.enableOrderTags,
 });
@@ -118,6 +143,7 @@ export const useRestaurantStore = create<RestaurantState>((set, get) => ({
     const current: RestaurantPreferences = {
       name: get().name,
       logoUrl: get().logoUrl,
+      measurementUnits: get().measurementUnits,
       enableOrderTags: get().enableOrderTags,
     };
 

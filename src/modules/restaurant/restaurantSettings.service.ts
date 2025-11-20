@@ -4,12 +4,14 @@ export type RestaurantBranding = {
   name: string;
   logoUrl: string;
   enableOrderTags: boolean;
+  measurementUnits: string[];
 };
 
 const DEFAULT_BRANDING: RestaurantBranding = {
   name: 'Yago Coffee',
   logoUrl: '',
   enableOrderTags: false,
+  measurementUnits: ['гр', 'кг', 'мл', 'л', 'шт'],
 };
 
 const normalizeBranding = (branding: Partial<RestaurantBranding> | IRestaurantSettings | null | undefined): RestaurantBranding => ({
@@ -27,6 +29,20 @@ const normalizeBranding = (branding: Partial<RestaurantBranding> | IRestaurantSe
         ? (branding as any).enableOrderTags
         : DEFAULT_BRANDING.enableOrderTags
     ),
+  measurementUnits:
+    branding && typeof branding === 'object' && Array.isArray((branding as any).measurementUnits)
+      ? (() => {
+          const normalizedUnits: string[] = Array.from(
+            new Set(
+              (branding as any).measurementUnits
+                .map((unit: unknown) => (typeof unit === 'string' ? unit.trim() : ''))
+                .filter((unit: string): unit is string => unit.length > 0)
+            )
+          );
+
+          return normalizedUnits.length > 0 ? normalizedUnits : DEFAULT_BRANDING.measurementUnits;
+        })()
+      : DEFAULT_BRANDING.measurementUnits,
 });
 
 export const getRestaurantBranding = async (): Promise<RestaurantBranding> => {
@@ -53,6 +69,20 @@ export const updateRestaurantBranding = async (payload: Partial<RestaurantBrandi
 
   if (payload.enableOrderTags !== undefined) {
     updatePayload.enableOrderTags = Boolean(payload.enableOrderTags);
+  }
+
+  if (payload.measurementUnits !== undefined) {
+    const normalizedUnits = Array.isArray(payload.measurementUnits)
+      ? Array.from(
+          new Set(
+            payload.measurementUnits
+              .map((unit) => (typeof unit === 'string' ? unit.trim() : ''))
+              .filter((unit) => unit.length > 0)
+          )
+        )
+      : DEFAULT_BRANDING.measurementUnits;
+
+    updatePayload.measurementUnits = normalizedUnits.length > 0 ? normalizedUnits : DEFAULT_BRANDING.measurementUnits;
   }
 
   const updated = await RestaurantSettingsModel.findOneAndUpdate(
