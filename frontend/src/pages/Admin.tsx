@@ -5625,11 +5625,11 @@ const Card: React.FC<
   </section>
 );
 
- const SummaryCard: React.FC<{ title: string; value: string }> = ({ title, value }) => (
+const SummaryCard: React.FC<{ title: string; value: string }> = ({ title, value }) => (
   <div className="rounded-3xl bg-white p-6 shadow-soft">
     <p className="text-sm text-slate-500">{title}</p>
     <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
   </div>
- );
+);
 
- export default AdminPage;
+export default AdminPage;
