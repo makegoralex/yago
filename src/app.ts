@@ -25,6 +25,23 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const frontendPublicPath = path.resolve(__dirname, '..', 'frontend', 'public');
+if (fs.existsSync(frontendPublicPath)) {
+  app.use(
+    express.static(frontendPublicPath, {
+      setHeaders: (res, filePath): void => {
+        if (path.basename(filePath) === 'service-worker.js') {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
+      },
+    })
+  );
+
+  app.get('/service-worker.js', (_req, res) => {
+    res.sendFile(path.join(frontendPublicPath, 'service-worker.js'));
+  });
+}
+
 const posDiscountRouter = createPosDiscountRouter();
 
 app.get('/', (_req, res) => {
