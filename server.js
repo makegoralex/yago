@@ -264,6 +264,7 @@ const renderLandingPage = () => `
   `;
 
 app.get("/", (_req, res) => {
+  res.set("Cache-Control", "no-store, max-age=0");
   res.type("html").send(renderLandingPage());
 });
 
