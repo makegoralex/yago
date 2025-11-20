@@ -6,6 +6,7 @@ import {
   resetRestaurantBranding,
   updateRestaurantBranding,
   restaurantBrandingDefaults,
+  type RestaurantBranding,
 } from './restaurantSettings.service';
 
 const router = Router();
@@ -17,6 +18,24 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
     Promise.resolve(handler(req, res, next)).catch(next);
   };
 };
+
+function extractBrandingUpdatePayload(body: unknown): Partial<RestaurantBranding> | null {
+  if (!body || typeof body !== 'object') {
+    return null;
+  }
+
+  const { name, logoUrl, enableOrderTags, measurementUnits, loyaltyRate } = body as Record<string, unknown>;
+
+  const updatePayload: Partial<RestaurantBranding> = {
+    name: typeof name === 'string' ? name : undefined,
+    logoUrl: typeof logoUrl === 'string' ? logoUrl : undefined,
+    enableOrderTags: typeof enableOrderTags === 'boolean' ? enableOrderTags : undefined,
+    measurementUnits: Array.isArray(measurementUnits) ? measurementUnits : undefined,
+    loyaltyRate: typeof loyaltyRate === 'number' ? loyaltyRate : undefined,
+  };
+
+  return Object.values(updatePayload).every((value) => value === undefined) ? null : updatePayload;
+}
 
 router.get(
   '/branding',
@@ -31,15 +50,14 @@ router.put(
   '/branding',
   requireRole('admin'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { name, logoUrl, enableOrderTags, measurementUnits, loyaltyRate } = req.body ?? {};
+    const updatePayload = extractBrandingUpdatePayload(req.body);
 
-    const branding = await updateRestaurantBranding({
-      name: typeof name === 'string' ? name : undefined,
-      logoUrl: typeof logoUrl === 'string' ? logoUrl : undefined,
-      enableOrderTags: typeof enableOrderTags === 'boolean' ? enableOrderTags : undefined,
-      measurementUnits: Array.isArray(measurementUnits) ? measurementUnits : undefined,
-      loyaltyRate: typeof loyaltyRate === 'number' ? loyaltyRate : undefined,
-    });
+    if (!updatePayload) {
+      res.status(400).json({ data: null, error: 'Не переданы валидные данные брендинга' });
+      return;
+    }
+
+    const branding = await updateRestaurantBranding(updatePayload);
 
     res.json({ data: { branding }, error: null });
   })
@@ -56,13 +74,20 @@ async function updateRestaurantBrandingHandler(req: Request, res: Response): Pro
     return;
   }
 
-  const branding = await updateRestaurantBranding({
-    name: typeof name === 'string' ? name : undefined,
-    logoUrl: typeof logoUrl === 'string' ? logoUrl : undefined,
-    enableOrderTags: typeof enableOrderTags === 'boolean' ? enableOrderTags : undefined,
-    measurementUnits: Array.isArray(measurementUnits) ? measurementUnits : undefined,
-    loyaltyRate: typeof loyaltyRate === 'number' ? loyaltyRate : undefined,
+  const updatePayload = extractBrandingUpdatePayload({
+    name,
+    logoUrl,
+    enableOrderTags,
+    measurementUnits,
+    loyaltyRate,
   });
+
+  if (!updatePayload) {
+    res.status(400).json({ data: null, error: 'Не переданы валидные данные брендинга' });
+    return;
+  }
+
+  const branding = await updateRestaurantBranding(updatePayload);
 
   res.json({ data: { branding }, error: null });
 }
@@ -83,5 +108,4 @@ router.get(
     res.json({ data: { branding: restaurantBrandingDefaults }, error: null });
   })
 );
-
 export default router;
