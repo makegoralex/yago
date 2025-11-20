@@ -1461,6 +1461,24 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const handleDeleteProduct = async (productId: string) => {
+    if (!productId) return;
+    if (!window.confirm('Удалить позицию? Действие нельзя отменить.')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/api/catalog/products/${productId}`);
+      notify({ title: 'Позиция удалена', type: 'success' });
+      if (selectedProduct?._id === productId) {
+        setSelectedProduct(null);
+      }
+      await loadMenuData();
+    } catch (error) {
+      notify({ title: 'Не удалось удалить позицию', type: 'error' });
+    }
+  };
+
   const handleSelectIngredient = (ingredient: Ingredient) => {
     setSelectedIngredient(ingredient);
     setIngredientEditForm({
@@ -1502,6 +1520,25 @@ const AdminPage: React.FC = () => {
       await loadInventoryData();
     } catch (error) {
       notify({ title: 'Не удалось обновить ингредиент', type: 'error' });
+    }
+  };
+
+  const handleDeleteIngredient = async (ingredientId: string) => {
+    if (!ingredientId) return;
+    if (!window.confirm('Удалить ингредиент? Он пропадёт из рецептур и складов.')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/api/catalog/ingredients/${ingredientId}`);
+      notify({ title: 'Ингредиент удалён', type: 'success' });
+      if (selectedIngredient?._id === ingredientId) {
+        setSelectedIngredient(null);
+      }
+      await loadMenuData();
+      await loadInventoryData();
+    } catch (error) {
+      notify({ title: 'Не удалось удалить ингредиент', type: 'error' });
     }
   };
 
@@ -1681,6 +1718,25 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const handleDeleteWarehouse = async (warehouseId: string) => {
+    if (!warehouseId) return;
+    if (!window.confirm('Удалить склад и все связанные остатки?')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/api/inventory/warehouses/${warehouseId}`);
+      notify({ title: 'Склад удалён', type: 'success' });
+      if (selectedWarehouse?._id === warehouseId) {
+        setSelectedWarehouse(null);
+        setWarehouseEditForm({ name: '', location: '', description: '' });
+      }
+      void loadInventoryData();
+    } catch (error) {
+      notify({ title: 'Не удалось удалить склад', type: 'error' });
+    }
+  };
+
   const handleReceiptItemChange = (
     index: number,
     field: 'itemType' | 'itemId' | 'quantity' | 'unitCost',
@@ -1774,6 +1830,21 @@ const AdminPage: React.FC = () => {
       await loadMenuData();
     } catch (error) {
       notify({ title: 'Не удалось сохранить поставку', type: 'error' });
+    }
+  };
+
+  const handleDeleteCashier = async (cashierId: string) => {
+    if (!cashierId) return;
+    if (!window.confirm('Удалить сотрудника? Доступ к системе будет отозван.')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/api/admin/cashiers/${cashierId}`);
+      notify({ title: 'Сотрудник удалён', type: 'success' });
+      setCashiers((prev) => prev.filter((cashier) => cashier.id !== cashierId));
+    } catch (error) {
+      notify({ title: 'Не удалось удалить сотрудника', type: 'error' });
     }
   };
 
@@ -2700,6 +2771,13 @@ const AdminPage: React.FC = () => {
                                     >
                                       Сбросить скидку
                                     </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteProduct(product._id)}
+                                      className="rounded-full px-3 py-1 font-semibold text-red-600 transition hover:bg-red-50"
+                                    >
+                                      Удалить
+                                    </button>
                                   </div>
                                 </td>
                               </tr>
@@ -3020,9 +3098,21 @@ const AdminPage: React.FC = () => {
                               rows={3}
                             />
                           </div>
-                          <button type="submit" className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white">
-                            Сохранить ингредиент
-                          </button>
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <button
+                              type="submit"
+                              className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
+                            >
+                              Сохранить ингредиент
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteIngredient(selectedIngredient._id)}
+                              className="w-full rounded-2xl border border-red-200 bg-red-50 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                            >
+                              Удалить ингредиент
+                            </button>
+                          </div>
                         </form>
                       ) : (
                         <p className="text-xs text-slate-400">Выберите ингредиент, чтобы скорректировать себестоимость.</p>
@@ -3319,9 +3409,21 @@ const AdminPage: React.FC = () => {
                     rows={2}
                     placeholder="Описание"
                   />
-                  <button type="submit" className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white">
-                    Сохранить склад
-                  </button>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="submit"
+                      className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
+                    >
+                      Сохранить склад
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteWarehouse(selectedWarehouse._id)}
+                      className="w-full rounded-2xl border border-red-200 bg-red-50 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                    >
+                      Удалить склад
+                    </button>
+                  </div>
                 </form>
               ) : null}
             </Card>
@@ -3583,6 +3685,7 @@ const AdminPage: React.FC = () => {
                         <th className="px-3 py-2 text-left">Email</th>
                         <th className="px-3 py-2 text-left">Создан</th>
                         <th className="px-3 py-2 text-left">Обновлён</th>
+                        <th className="px-3 py-2 text-right">Действия</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -3592,6 +3695,15 @@ const AdminPage: React.FC = () => {
                           <td className="px-3 py-2 text-slate-500">{cashier.email || '—'}</td>
                           <td className="px-3 py-2 text-slate-500">{formatDateTime(cashier.createdAt)}</td>
                           <td className="px-3 py-2 text-slate-500">{formatDateTime(cashier.updatedAt)}</td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCashier(cashier.id)}
+                              className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+                            >
+                              Удалить
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
