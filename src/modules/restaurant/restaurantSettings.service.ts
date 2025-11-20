@@ -68,20 +68,20 @@ export const getRestaurantBranding = async (): Promise<RestaurantBranding> => {
 export const updateRestaurantBranding = async (payload: Partial<RestaurantBranding>): Promise<RestaurantBranding> => {
   const updatePayload: Partial<RestaurantBranding> = {};
 
-  if (payload.name !== undefined) {
+  if (typeof payload.name === 'string') {
     const name = payload.name.trim();
     updatePayload.name = name || DEFAULT_BRANDING.name;
   }
 
-  if (payload.logoUrl !== undefined) {
+  if (typeof payload.logoUrl === 'string') {
     updatePayload.logoUrl = payload.logoUrl.trim();
   }
 
-  if (payload.enableOrderTags !== undefined) {
+  if (typeof payload.enableOrderTags === 'boolean') {
     updatePayload.enableOrderTags = Boolean(payload.enableOrderTags);
   }
 
-  if (payload.measurementUnits !== undefined) {
+  if (Array.isArray(payload.measurementUnits)) {
     const normalizedUnits = Array.isArray(payload.measurementUnits)
       ? Array.from(
           new Set(
@@ -95,7 +95,7 @@ export const updateRestaurantBranding = async (payload: Partial<RestaurantBrandi
     updatePayload.measurementUnits = normalizedUnits.length > 0 ? normalizedUnits : DEFAULT_BRANDING.measurementUnits;
   }
 
-  if (payload.loyaltyRate !== undefined) {
+  if (typeof payload.loyaltyRate === 'number') {
     updatePayload.loyaltyRate = clampLoyaltyRate(payload.loyaltyRate);
   }
 
