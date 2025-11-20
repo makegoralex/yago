@@ -4745,6 +4745,8 @@ const AdminPage: React.FC = () => {
             </Card>
           ) : null}
         </div>
+      </div>
+    </div>
       ) : null}
       {activeTab === 'loyalty' ? (
         <div className="lg:flex lg:items-start lg:gap-6">
