@@ -9,6 +9,7 @@ const LoginPage: React.FC = () => {
   const { notify } = useToast();
   const { setSession, clearSession, user } = useAuthStore();
   const [email, setEmail] = useState('');
+  const [organizationId, setOrganizationId] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -17,19 +18,37 @@ const LoginPage: React.FC = () => {
     event.preventDefault();
     setLoading(true);
     try {
-      const response = await api.post('/api/auth/login', { email, password });
+      const payload: Record<string, string> = { email, password };
+
+      if (organizationId.trim()) {
+        payload.organizationId = organizationId.trim();
+      }
+
+      const response = await api.post('/api/auth/login', payload);
       const rawPayload = response.data?.data ?? response.data;
 
       const accessToken = rawPayload?.accessToken ?? rawPayload?.tokens?.accessToken;
       const refreshToken = rawPayload?.refreshToken ?? rawPayload?.tokens?.refreshToken;
       const payloadUser = rawPayload?.user ?? rawPayload?.userInfo;
 
-      if (!accessToken || !refreshToken || !payloadUser) {
+      const userId = payloadUser?.id ?? payloadUser?._id;
+
+      if (!accessToken || !refreshToken || !userId) {
         throw new Error('Invalid login response payload');
       }
 
-      setSession({ user: payloadUser, accessToken, refreshToken, remember });
-      notify({ title: 'Добро пожаловать!', description: `Привет, ${payloadUser.name}`, type: 'success' });
+      const normalizedUser = {
+        _id: userId,
+        id: userId,
+        name: payloadUser?.name ?? 'Пользователь',
+        email: payloadUser?.email ?? email,
+        role: payloadUser?.role ?? 'cashier',
+        organizationId:
+          payloadUser?.organizationId ?? rawPayload?.organization?.id ?? (organizationId.trim() || undefined),
+      };
+
+      setSession({ user: normalizedUser, accessToken, refreshToken, remember });
+      notify({ title: 'Добро пожаловать!', description: `Привет, ${normalizedUser.name}`, type: 'success' });
       navigate('/pos');
     } catch (error) {
       notify({ title: 'Ошибка входа', description: 'Не удалось войти. Проверьте данные.', type: 'error' });
@@ -75,6 +94,19 @@ const LoginPage: React.FC = () => {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
+            />
+          </div>
+          <div>
+            <label htmlFor="organizationId" className="block text-sm font-medium text-slate-600">
+              ID организации (опционально)
+            </label>
+            <input
+              id="organizationId"
+              type="text"
+              value={organizationId}
+              onChange={(event) => setOrganizationId(event.target.value)}
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
+              placeholder="Если у email несколько организаций"
             />
           </div>
           <div className="flex items-center justify-between">

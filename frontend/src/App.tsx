@@ -4,6 +4,7 @@ import LoginPage from './pages/Login';
 import POSPage from './pages/POS';
 import AdminPage from './pages/Admin';
 import SettingsPage from './pages/Settings';
+import LandingPage from './pages/Landing';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import { useAuthStore } from './store/auth';
 import MobileNav from './components/ui/MobileNav';
@@ -29,10 +30,10 @@ const App: React.FC = () => {
           <Route path="/pos" element={<POSPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
-        <Route element={<ProtectedRoute allowed={['admin']} />}>
+        <Route element={<ProtectedRoute allowed={['admin', 'owner', 'superAdmin']} />}>
           <Route path="/admin" element={<AdminPage />} />
         </Route>
-        <Route path="/" element={<Navigate to={user ? '/pos' : '/login'} replace />} />
+        <Route path="/" element={user ? <Navigate to="/pos" replace /> : <LandingPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <MobileNav />
