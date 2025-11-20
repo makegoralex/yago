@@ -2258,6 +2258,43 @@ const AdminPage: React.FC = () => {
       if (audit) {
         setLastAuditResult(audit);
       }
+      await loadInventoryData();
+      await loadStockReceipts();
+      await loadMenuData();
+    } catch (error) {
+      const message = extractErrorMessage(error, 'Не удалось удалить документ');
+      notify({ title: message, type: 'error' });
+    }
+  };
+
+  const handleAuditItemChange = (
+    index: number,
+    field: 'itemType' | 'itemId' | 'countedQuantity',
+    value: string
+  ) => {
+    setInventoryAuditForm((prev) => {
+      const items = [...prev.items];
+      items[index] = { ...items[index], [field]: value };
+      return { ...prev, items };
+    });
+  };
+
+  const addAuditItemRow = () => {
+    setInventoryAuditForm((prev) => ({
+      ...prev,
+      items: [...prev.items, { itemType: 'ingredient', itemId: '', countedQuantity: '' }],
+    }));
+  };
+
+  const removeAuditItemRow = (index: number) => {
+    setInventoryAuditForm((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, itemIndex) => itemIndex !== index),
+    }));
+  };
+
+  const handleSubmitInventoryAudit = async (event: React.FormEvent) => {
+    event.preventDefault();
 
       notify({
         title: 'Инвентаризация завершена. Документы до этой даты будут заблокированы.',
