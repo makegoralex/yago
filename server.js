@@ -1,8 +1,270 @@
 const express = require("express");
 const app = express();
 
-app.get("/", (req, res) => {
-  res.send("🚀 Autodeploy работает! Код пришёл из Codex через GitHub Actions!");
+const renderLandingPage = () => `
+    <!doctype html>
+    <html lang="ru">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Yago POS — платформа для современной торговли</title>
+        <style>
+          :root {
+            --bg: #0b1221;
+            --card: #111a2f;
+            --accent: #5ad0ff;
+            --text: #e8f0ff;
+            --muted: #b7c4e3;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: radial-gradient(circle at 10% 20%, rgba(90, 208, 255, 0.08), transparent 25%),
+              radial-gradient(circle at 80% 0%, rgba(160, 120, 255, 0.12), transparent 32%),
+              var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+          }
+
+          header {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 48px 24px 24px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 20px;
+            justify-content: space-between;
+          }
+
+          .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 800;
+            font-size: 20px;
+            letter-spacing: 0.3px;
+          }
+
+          .logo-mark {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #5ad0ff, #7c7cff);
+            display: grid;
+            place-items: center;
+            font-size: 24px;
+            color: #0b1221;
+            font-weight: 900;
+          }
+
+          .cta-button {
+            padding: 12px 18px;
+            border-radius: 12px;
+            border: 1px solid rgba(90, 208, 255, 0.5);
+            background: linear-gradient(120deg, rgba(90, 208, 255, 0.25), rgba(124, 124, 255, 0.2));
+            color: var(--text);
+            font-weight: 700;
+            text-decoration: none;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+          }
+
+          .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 38px rgba(90, 208, 255, 0.25);
+          }
+
+          main {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 24px 48px;
+          }
+
+          .hero {
+            background: linear-gradient(180deg, rgba(17, 26, 47, 0.92), rgba(17, 26, 47, 0.7));
+            border: 1px solid rgba(90, 208, 255, 0.18);
+            border-radius: 24px;
+            padding: 36px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+            display: grid;
+            gap: 18px;
+          }
+
+          .hero h1 {
+            margin: 0;
+            font-size: clamp(28px, 5vw, 38px);
+            line-height: 1.2;
+          }
+
+          .hero p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 16px;
+            line-height: 1.6;
+          }
+
+          .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+          }
+
+          .metric-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(90, 208, 255, 0.18);
+            border-radius: 18px;
+            padding: 16px;
+          }
+
+          .metric-card .value {
+            font-size: 24px;
+            font-weight: 800;
+          }
+
+          .metric-card .label {
+            color: var(--muted);
+            font-size: 13px;
+            letter-spacing: 0.3px;
+          }
+
+          .section-title {
+            margin: 38px 0 12px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          }
+
+          .section-title::before {
+            content: '';
+            width: 12px;
+            height: 12px;
+            border-radius: 4px;
+            background: linear-gradient(135deg, #5ad0ff, #7c7cff);
+            box-shadow: 0 0 16px rgba(90, 208, 255, 0.5);
+          }
+
+          .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 14px;
+          }
+
+          .feature-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 16px;
+            padding: 18px;
+            display: grid;
+            gap: 8px;
+          }
+
+          .feature-card strong {
+            font-size: 16px;
+          }
+
+          .feature-card span {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.5;
+          }
+
+          .footer-note {
+            margin-top: 36px;
+            color: var(--muted);
+            font-size: 13px;
+          }
+        </style>
+      </head>
+      <body>
+        <header>
+          <div class="logo" aria-label="Логотип Yago POS">
+            <div class="logo-mark">Y</div>
+            <div>Yago POS</div>
+          </div>
+          <a class="cta-button" href="mailto:hello@yagopos.com">Запросить демо</a>
+        </header>
+        <main>
+          <section class="hero">
+            <h1>Ваш бизнес под контролем: POS, склад, лояльность и аналитика в одном окне</h1>
+            <p>
+              Yago POS — облачная платформа для кафе, магазинов и dark kitchen. Управляйте сменами, меню, скидками и заказами
+              без сложных интеграций, а встроенные API позволяют подключать витрины и внешние сервисы.
+            </p>
+            <div class="metrics">
+              <div class="metric-card">
+                <div class="value"><span aria-hidden="true">⚡</span> 5 минут</div>
+                <div class="label">На развёртывание и запуск точки</div>
+              </div>
+              <div class="metric-card">
+                <div class="value">99.9%</div>
+                <div class="label">Доступность облачной инфраструктуры</div>
+              </div>
+              <div class="metric-card">
+                <div class="value">API Ready</div>
+                <div class="label">REST + документация на /docs</div>
+              </div>
+            </div>
+          </section>
+
+          <h2 class="section-title">Что уже внутри</h2>
+          <div class="features" role="list">
+            <div class="feature-card" role="listitem">
+              <strong>Управление меню и каталогом</strong>
+              <span>Категории, модификаторы, остатки и цены с мгновенным обновлением на POS и курьерских витринах.</span>
+            </div>
+            <div class="feature-card" role="listitem">
+              <strong>Заказы и скидки</strong>
+              <span>Гибкие правила промо, промокоды, автоматические скидки по времени и персональные предложения.</span>
+            </div>
+            <div class="feature-card" role="listitem">
+              <strong>Склад и поставщики</strong>
+              <span>Остатки, инвентаризации, приходные накладные и контроль себестоимости по каждому блюду.</span>
+            </div>
+            <div class="feature-card" role="listitem">
+              <strong>Лояльность и клиенты</strong>
+              <span>Баллы, статусы, персональные цены и история покупок в одном профиле гостя.</span>
+            </div>
+            <div class="feature-card" role="listitem">
+              <strong>Смены и кассы</strong>
+              <span>Открытие/закрытие смен, кассовая дисциплина и контроль движения наличных.</span>
+            </div>
+            <div class="feature-card" role="listitem">
+              <strong>Отчётность</strong>
+              <span>Продажи по часам и категориям, эффективность акций, маржинальность и экспорт данных.</span>
+            </div>
+          </div>
+
+          <h2 class="section-title">Подключение за день</h2>
+          <div class="features" role="list">
+            <div class="feature-card" role="listitem">
+              <strong>Облачный старт</strong>
+              <span>Не требуется своё железо: достаточно браузера или планшета. POS доступен на /pos.</span>
+            </div>
+            <div class="feature-card" role="listitem">
+              <strong>Админ-панель</strong>
+              <span>Настройка меню, скидок и пользователей на /admin с ролевой моделью доступа.</span>
+            </div>
+            <div class="feature-card" role="listitem">
+              <strong>Интеграции по API</strong>
+              <span>Документация по адресу /docs. Используйте webhooks и REST, чтобы связать доставку и CRM.</span>
+            </div>
+          </div>
+
+          <p class="footer-note">Готовы попробовать? Напишите нам — подключим пилот за один день и перенесём ваши данные.</p>
+        </main>
+      </body>
+    </html>
+  `;
+
+app.get("/", (_req, res) => {
+  res.type("html").send(renderLandingPage());
 });
 
 app.listen(3000, "0.0.0.0", () => {
