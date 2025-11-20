@@ -26,8 +26,8 @@ state available locally.
    перезапускайте его командой `pm2 restart <имя-процесса> --update-env` — имя
    процесса должно совпадать с тем, что вы указали при запуске (`pm2 start dist/index.js --name yago-api`).
 4. После запуска API доступен по адресу `http://<host>:<PORT>`. Корневой маршрут `/`
-   возвращает текст `✅ Yago POS API is running`, что можно использовать для
-   health-check.
+   отдаёт лендинг с описанием возможностей POS. Для health-check используйте
+   `http://<host>:<PORT>/healthz` — он возвращает JSON `{ "status": "ok" }`.
 
 ### 2. Frontend (PWA кассового интерфейса)
 

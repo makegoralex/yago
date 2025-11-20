@@ -718,16 +718,13 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
   paths: {
     '/': {
       get: {
-        summary: 'Root availability check',
+        summary: 'Landing page',
         responses: {
           '200': {
-            description: 'Root route response',
+            description: 'Marketing landing page with links to POS and admin panel',
             content: {
-              'text/plain': {
-                schema: {
-                  type: 'string',
-                  example: '✅ Yago POS API is running',
-                },
+              'text/html': {
+                schema: { type: 'string' },
               },
             },
           },
@@ -736,7 +733,7 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
     },
     '/healthz': {
       get: {
-        summary: 'Health check',
+        summary: 'Health check (use for monitoring)',
         responses: {
           '200': {
             description: 'API is healthy',
