@@ -5,6 +5,7 @@ export interface IRestaurantSettings extends Document {
   name: string;
   logoUrl?: string;
   enableOrderTags: boolean;
+  measurementUnits: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +33,10 @@ const restaurantSettingsSchema = new Schema<IRestaurantSettings>(
     enableOrderTags: {
       type: Boolean,
       default: false,
+    },
+    measurementUnits: {
+      type: [String],
+      default: ['гр', 'кг', 'мл', 'л', 'шт'],
     },
   },
   { timestamps: true }

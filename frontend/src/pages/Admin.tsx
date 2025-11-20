@@ -441,6 +441,7 @@ const AdminPage: React.FC = () => {
   const restaurantName = useRestaurantStore((state) => state.name);
   const restaurantLogo = useRestaurantStore((state) => state.logoUrl);
   const enableOrderTags = useRestaurantStore((state) => state.enableOrderTags);
+  const measurementUnits = useRestaurantStore((state) => state.measurementUnits);
   const updateRestaurantBranding = useRestaurantStore((state) => state.updateBranding);
   const resetRestaurantBranding = useRestaurantStore((state) => state.resetBranding);
   const [brandingForm, setBrandingForm] = useState({ name: restaurantName, logoUrl: restaurantLogo });
@@ -2804,7 +2805,16 @@ const AdminPage: React.FC = () => {
                 <Card title="Добавить ингредиент">
                   <form onSubmit={handleCreateIngredient} className="space-y-3 text-sm">
                     <input name="name" type="text" placeholder="Название" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
-                    <input name="unit" type="text" placeholder="Единица (грамм, мл)" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
+                    <select name="unit" defaultValue="" className="w-full rounded-2xl border border-slate-200 px-4 py-2">
+                      <option value="" disabled>
+                        Выберите единицу измерения
+                      </option>
+                      {measurementUnits.map((unit) => (
+                        <option key={unit} value={unit}>
+                          {unit}
+                        </option>
+                      ))}
+                    </select>
                     <input name="costPerUnit" type="number" step="0.01" min="0" placeholder="Цена за единицу" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
                     <button type="submit" className="w-full rounded-2xl bg-slate-900 py-2 text-sm font-semibold text-white">
                       Добавить ингредиент
@@ -2845,12 +2855,20 @@ const AdminPage: React.FC = () => {
                           </div>
                           <div className="grid gap-2">
                             <label className="text-xs font-semibold uppercase text-slate-400">Единица</label>
-                            <input
-                              type="text"
+                            <select
                               value={ingredientEditForm.unit}
                               onChange={(event) => setIngredientEditForm((prev) => ({ ...prev, unit: event.target.value }))}
                               className="rounded-2xl border border-slate-200 px-3 py-2"
-                            />
+                            >
+                              <option value="" disabled>
+                                Выберите единицу измерения
+                              </option>
+                              {measurementUnits.map((unit) => (
+                                <option key={unit} value={unit}>
+                                  {unit}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                           <div className="grid gap-2">
                             <label className="text-xs font-semibold uppercase text-slate-400">Стоимость за единицу</label>
