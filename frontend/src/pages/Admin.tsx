@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 import {
   Bar,
@@ -388,6 +389,7 @@ const endOfDay = (value: Date): Date => {
 };
 
 const AdminPage: React.FC = () => {
+  const navigate = useNavigate();
   const { notify } = useToast();
   const [activeTab, setActiveTab] = useState<
     'dashboard' | 'menu' | 'inventory' | 'loyalty' | 'suppliers' | 'discounts' | 'staff' | 'branding'
@@ -2840,7 +2842,14 @@ const AdminPage: React.FC = () => {
             Управление персоналом, меню, запасами, скидками и поставщиками {restaurantName}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('/pos')}
+            className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-slate-800"
+          >
+            Перейти в кассу
+          </button>
           {[
             { id: 'dashboard', label: 'Дашборд' },
             { id: 'menu', label: 'Меню' },
