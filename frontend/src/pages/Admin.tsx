@@ -369,6 +369,24 @@ const DAY_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 0, label: 'Вс' },
 ];
 
+const formatInputDate = (date: Date): string => date.toISOString().slice(0, 10);
+const parseDateInput = (value: string): Date => {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+};
+
+const startOfDay = (value: Date): Date => {
+  const result = new Date(value);
+  result.setHours(0, 0, 0, 0);
+  return result;
+};
+
+const endOfDay = (value: Date): Date => {
+  const result = new Date(value);
+  result.setHours(23, 59, 59, 999);
+  return result;
+};
+
 const AdminPage: React.FC = () => {
   const { notify } = useToast();
   const [activeTab, setActiveTab] = useState<
@@ -378,6 +396,7 @@ const AdminPage: React.FC = () => {
     'products'
   );
   const [loyaltySection, setLoyaltySection] = useState<'settings' | 'guests'>('settings');
+  const todayInputValue = useMemo(() => formatInputDate(new Date()), []);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [summary, setSummary] = useState({
     totalOrders: 0,
@@ -484,15 +503,21 @@ const AdminPage: React.FC = () => {
     ],
   });
   const [receiptType, setReceiptType] = useState<'receipt' | 'writeOff'>('receipt');
-  const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [receiptDate, setReceiptDate] = useState(() => todayInputValue);
   const [stockReceipts, setStockReceipts] = useState<StockReceipt[]>([]);
   const [stockReceiptsLoading, setStockReceiptsLoading] = useState(false);
   const [stockReceiptsError, setStockReceiptsError] = useState<string | null>(null);
   const [selectedStockReceipt, setSelectedStockReceipt] = useState<StockReceipt | null>(null);
   const [receiptFilter, setReceiptFilter] = useState<'all' | StockReceipt['type']>('all');
+  const [receiptDateFrom, setReceiptDateFrom] = useState('');
+  const [receiptDateTo, setReceiptDateTo] = useState('');
+  const [receiptDatePreset, setReceiptDatePreset] = useState('');
+  const [receiptSupplierFilter, setReceiptSupplierFilter] = useState('');
+  const [receiptAmountMin, setReceiptAmountMin] = useState('');
+  const [receiptAmountMax, setReceiptAmountMax] = useState('');
   const [inventoryAuditForm, setInventoryAuditForm] = useState({
     warehouseId: '',
-    performedAt: new Date().toISOString().slice(0, 10),
+    performedAt: todayInputValue,
     items: [] as Array<{ itemType: 'ingredient' | 'product'; itemId: string; countedQuantity: string }>,
   });
   const [auditSubmitting, setAuditSubmitting] = useState(false);
@@ -924,15 +949,123 @@ const AdminPage: React.FC = () => {
     [ingredientMap, productMap]
   );
 
-  const filteredStockReceipts = useMemo(
-    () =>
-      stockReceipts.filter((receipt) =>
-        selectedWarehouse
-          ? receipt.warehouseId === selectedWarehouse._id &&
-            (receiptFilter === 'all' ? true : receipt.type === receiptFilter)
-          : false
-      ),
-    [stockReceipts, receiptFilter, selectedWarehouse]
+  const filteredStockReceipts = useMemo(() => {
+    if (!selectedWarehouse) {
+      return [];
+    }
+
+    const fromDate = receiptDateFrom ? startOfDay(parseDateInput(receiptDateFrom)) : null;
+    const toDate = receiptDateTo ? endOfDay(parseDateInput(receiptDateTo)) : null;
+    const minAmount = receiptAmountMin.trim() ? Number(receiptAmountMin) : null;
+    const maxAmount = receiptAmountMax.trim() ? Number(receiptAmountMax) : null;
+
+    return stockReceipts.filter((receipt) => {
+      if (receipt.warehouseId !== selectedWarehouse._id) {
+        return false;
+      }
+
+      if (receiptFilter !== 'all' && receipt.type !== receiptFilter) {
+        return false;
+      }
+
+      const occurredAt = new Date(receipt.occurredAt);
+
+      if (fromDate && occurredAt < fromDate) {
+        return false;
+      }
+
+      if (toDate && occurredAt > toDate) {
+        return false;
+      }
+
+      if (receiptSupplierFilter && receipt.supplierId !== receiptSupplierFilter) {
+        return false;
+      }
+
+      const total = calculateReceiptTotal(receipt);
+
+      if (minAmount !== null && Number.isFinite(minAmount) && total < minAmount) {
+        return false;
+      }
+
+      if (maxAmount !== null && Number.isFinite(maxAmount) && total > maxAmount) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [
+    calculateReceiptTotal,
+    receiptAmountMax,
+    receiptAmountMin,
+    receiptDateFrom,
+    receiptDateTo,
+    receiptFilter,
+    receiptSupplierFilter,
+    selectedWarehouse,
+    stockReceipts,
+  ]);
+
+  const receiptTotals = useMemo(() => {
+    const totalsMap = new Map<string, number>();
+    let overall = 0;
+
+    for (const receipt of filteredStockReceipts) {
+      const total = calculateReceiptTotal(receipt);
+      totalsMap.set(receipt._id, total);
+      overall += total;
+    }
+
+    return { totalsMap, overall };
+  }, [calculateReceiptTotal, filteredStockReceipts]);
+
+  const applyReceiptDatePreset = useCallback(
+    (preset: string) => {
+      let from: Date | null = null;
+      let to: Date | null = null;
+      const now = new Date();
+
+      switch (preset) {
+        case 'today':
+          from = startOfDay(now);
+          to = now;
+          break;
+        case 'yesterday': {
+          const base = startOfDay(now);
+          base.setDate(base.getDate() - 1);
+          from = base;
+          to = base;
+          break;
+        }
+        case 'week':
+          from = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6));
+          to = now;
+          break;
+        case 'month':
+          from = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
+          to = now;
+          break;
+        case 'lastMonth':
+          from = startOfDay(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+          to = endOfDay(new Date(now.getFullYear(), now.getMonth(), 0));
+          break;
+        case 'year':
+          from = startOfDay(new Date(now.getFullYear(), 0, 1));
+          to = now;
+          break;
+        case 'lastYear':
+          from = startOfDay(new Date(now.getFullYear() - 1, 0, 1));
+          to = endOfDay(new Date(now.getFullYear() - 1, 11, 31));
+          break;
+        default:
+          break;
+      }
+
+      setReceiptDatePreset(preset);
+      setReceiptDateFrom(from ? formatInputDate(from) : '');
+      setReceiptDateTo(to ? formatInputDate(to) : '');
+    },
+    [setReceiptDateFrom, setReceiptDateTo]
   );
 
   const loadCashiersData = useCallback(async () => {
@@ -2070,7 +2203,7 @@ const AdminPage: React.FC = () => {
   const resetReceiptForm = (preserveWarehouse = false) => {
     setSelectedStockReceipt(null);
     setReceiptType('receipt');
-    setReceiptDate(new Date().toISOString().slice(0, 10));
+    setReceiptDate(formatInputDate(new Date()));
     setReceiptForm({
       warehouseId: preserveWarehouse ? receiptForm.warehouseId : '',
       supplierId: '',
@@ -2094,6 +2227,18 @@ const AdminPage: React.FC = () => {
 
     if (!receiptDate) {
       notify({ title: 'Укажите дату документа', type: 'info' });
+      return;
+    }
+
+    const occurredDate = parseDateInput(receiptDate);
+
+    if (Number.isNaN(occurredDate.getTime())) {
+      notify({ title: 'Некорректная дата документа', type: 'info' });
+      return;
+    }
+
+    if (occurredDate.getTime() > endOfDay(new Date()).getTime()) {
+      notify({ title: 'Дата документа не может быть в будущем', type: 'info' });
       return;
     }
 
@@ -2249,6 +2394,23 @@ const AdminPage: React.FC = () => {
       return;
     }
 
+    if (!inventoryAuditForm.performedAt) {
+      notify({ title: 'Укажите дату инвентаризации', type: 'info' });
+      return;
+    }
+
+    const performedDate = parseDateInput(inventoryAuditForm.performedAt);
+
+    if (Number.isNaN(performedDate.getTime())) {
+      notify({ title: 'Некорректная дата инвентаризации', type: 'info' });
+      return;
+    }
+
+    if (performedDate.getTime() > endOfDay(new Date()).getTime()) {
+      notify({ title: 'Дата инвентаризации не может быть в будущем', type: 'info' });
+      return;
+    }
+
     const payloadItems = inventoryAuditForm.items
       .map((item) => ({
         itemType: item.itemType,
@@ -2287,7 +2449,7 @@ const AdminPage: React.FC = () => {
 
       setInventoryAuditForm((prev) => ({
         ...prev,
-        performedAt: new Date().toISOString().slice(0, 10),
+        performedAt: formatInputDate(new Date()),
         items: [],
       }));
 
@@ -2350,6 +2512,26 @@ const AdminPage: React.FC = () => {
       void loadSuppliersData();
     } catch (error) {
       notify({ title: 'Не удалось обновить поставщика', type: 'error' });
+    }
+  };
+
+  const handleDeleteSupplier = async (supplierId: string) => {
+    if (!supplierId) return;
+    if (!window.confirm('Удалить поставщика? Документы останутся без привязки.')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/api/suppliers/${supplierId}`);
+      notify({ title: 'Поставщик удалён', type: 'success' });
+      setSuppliers((prev) => prev.filter((supplier) => supplier._id !== supplierId));
+
+      if (selectedSupplier?._id === supplierId) {
+        setSelectedSupplier(null);
+        setSupplierEditForm({ name: '', contactName: '', phone: '', email: '', address: '', notes: '' });
+      }
+    } catch (error) {
+      notify({ title: 'Не удалось удалить поставщика', type: 'error' });
     }
   };
 
@@ -3804,8 +3986,58 @@ const AdminPage: React.FC = () => {
       ) : null}
       {activeTab === 'inventory' ? (
         <div className="space-y-6">
-          <section className="grid gap-6 lg:grid-cols-3">
-            <Card title="Склады">
+          <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+            <div className="space-y-4">
+              <Card title="Навигация по складу" id="inventory-navigation" className="sticky top-4">
+                <nav className="space-y-2 text-sm">
+                  <a
+                    href="#inventory-warehouses"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-emerald-300"
+                  >
+                    <span className="font-semibold text-slate-800">Склады</span>
+                    <span className="text-xs text-slate-400">управление локациями</span>
+                  </a>
+                  <a
+                    href="#inventory-summary"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-emerald-300"
+                  >
+                    <span className="font-semibold text-slate-800">Сводка</span>
+                    <span className="text-xs text-slate-400">остатки и стоимость</span>
+                  </a>
+                  <a
+                    href="#inventory-receipts"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-emerald-300"
+                  >
+                    <span className="font-semibold text-slate-800">Документ</span>
+                    <span className="text-xs text-slate-400">поставка/списание</span>
+                  </a>
+                  <a
+                    href="#inventory-documents"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-emerald-300"
+                  >
+                    <span className="font-semibold text-slate-800">История</span>
+                    <span className="text-xs text-slate-400">фильтры и суммы</span>
+                  </a>
+                  <a
+                    href="#inventory-audit"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-emerald-300"
+                  >
+                    <span className="font-semibold text-slate-800">Инвентаризация</span>
+                    <span className="text-xs text-slate-400">блокировка документов</span>
+                  </a>
+                  <a
+                    href="#inventory-stock"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-emerald-300"
+                  >
+                    <span className="font-semibold text-slate-800">Остатки</span>
+                    <span className="text-xs text-slate-400">позиции на складе</span>
+                  </a>
+                </nav>
+              </Card>
+            </div>
+            <div className="space-y-6">
+              <section className="grid gap-6 lg:grid-cols-3">
+                <Card title="Склады" id="inventory-warehouses">
               <form onSubmit={handleCreateWarehouse} className="space-y-3 text-sm">
                 <input
                   type="text"
@@ -3898,7 +4130,7 @@ const AdminPage: React.FC = () => {
                 </form>
               ) : null}
             </Card>
-            <Card title="Сводка">
+            <Card title="Сводка" id="inventory-summary">
               {inventorySummary ? (
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-center justify-between">
@@ -3918,7 +4150,7 @@ const AdminPage: React.FC = () => {
                 <p className="text-sm text-slate-400">Нет данных</p>
               )}
             </Card>
-            <Card title="Поставка / списание">
+            <Card title="Поставка / списание" id="inventory-receipts">
               <form onSubmit={handleSaveStockReceipt} className="space-y-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
                   <span>
@@ -3948,6 +4180,7 @@ const AdminPage: React.FC = () => {
                   <input
                     type="date"
                     value={receiptDate}
+                    max={todayInputValue}
                     onChange={(event) => setReceiptDate(event.target.value)}
                     className="w-full rounded-2xl border border-slate-200 px-4 py-2"
                   />
@@ -4087,7 +4320,7 @@ const AdminPage: React.FC = () => {
           </section>
 
           <section className="grid gap-6 lg:grid-cols-2">
-            <Card title="Документы склада">
+            <Card title="Документы склада" id="inventory-documents">
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <span>Показать:</span>
@@ -4102,14 +4335,117 @@ const AdminPage: React.FC = () => {
                     <option value="inventory">Инвентаризации</option>
                   </select>
                 </div>
-              <button
-                type="button"
-                onClick={() => void loadStockReceipts()}
-                className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
-              >
-                Обновить список
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => void loadStockReceipts()}
+                  className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                >
+                  Обновить список
+                </button>
+              </div>
+              <div className="mt-3 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
+                <label className="flex flex-col gap-1 text-slate-600">
+                  <span className="text-[11px] uppercase text-slate-400">Период с</span>
+                  <input
+                    type="date"
+                    value={receiptDateFrom}
+                    max={todayInputValue}
+                    onChange={(event) => {
+                      setReceiptDatePreset('');
+                      setReceiptDateFrom(event.target.value);
+                    }}
+                    className="rounded-2xl border border-slate-200 px-3 py-2"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-slate-600">
+                  <span className="text-[11px] uppercase text-slate-400">Период по</span>
+                  <input
+                    type="date"
+                    value={receiptDateTo}
+                    max={todayInputValue}
+                    onChange={(event) => {
+                      setReceiptDatePreset('');
+                      setReceiptDateTo(event.target.value);
+                    }}
+                    className="rounded-2xl border border-slate-200 px-3 py-2"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-slate-600">
+                  <span className="text-[11px] uppercase text-slate-400">Поставщик</span>
+                  <select
+                    value={receiptSupplierFilter}
+                    onChange={(event) => setReceiptSupplierFilter(event.target.value)}
+                    className="rounded-2xl border border-slate-200 px-3 py-2"
+                  >
+                    <option value="">Все поставщики</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier._id} value={supplier._id}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-1 text-slate-600">
+                    <span className="text-[11px] uppercase text-slate-400">Сумма от</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={receiptAmountMin}
+                      onChange={(event) => setReceiptAmountMin(event.target.value)}
+                      className="rounded-2xl border border-slate-200 px-3 py-2"
+                      placeholder="0"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-slate-600">
+                    <span className="text-[11px] uppercase text-slate-400">Сумма до</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={receiptAmountMax}
+                      onChange={(event) => setReceiptAmountMax(event.target.value)}
+                      className="rounded-2xl border border-slate-200 px-3 py-2"
+                      placeholder="∞"
+                    />
+                  </label>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="font-semibold text-slate-700">Быстрый выбор:</span>
+                {[{ id: 'today', label: 'Сегодня' }, { id: 'yesterday', label: 'Вчера' }, { id: 'week', label: '7 дней' }, { id: 'month', label: 'Этот месяц' }, { id: 'lastMonth', label: 'Прошлый месяц' }, { id: 'year', label: 'Этот год' }, { id: 'lastYear', label: 'Прошлый год' }].map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applyReceiptDatePreset(preset.id)}
+                    className={`rounded-full border px-3 py-1 font-semibold transition ${
+                      receiptDatePreset === preset.id
+                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReceiptDatePreset('');
+                    setReceiptDateFrom('');
+                    setReceiptDateTo('');
+                  }}
+                  className="rounded-full border border-slate-200 px-3 py-1 font-semibold text-slate-500 transition hover:border-emerald-300"
+                >
+                  Сбросить период
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
+                <p>
+                  Показано документов: <span className="font-semibold text-slate-800">{filteredStockReceipts.length}</span>
+                </p>
+                <p>
+                  Сумма по фильтру: <span className="font-semibold text-slate-800">{receiptTotals.overall.toFixed(2)} ₽</span>
+                </p>
+              </div>
             {!selectedWarehouse ? (
               <p className="mt-3 text-sm text-slate-500">Выберите склад, чтобы увидеть документы.</p>
             ) : stockReceiptsLoading ? (
@@ -4121,7 +4457,7 @@ const AdminPage: React.FC = () => {
               ) : (
                 <ul className="mt-3 space-y-3">
                   {filteredStockReceipts.map((receipt) => {
-                    const total = calculateReceiptTotal(receipt);
+                    const total = receiptTotals.totalsMap.get(receipt._id) ?? calculateReceiptTotal(receipt);
                     const warehouseName = warehouseMap.get(receipt.warehouseId)?.name ?? '—';
                     const supplierName = receipt.supplierId
                       ? supplierMap.get(receipt.supplierId)?.name ?? '—'
@@ -4183,7 +4519,7 @@ const AdminPage: React.FC = () => {
               )}
             </Card>
 
-            <Card title="Инвентаризация">
+            <Card title="Инвентаризация" id="inventory-audit">
               <form onSubmit={handleSubmitInventoryAudit} className="space-y-3 text-sm">
                 <p className="text-[11px] text-amber-700">
                   После завершения инвентаризации документы до выбранной даты будут заблокированы для изменений.
@@ -4205,6 +4541,7 @@ const AdminPage: React.FC = () => {
                 <input
                   type="date"
                   value={inventoryAuditForm.performedAt}
+                  max={todayInputValue}
                   onChange={(event) =>
                     setInventoryAuditForm((prev) => ({ ...prev, performedAt: event.target.value }))
                   }
@@ -4314,7 +4651,7 @@ const AdminPage: React.FC = () => {
             </Card>
           </section>
 
-          <Card title="Складские остатки">
+          <Card title="Складские остатки" id="inventory-stock">
             {inventoryLoading ? (
               <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
             ) : (
@@ -4364,6 +4701,8 @@ const AdminPage: React.FC = () => {
             )}
           </Card>
         </div>
+      </div>
+    </div>
       ) : null}
 
       {activeTab === 'loyalty' ? (
@@ -4794,12 +5133,21 @@ const AdminPage: React.FC = () => {
                             rows={3}
                             placeholder="Заметки"
                           />
-                          <button
-                            type="submit"
-                            className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
-                          >
-                            Сохранить поставщика
-                          </button>
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <button
+                              type="submit"
+                              className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
+                            >
+                              Сохранить поставщика
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSupplier(selectedSupplier._id)}
+                              className="w-full rounded-2xl border border-red-200 bg-red-50 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                            >
+                              Удалить поставщика
+                            </button>
+                          </div>
                         </form>
                       ) : (
                         <p className="text-xs text-slate-400">Выберите поставщика для редактирования данных.</p>
@@ -5222,14 +5570,17 @@ const AdminPage: React.FC = () => {
   );
  };
 
- const Card: React.FC<React.PropsWithChildren<{ title: string }>> = ({ title, children }) => (
-  <section className="rounded-3xl bg-white p-6 shadow-soft">
+const Card: React.FC<
+  React.PropsWithChildren<{ title: string; id?: string; className?: string; actions?: React.ReactNode }>
+> = ({ title, children, id, className, actions }) => (
+  <section id={id} className={`rounded-3xl bg-white p-6 shadow-soft ${className ?? ''}`}>
     <div className="mb-4 flex items-center justify-between">
       <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      {actions ?? null}
     </div>
     {children}
   </section>
- );
+);
 
  const SummaryCard: React.FC<{ title: string; value: string }> = ({ title, value }) => (
   <div className="rounded-3xl bg-white p-6 shadow-soft">
