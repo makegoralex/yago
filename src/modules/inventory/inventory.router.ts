@@ -8,9 +8,13 @@ import { InventoryItemModel } from './inventoryItem.model';
 import { WarehouseModel } from './warehouse.model';
 import {
   createStockReceipt,
+  deleteStockReceipt,
   fetchInventoryItemsWithReferences,
   getInventorySummary,
   InventoryReceiptError,
+  listStockReceipts,
+  performInventoryAudit,
+  updateStockReceipt,
 } from './inventory.service';
 import { recalculateAverageCostForItem } from './inventoryCost.service';
 
@@ -280,10 +284,152 @@ router.post(
         warehouseId: req.body?.warehouseId,
         supplierId: req.body?.supplierId,
         items: req.body?.items,
+        occurredAt: req.body?.occurredAt,
         createdBy: req.user.id,
       });
 
       res.status(201).json({ data: receipt, error: null });
+    } catch (error) {
+      if (error instanceof InventoryReceiptError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
+
+router.get(
+  '/receipts',
+  asyncHandler(async (req, res) => {
+    const { type, warehouseId, supplierId } = req.query;
+
+    const filter: Record<string, unknown> = {};
+
+    if (type) {
+      if (type !== 'receipt' && type !== 'writeOff' && type !== 'inventory') {
+        res.status(400).json({ data: null, error: 'Некорректный тип документа' });
+        return;
+      }
+
+      filter.type = type;
+    }
+
+    if (warehouseId) {
+      if (typeof warehouseId !== 'string' || !isValidObjectId(warehouseId)) {
+        res.status(400).json({ data: null, error: 'Некорректный склад' });
+        return;
+      }
+
+      filter.warehouseId = warehouseId;
+    }
+
+    if (supplierId) {
+      if (typeof supplierId !== 'string' || !isValidObjectId(supplierId)) {
+        res.status(400).json({ data: null, error: 'Некорректный поставщик' });
+        return;
+      }
+
+      filter.supplierId = supplierId;
+    }
+
+    const receipts = await listStockReceipts(filter);
+
+    res.json({ data: receipts, error: null });
+  })
+);
+
+router.put(
+  '/receipts/:id',
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    try {
+      const receipt = await updateStockReceipt(id, {
+        items: req.body?.items,
+        supplierId: req.body?.supplierId,
+        occurredAt: req.body?.occurredAt,
+      });
+
+      res.json({ data: receipt, error: null });
+    } catch (error) {
+      if (error instanceof InventoryReceiptError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
+
+router.delete(
+  '/receipts/:id',
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    try {
+      await deleteStockReceipt(id);
+      res.json({ data: { id }, error: null });
+    } catch (error) {
+      if (error instanceof InventoryReceiptError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
+
+router.post(
+  '/write-offs',
+  asyncHandler(async (req, res) => {
+    if (!req.user?.id) {
+      res.status(403).json({ data: null, error: 'Не удалось определить пользователя' });
+      return;
+    }
+
+    try {
+      const receipt = await createStockReceipt({
+        warehouseId: req.body?.warehouseId,
+        supplierId: req.body?.supplierId,
+        items: req.body?.items,
+        createdBy: req.user.id,
+        type: 'writeOff',
+        occurredAt: req.body?.occurredAt,
+      });
+
+      res.status(201).json({ data: receipt, error: null });
+    } catch (error) {
+      if (error instanceof InventoryReceiptError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
+
+router.post(
+  '/inventory/audits',
+  asyncHandler(async (req, res) => {
+    if (!req.user?.id) {
+      res.status(403).json({ data: null, error: 'Не удалось определить пользователя' });
+      return;
+    }
+
+    try {
+      const audit = await performInventoryAudit({
+        warehouseId: req.body?.warehouseId,
+        items: req.body?.items,
+        performedAt: req.body?.performedAt,
+        performedBy: req.user.id,
+      });
+
+      res.status(201).json({ data: audit, error: null });
     } catch (error) {
       if (error instanceof InventoryReceiptError) {
         res.status(error.status).json({ data: null, error: error.message });
