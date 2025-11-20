@@ -383,6 +383,18 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
         properties: {
           warehouseId: { type: 'string', example: '665c2ba2d6f42e4a3c8fd200' },
           supplierId: { type: 'string', nullable: true, example: '665c2ba2d6f42e4a3c8fc210' },
+          type: {
+            type: 'string',
+            enum: ['receipt', 'writeOff'],
+            description: 'Тип движения. По умолчанию — receipt',
+            example: 'receipt',
+          },
+          occurredAt: {
+            type: 'string',
+            format: 'date-time',
+            description: 'Дата поставки/списания',
+            example: '2024-07-01T08:30:00.000Z',
+          },
           items: {
             type: 'array',
             items: { $ref: '#/components/schemas/StockReceiptItemInput' },
@@ -393,6 +405,8 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
         type: 'object',
         properties: {
           id: { type: 'string', example: '665c2ba2d6f42e4a3c8ff001' },
+          type: { type: 'string', example: 'receipt' },
+          occurredAt: { type: 'string', format: 'date-time' },
           warehouseId: { type: 'string', example: '665c2ba2d6f42e4a3c8fd200' },
           supplierId: { type: 'string', nullable: true, example: '665c2ba2d6f42e4a3c8fc210' },
           createdBy: { type: 'string', example: '665c2ba2d6f42e4a3c8fa300' },
@@ -402,6 +416,40 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           },
           createdAt: { type: 'string', format: 'date-time' },
           updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      InventoryAuditItemInput: {
+        type: 'object',
+        required: ['itemType', 'itemId', 'countedQuantity'],
+        properties: {
+          itemType: { type: 'string', enum: ['ingredient', 'product'] },
+          itemId: { type: 'string' },
+          countedQuantity: { type: 'number', example: 12 },
+        },
+      },
+      InventoryAudit: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          warehouseId: { type: 'string' },
+          performedAt: { type: 'string', format: 'date-time' },
+          totalLossValue: { type: 'number', example: 1200 },
+          totalGainValue: { type: 'number', example: 350 },
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                itemType: { type: 'string', enum: ['ingredient', 'product'] },
+                itemId: { type: 'string' },
+                previousQuantity: { type: 'number' },
+                countedQuantity: { type: 'number' },
+                difference: { type: 'number' },
+                unitCostSnapshot: { type: 'number', nullable: true },
+              },
+            },
+          },
+          createdAt: { type: 'string', format: 'date-time' },
         },
       },
       AdminCatalogOverview: {
@@ -1715,6 +1763,40 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
       },
     },
     '/api/inventory/receipts': {
+      get: {
+        summary: 'List stock documents',
+        tags: ['Inventory'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'type',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['receipt', 'writeOff', 'inventory'] },
+          },
+          { name: 'warehouseId', in: 'query', required: false, schema: { type: 'string' } },
+          { name: 'supplierId', in: 'query', required: false, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Receipts list',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/StockReceipt' },
+                    },
+                    error: { type: 'string', nullable: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       post: {
         summary: 'Create stock receipt and update balances',
         tags: ['Inventory'],
@@ -1745,6 +1827,135 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           '400': { description: 'Validation error' },
           '403': { description: 'Forbidden — admin role required' },
           '404': { description: 'Warehouse or supplier not found' },
+        },
+      },
+    },
+    '/api/inventory/receipts/{id}': {
+      put: {
+        summary: 'Update receipt/write-off and re-apply balances',
+        tags: ['Inventory'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/StockReceiptInput' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Receipt updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/StockReceipt' },
+                    error: { type: 'string', nullable: true },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error' },
+          '404': { description: 'Document not found' },
+          '409': { description: 'Locked by inventory' },
+        },
+      },
+      delete: {
+        summary: 'Delete receipt/write-off and rollback balances',
+        tags: ['Inventory'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': { description: 'Receipt deleted' },
+          '400': { description: 'Invalid id' },
+          '409': { description: 'Locked by inventory' },
+        },
+      },
+    },
+    '/api/inventory/write-offs': {
+      post: {
+        summary: 'Register write-off and decrease balances',
+        tags: ['Inventory'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/StockReceiptInput' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Write-off created',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/StockReceipt' },
+                    error: { type: 'string', nullable: true, example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error' },
+          '403': { description: 'Forbidden — admin role required' },
+          '404': { description: 'Warehouse or supplier not found' },
+        },
+      },
+    },
+    '/api/inventory/inventory/audits': {
+      post: {
+        summary: 'Perform inventory audit and lock previous documents',
+        tags: ['Inventory'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['warehouseId', 'items'],
+                properties: {
+                  warehouseId: { type: 'string' },
+                  performedAt: { type: 'string', format: 'date-time' },
+                  items: {
+                    type: 'array',
+                    items: { $ref: '#/components/schemas/InventoryAuditItemInput' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Audit completed',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { $ref: '#/components/schemas/InventoryAudit' },
+                    error: { type: 'string', nullable: true },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error' },
+          '404': { description: 'Warehouse or item not found' },
+          '409': { description: 'Audit overlaps with locked period' },
         },
       },
     },
