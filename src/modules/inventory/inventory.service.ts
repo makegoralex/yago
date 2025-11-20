@@ -77,18 +77,43 @@ const ensureNotLockedByInventory = async (
   }
 };
 
-const parseReceiptDate = (value: unknown): Date => {
-  if (!value) {
-    return new Date();
-  }
+const startOfLocalDay = (date: Date): Date => {
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+};
 
-  const date = new Date(String(value));
+const parseReceiptDate = (value: unknown): Date => {
+  let date: Date;
+
+  if (!value) {
+    date = new Date();
+  } else if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const [year, month, day] = trimmed.split('-').map((part) => Number(part));
+      date = new Date(year, month - 1, day, 0, 0, 0, 0);
+    } else {
+      date = new Date(trimmed);
+    }
+  } else if (value instanceof Date) {
+    date = value;
+  } else {
+    date = new Date(String(value));
+  }
 
   if (Number.isNaN(date.getTime())) {
     throw new InventoryReceiptError(400, 'Некорректная дата документа');
   }
 
-  return date;
+  if (date.getTime() > Date.now()) {
+    throw new InventoryReceiptError(400, 'Дата документа не может быть в будущем');
+  }
+
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())
+    ? startOfLocalDay(date)
+    : date;
 };
 
 const normalizeReceiptItems = async (items: unknown): Promise<StockReceiptDocument['items']> => {
