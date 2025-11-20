@@ -114,6 +114,36 @@ type LegacySalesAndShiftStats = {
 const normalizeNumber = (value: unknown, fallback = 0): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
+const unitKey = (fromUnit?: string | null, toUnit?: string | null) =>
+  `${(fromUnit ?? '').toLowerCase()}->${(toUnit ?? '').toLowerCase()}`;
+
+const CONVERSION_FACTORS = new Map<string, number>([
+  ['гр->кг', 0.001],
+  ['г->кг', 0.001],
+  ['кг->гр', 1000],
+  ['кг->г', 1000],
+  ['мл->л', 0.001],
+  ['л->мл', 1000],
+]);
+
+const convertQuantity = (quantity: number, fromUnit?: string | null, toUnit?: string | null): number => {
+  if (!Number.isFinite(quantity) || quantity === 0) {
+    return 0;
+  }
+
+  if (!fromUnit || !toUnit || fromUnit === toUnit) {
+    return quantity;
+  }
+
+  const factor = CONVERSION_FACTORS.get(unitKey(fromUnit, toUnit));
+
+  if (!factor) {
+    return quantity;
+  }
+
+  return quantity * factor;
+};
+
 const normalizeSalesAndShiftStats = (
   payload?: SalesAndShiftStats | LegacySalesAndShiftStats | null
 ): SalesAndShiftStats | null => {
@@ -198,6 +228,7 @@ type Customer = {
 type ModifierIngredientDelta = {
   ingredientId: string;
   delta: string;
+  unit?: string;
 };
 
 type ModifierOptionForm = {
@@ -333,9 +364,9 @@ const AdminPage: React.FC = () => {
     imageUrl: '',
   });
   const [newProductModifierIds, setNewProductModifierIds] = useState<string[]>([]);
-  const [productIngredients, setProductIngredients] = useState<Array<{ ingredientId: string; quantity: string }>>([
-    { ingredientId: '', quantity: '' },
-  ]);
+  const [productIngredients, setProductIngredients] = useState<
+    Array<{ ingredientId: string; quantity: string; unit?: string }>
+  >([{ ingredientId: '', quantity: '', unit: '' }]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [categoryEditName, setCategoryEditName] = useState('');
   const [categorySortOrder, setCategorySortOrder] = useState('');
@@ -353,7 +384,7 @@ const AdminPage: React.FC = () => {
   });
   const [productEditModifiers, setProductEditModifiers] = useState<string[]>([]);
   const [productEditIngredients, setProductEditIngredients] = useState<
-    Array<{ ingredientId: string; quantity: string }>
+    Array<{ ingredientId: string; quantity: string; unit?: string }>
   >([]);
   const [selectedModifierGroup, setSelectedModifierGroup] = useState<ModifierGroup | null>(null);
   const [modifierGroupForm, setModifierGroupForm] = useState({
@@ -441,6 +472,7 @@ const AdminPage: React.FC = () => {
   const restaurantName = useRestaurantStore((state) => state.name);
   const restaurantLogo = useRestaurantStore((state) => state.logoUrl);
   const enableOrderTags = useRestaurantStore((state) => state.enableOrderTags);
+  const measurementUnits = useRestaurantStore((state) => state.measurementUnits);
   const updateRestaurantBranding = useRestaurantStore((state) => state.updateBranding);
   const resetRestaurantBranding = useRestaurantStore((state) => state.resetBranding);
   const [brandingForm, setBrandingForm] = useState({ name: restaurantName, logoUrl: restaurantLogo });
@@ -963,12 +995,24 @@ const AdminPage: React.FC = () => {
     [ingredients]
   );
 
+  const ingredientUnitMap = useMemo(
+    () =>
+      ingredients.reduce<Record<string, string>>((acc, ingredient) => {
+        acc[ingredient._id] = ingredient.unit;
+        return acc;
+      }, {}),
+    [ingredients]
+  );
+
   const baseIngredientDeltas = useMemo(
     () =>
       (selectedProduct ? productEditIngredients : productIngredients)
         .filter((item) => item.ingredientId)
-        .map((item) => ({ ingredientId: item.ingredientId, delta: '' })),
-    [productEditIngredients, productIngredients, selectedProduct]
+        .map((item) => {
+          const ingredientUnit = ingredients.find((entry) => entry._id === item.ingredientId)?.unit;
+          return { ingredientId: item.ingredientId, delta: '', unit: item.unit || ingredientUnit };
+        }),
+    [ingredients, productEditIngredients, productIngredients, selectedProduct]
   );
 
   const baseIngredientsForCost = useMemo(
@@ -977,10 +1021,15 @@ const AdminPage: React.FC = () => {
         .filter((item) => item.ingredientId && item.quantity)
         .map((item) => {
           const ingredient = ingredients.find((entry) => entry._id === item.ingredientId);
+          const ingredientUnit = ingredient?.unit ?? '';
+          const recipeUnit = item.unit || ingredientUnit;
+          const normalizedQuantity = convertQuantity(Number(item.quantity) || 0, recipeUnit, ingredientUnit);
           return {
             ingredientId: item.ingredientId,
             quantity: Number(item.quantity) || 0,
-            unit: ingredient?.unit ?? '',
+            normalizedQuantity,
+            unit: recipeUnit,
+            ingredientUnit,
             name: ingredient?.name ?? 'Ингредиент',
             costPerUnit: ingredient?.costPerUnit ?? 0,
           };
@@ -1013,11 +1062,14 @@ const AdminPage: React.FC = () => {
 
   const calculateCostChangeFromDeltas = useCallback(
     (deltas: ModifierIngredientDelta[]) =>
-      deltas.reduce(
-        (sum, entry) => sum + (Number(entry.delta) || 0) * (ingredientCostMap[entry.ingredientId] ?? 0),
-        0
-      ),
-    [ingredientCostMap]
+      deltas.reduce((sum, entry) => {
+        const baseUnit = ingredientUnitMap[entry.ingredientId];
+        const deltaUnit = entry.unit || baseUnit;
+        const normalizedDelta = convertQuantity(Number(entry.delta) || 0, deltaUnit, baseUnit);
+
+        return sum + normalizedDelta * (ingredientCostMap[entry.ingredientId] ?? 0);
+      }, 0),
+    [ingredientCostMap, ingredientUnitMap]
   );
 
   const handleCreateCategory = async (event: React.FormEvent) => {
@@ -1037,13 +1089,26 @@ const AdminPage: React.FC = () => {
   };
 
   const handleAddIngredientRow = () => {
-    setProductIngredients((prev) => [...prev, { ingredientId: '', quantity: '' }]);
+    setProductIngredients((prev) => [...prev, { ingredientId: '', quantity: '', unit: '' }]);
   };
 
-  const handleIngredientChange = (index: number, field: 'ingredientId' | 'quantity', value: string) => {
+  const handleIngredientChange = (index: number, field: 'ingredientId' | 'quantity' | 'unit', value: string) => {
     setProductIngredients((prev) => {
       const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
+      const ingredientUnit =
+        field === 'ingredientId'
+          ? ingredients.find((entry) => entry._id === value)?.unit
+          : ingredients.find((entry) => entry._id === copy[index].ingredientId)?.unit;
+
+      copy[index] = {
+        ...copy[index],
+        [field]: value,
+        ...(field === 'ingredientId'
+          ? { unit: ingredientUnit || '' }
+          : field === 'unit'
+            ? { unit: value }
+            : { unit: copy[index].unit || ingredientUnit || '' }),
+      };
       return copy;
     });
   };
@@ -1105,11 +1170,15 @@ const AdminPage: React.FC = () => {
     });
     setProductEditIngredients(
       Array.isArray(product.ingredients)
-        ? product.ingredients.map((entry) => ({
-            ingredientId: entry.ingredientId,
-          quantity: entry.quantity.toString(),
-        }))
-      : []
+        ? product.ingredients.map((entry) => {
+            const ingredientUnit = ingredients.find((ingredient) => ingredient._id === entry.ingredientId)?.unit;
+            return {
+              ingredientId: entry.ingredientId,
+              quantity: entry.quantity.toString(),
+              unit: entry.unit || ingredientUnit || '',
+            };
+          })
+        : []
     );
     setProductEditModifiers(
       Array.isArray(product.modifierGroups)
@@ -1288,18 +1357,31 @@ const AdminPage: React.FC = () => {
 
   const handleEditIngredientChange = (
     index: number,
-    field: 'ingredientId' | 'quantity',
+    field: 'ingredientId' | 'quantity' | 'unit',
     value: string
   ) => {
     setProductEditIngredients((prev) => {
       const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
+      const ingredientUnit =
+        field === 'ingredientId'
+          ? ingredients.find((entry) => entry._id === value)?.unit
+          : ingredients.find((entry) => entry._id === copy[index].ingredientId)?.unit;
+
+      copy[index] = {
+        ...copy[index],
+        [field]: value,
+        ...(field === 'ingredientId'
+          ? { unit: ingredientUnit || '' }
+          : field === 'unit'
+            ? { unit: value }
+            : { unit: copy[index].unit || ingredientUnit || '' }),
+      };
       return copy;
     });
   };
 
   const addEditIngredientRow = () => {
-    setProductEditIngredients((prev) => [...prev, { ingredientId: '', quantity: '' }]);
+    setProductEditIngredients((prev) => [...prev, { ingredientId: '', quantity: '', unit: '' }]);
   };
 
   const removeEditIngredientRow = (index: number) => {
@@ -1349,7 +1431,14 @@ const AdminPage: React.FC = () => {
 
     const normalizedIngredients = productEditIngredients
       .filter((item) => item.ingredientId && item.quantity)
-      .map((item) => ({ ingredientId: item.ingredientId, quantity: Number(item.quantity) }));
+      .map((item) => {
+        const ingredientUnit = ingredients.find((entry) => entry._id === item.ingredientId)?.unit;
+        return {
+          ingredientId: item.ingredientId,
+          quantity: Number(item.quantity),
+          unit: item.unit || ingredientUnit,
+        };
+      });
 
     if (normalizedIngredients.length) {
       payload.ingredients = normalizedIngredients;
@@ -1436,7 +1525,10 @@ const AdminPage: React.FC = () => {
 
       const normalizedIngredients = productIngredients
         .filter((item) => item.ingredientId && item.quantity)
-        .map((item) => ({ ingredientId: item.ingredientId, quantity: Number(item.quantity) }));
+        .map((item) => {
+          const ingredientUnit = ingredients.find((entry) => entry._id === item.ingredientId)?.unit;
+          return { ingredientId: item.ingredientId, quantity: Number(item.quantity), unit: item.unit || ingredientUnit };
+        });
 
       if (normalizedIngredients.length) {
         payload.ingredients = normalizedIngredients;
@@ -2473,11 +2565,11 @@ const AdminPage: React.FC = () => {
                       <p className="text-xs font-semibold uppercase text-slate-500">Ингредиенты</p>
                       {productIngredients.map((row, index) => (
                         <div key={index} className="flex gap-2">
-                          <select
-                            value={row.ingredientId}
-                            onChange={(event) => handleIngredientChange(index, 'ingredientId', event.target.value)}
-                            className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
-                          >
+                        <select
+                          value={row.ingredientId}
+                          onChange={(event) => handleIngredientChange(index, 'ingredientId', event.target.value)}
+                          className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
+                        >
                             <option value="">Ингредиент</option>
                             {ingredients.map((ingredient) => (
                               <option key={ingredient._id} value={ingredient._id}>
@@ -2485,15 +2577,27 @@ const AdminPage: React.FC = () => {
                               </option>
                             ))}
                           </select>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={row.quantity}
-                            onChange={(event) => handleIngredientChange(index, 'quantity', event.target.value)}
-                            className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
-                            placeholder="Кол-во"
-                          />
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={row.quantity}
+                          onChange={(event) => handleIngredientChange(index, 'quantity', event.target.value)}
+                          className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
+                          placeholder="Кол-во"
+                        />
+                        <select
+                          value={row.unit || ''}
+                          onChange={(event) => handleIngredientChange(index, 'unit', event.target.value)}
+                          className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
+                        >
+                          <option value="">Ед.</option>
+                          {measurementUnits.map((unit) => (
+                            <option key={unit} value={unit}>
+                              {unit}
+                            </option>
+                          ))}
+                        </select>
                         </div>
                       ))}
                       <button
@@ -2749,11 +2853,11 @@ const AdminPage: React.FC = () => {
                         ) : null}
                         {productEditIngredients.map((row, index) => (
                           <div key={index} className="flex flex-wrap items-center gap-2">
-                            <select
-                              value={row.ingredientId}
-                              onChange={(event) => handleEditIngredientChange(index, 'ingredientId', event.target.value)}
-                              className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
-                            >
+                          <select
+                            value={row.ingredientId}
+                            onChange={(event) => handleEditIngredientChange(index, 'ingredientId', event.target.value)}
+                            className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
+                          >
                               <option value="">Ингредиент</option>
                               {ingredients.map((ingredient) => (
                                 <option key={ingredient._id} value={ingredient._id}>
@@ -2761,15 +2865,27 @@ const AdminPage: React.FC = () => {
                                 </option>
                               ))}
                             </select>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={row.quantity}
-                              onChange={(event) => handleEditIngredientChange(index, 'quantity', event.target.value)}
-                              className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
-                              placeholder="Кол-во"
-                            />
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={row.quantity}
+                            onChange={(event) => handleEditIngredientChange(index, 'quantity', event.target.value)}
+                            className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
+                            placeholder="Кол-во"
+                          />
+                          <select
+                            value={row.unit || ''}
+                            onChange={(event) => handleEditIngredientChange(index, 'unit', event.target.value)}
+                            className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
+                          >
+                            <option value="">Ед.</option>
+                            {measurementUnits.map((unit) => (
+                              <option key={unit} value={unit}>
+                                {unit}
+                              </option>
+                            ))}
+                          </select>
                             <button
                               type="button"
                               onClick={() => removeEditIngredientRow(index)}
@@ -2804,7 +2920,16 @@ const AdminPage: React.FC = () => {
                 <Card title="Добавить ингредиент">
                   <form onSubmit={handleCreateIngredient} className="space-y-3 text-sm">
                     <input name="name" type="text" placeholder="Название" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
-                    <input name="unit" type="text" placeholder="Единица (грамм, мл)" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
+                    <select name="unit" defaultValue="" className="w-full rounded-2xl border border-slate-200 px-4 py-2">
+                      <option value="" disabled>
+                        Выберите единицу измерения
+                      </option>
+                      {measurementUnits.map((unit) => (
+                        <option key={unit} value={unit}>
+                          {unit}
+                        </option>
+                      ))}
+                    </select>
                     <input name="costPerUnit" type="number" step="0.01" min="0" placeholder="Цена за единицу" className="w-full rounded-2xl border border-slate-200 px-4 py-2" />
                     <button type="submit" className="w-full rounded-2xl bg-slate-900 py-2 text-sm font-semibold text-white">
                       Добавить ингредиент
@@ -2845,12 +2970,20 @@ const AdminPage: React.FC = () => {
                           </div>
                           <div className="grid gap-2">
                             <label className="text-xs font-semibold uppercase text-slate-400">Единица</label>
-                            <input
-                              type="text"
+                            <select
                               value={ingredientEditForm.unit}
                               onChange={(event) => setIngredientEditForm((prev) => ({ ...prev, unit: event.target.value }))}
                               className="rounded-2xl border border-slate-200 px-3 py-2"
-                            />
+                            >
+                              <option value="" disabled>
+                                Выберите единицу измерения
+                              </option>
+                              {measurementUnits.map((unit) => (
+                                <option key={unit} value={unit}>
+                                  {unit}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                           <div className="grid gap-2">
                             <label className="text-xs font-semibold uppercase text-slate-400">Стоимость за единицу</label>
@@ -3012,13 +3145,18 @@ const AdminPage: React.FC = () => {
                             baseIngredientsForCost.map((ingredient) => {
                               const deltaEntry = option.ingredientDeltas?.find((entry) => entry.ingredientId === ingredient.ingredientId);
                               const deltaValue = deltaEntry?.delta ?? '';
-                              const estimatedCost = (Number(deltaValue) || 0) * (ingredient.costPerUnit ?? 0);
+                              const estimatedCost =
+                                convertQuantity(Number(deltaValue) || 0, deltaEntry?.unit || ingredient.unit, ingredient.ingredientUnit) *
+                                (ingredient.costPerUnit ?? 0);
                               return (
                                 <div key={`${ingredient.ingredientId}-${index}`} className="flex flex-wrap items-center gap-2 rounded-lg bg-white p-2">
                                   <div className="min-w-[160px] flex-1">
                                     <p className="text-xs font-semibold text-slate-800">{ingredient.name}</p>
                                     <p className="text-[11px] text-slate-500">
-                                      Базово: {ingredient.quantity} {ingredient.unit} · {ingredient.costPerUnit ? `${ingredient.costPerUnit.toFixed(2)} ₽/${ingredient.unit}` : 'нет цены'}
+                                      Базово: {ingredient.quantity} {ingredient.unit} ·{' '}
+                                      {ingredient.costPerUnit
+                                        ? `${ingredient.costPerUnit.toFixed(2)} ₽/${ingredient.ingredientUnit || ingredient.unit}`
+                                        : 'нет цены'}
                                     </p>
                                   </div>
                                   <input

@@ -5,6 +5,7 @@ import type { ModifierGroupDocument } from './modifierGroup.model';
 export interface ProductIngredient {
   ingredientId: Types.ObjectId;
   quantity: number;
+  unit?: string;
 }
 
 export interface Category {
@@ -119,6 +120,11 @@ const productSchema = new Schema<ProductDocument>(
             type: Number,
             required: true,
             min: 0,
+          },
+          unit: {
+            type: String,
+            required: false,
+            trim: true,
           },
         },
       ],

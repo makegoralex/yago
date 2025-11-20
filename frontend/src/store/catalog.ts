@@ -36,7 +36,7 @@ export type Product = {
   discountValue?: number;
   modifierGroups?: ModifierGroup[];
   isActive?: boolean;
-  ingredients?: Array<{ ingredientId: string; quantity: number }>;
+  ingredients?: Array<{ ingredientId: string; quantity: number; unit?: string }>;
 };
 
 type CatalogState = {
