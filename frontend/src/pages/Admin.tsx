@@ -927,9 +927,12 @@ const AdminPage: React.FC = () => {
   const filteredStockReceipts = useMemo(
     () =>
       stockReceipts.filter((receipt) =>
-        receiptFilter === 'all' ? true : receipt.type === receiptFilter
+        selectedWarehouse
+          ? receipt.warehouseId === selectedWarehouse._id &&
+            (receiptFilter === 'all' ? true : receipt.type === receiptFilter)
+          : false
       ),
-    [stockReceipts, receiptFilter]
+    [stockReceipts, receiptFilter, selectedWarehouse]
   );
 
   const loadCashiersData = useCallback(async () => {
@@ -1966,14 +1969,33 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const handleSelectWarehouse = (warehouse: Warehouse) => {
+  const handleSelectWarehouse = useCallback((warehouse: Warehouse) => {
     setSelectedWarehouse(warehouse);
     setWarehouseEditForm({
       name: warehouse.name,
       location: warehouse.location ?? '',
       description: warehouse.description ?? '',
     });
-  };
+
+    setReceiptForm((prev) => ({ ...prev, warehouseId: warehouse._id }));
+    setInventoryAuditForm((prev) => ({
+      ...prev,
+      warehouseId: warehouse._id,
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (warehouses.length === 1 && !selectedWarehouse) {
+      handleSelectWarehouse(warehouses[0]);
+      return;
+    }
+
+    if (selectedWarehouse && !warehouses.some((warehouse) => warehouse._id === selectedWarehouse._id)) {
+      setSelectedWarehouse(null);
+      setReceiptForm((prev) => ({ ...prev, warehouseId: '' }));
+      setInventoryAuditForm((prev) => ({ ...prev, warehouseId: '', items: [] }));
+    }
+  }, [handleSelectWarehouse, warehouses, selectedWarehouse]);
 
   const handleUpdateWarehouse = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -4078,20 +4100,22 @@ const AdminPage: React.FC = () => {
                     <option value="inventory">Инвентаризации</option>
                   </select>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void loadStockReceipts()}
-                  className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
-                >
-                  Обновить список
-                </button>
-              </div>
-              {stockReceiptsLoading ? (
-                <div className="mt-3 h-24 animate-pulse rounded-2xl bg-slate-200/70" />
-              ) : stockReceiptsError ? (
-                <p className="mt-3 text-sm text-red-600">{stockReceiptsError}</p>
-              ) : filteredStockReceipts.length === 0 ? (
-                <p className="mt-3 text-sm text-slate-400">Документы не найдены.</p>
+              <button
+                type="button"
+                onClick={() => void loadStockReceipts()}
+                className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+              >
+                Обновить список
+              </button>
+            </div>
+            {!selectedWarehouse ? (
+              <p className="mt-3 text-sm text-slate-500">Выберите склад, чтобы увидеть документы.</p>
+            ) : stockReceiptsLoading ? (
+              <div className="mt-3 h-24 animate-pulse rounded-2xl bg-slate-200/70" />
+            ) : stockReceiptsError ? (
+              <p className="mt-3 text-sm text-red-600">{stockReceiptsError}</p>
+            ) : filteredStockReceipts.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-400">Документы не найдены.</p>
               ) : (
                 <ul className="mt-3 space-y-3">
                   {filteredStockReceipts.map((receipt) => {
