@@ -5611,7 +5611,7 @@ const AdminPage: React.FC = () => {
       ) : null}
     </div>
   );
- };
+};
 
 const Card: React.FC<
   React.PropsWithChildren<{ title: string; id?: string; className?: string; actions?: React.ReactNode }>
