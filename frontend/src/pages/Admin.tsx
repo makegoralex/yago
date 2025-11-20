@@ -772,7 +772,7 @@ const AdminPage: React.FC = () => {
   }, [notify]);
 
   const normalizeReceiptPayload = (payload: unknown): StockReceipt[] => {
-    const stack: unknown[] = [];
+    const queue: unknown[] = [];
     const seen = new WeakSet<object>();
 
     const isStockReceiptArray = (value: unknown): value is StockReceipt[] =>
@@ -782,14 +782,13 @@ const AdminPage: React.FC = () => {
           entry &&
           typeof entry === 'object' &&
           'type' in entry &&
-          (entry as { type?: unknown }).type &&
-          ['receipt', 'writeOff', 'inventory'].includes((entry as { type: string }).type)
+          ['receipt', 'writeOff', 'inventory'].includes((entry as { type?: string }).type ?? '')
       );
 
-    const collectCandidates = (value: unknown) => {
+    const enqueueNested = (value: unknown) => {
       if (!value) return;
       if (Array.isArray(value)) {
-        stack.push(value);
+        queue.push(value);
         return;
       }
 
@@ -798,18 +797,17 @@ const AdminPage: React.FC = () => {
         seen.add(value as object);
 
         const obj = value as Record<string, unknown>;
-        stack.push(obj.receipts, obj.data, obj.items, obj.docs);
+        queue.push(obj.receipts, obj.data, obj.items, obj.docs);
 
-        // Some APIs return nested wrappers like { data: { receipts: { data: [...] } } }
         for (const nested of Object.values(obj)) {
-          collectCandidates(nested);
+          enqueueNested(nested);
         }
       }
     };
 
-    collectCandidates(payload);
+    enqueueNested(payload);
 
-    for (const candidate of stack) {
+    for (const candidate of queue) {
       if (isStockReceiptArray(candidate)) {
         return candidate;
       }
@@ -825,18 +823,19 @@ const AdminPage: React.FC = () => {
     try {
       let lastError: unknown;
 
-        for (const endpoint of ['/api/admin/inventory/receipts', '/api/inventory/receipts']) {
-          try {
-            const response = await api.get(endpoint);
-            const payload = getResponseData<
-              StockReceipt[] | { receipts?: StockReceipt[]; data?: unknown }
-            >(response);
-            const normalizedReceipts = normalizeReceiptPayload(payload ?? response?.data);
+      for (const endpoint of ['/api/admin/inventory/receipts', '/api/inventory/receipts']) {
+        try {
+          const response = await api.get(endpoint);
+          const payload = getResponseData<
+            StockReceipt[] | { receipts?: StockReceipt[]; data?: unknown }
+          >(response);
 
-            setStockReceipts(normalizedReceipts);
-            lastError = undefined;
-            break;
-          } catch (error) {
+          const normalizedReceipts = normalizeReceiptPayload(payload ?? response?.data);
+
+          setStockReceipts(normalizedReceipts);
+          lastError = undefined;
+          break;
+        } catch (error) {
           if (isAxiosError(error) && error.response?.status === 404) {
             lastError = error;
             continue;
@@ -2258,43 +2257,6 @@ const AdminPage: React.FC = () => {
       if (audit) {
         setLastAuditResult(audit);
       }
-      await loadInventoryData();
-      await loadStockReceipts();
-      await loadMenuData();
-    } catch (error) {
-      const message = extractErrorMessage(error, 'Не удалось удалить документ');
-      notify({ title: message, type: 'error' });
-    }
-  };
-
-  const handleAuditItemChange = (
-    index: number,
-    field: 'itemType' | 'itemId' | 'countedQuantity',
-    value: string
-  ) => {
-    setInventoryAuditForm((prev) => {
-      const items = [...prev.items];
-      items[index] = { ...items[index], [field]: value };
-      return { ...prev, items };
-    });
-  };
-
-  const addAuditItemRow = () => {
-    setInventoryAuditForm((prev) => ({
-      ...prev,
-      items: [...prev.items, { itemType: 'ingredient', itemId: '', countedQuantity: '' }],
-    }));
-  };
-
-  const removeAuditItemRow = (index: number) => {
-    setInventoryAuditForm((prev) => ({
-      ...prev,
-      items: prev.items.filter((_, itemIndex) => itemIndex !== index),
-    }));
-  };
-
-  const handleSubmitInventoryAudit = async (event: React.FormEvent) => {
-    event.preventDefault();
 
       notify({
         title: 'Инвентаризация завершена. Документы до этой даты будут заблокированы.',
