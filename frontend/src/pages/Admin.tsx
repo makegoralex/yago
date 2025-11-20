@@ -781,7 +781,10 @@ const AdminPage: React.FC = () => {
       for (const endpoint of ['/api/admin/inventory/receipts', '/api/inventory/receipts']) {
         try {
           const response = await api.get(endpoint);
-          setStockReceipts(getResponseData<StockReceipt[]>(response) ?? []);
+          const payload = getResponseData<StockReceipt[] | { receipts?: StockReceipt[] }>(response);
+          const normalizedReceipts = Array.isArray(payload) ? payload : payload?.receipts;
+
+          setStockReceipts(Array.isArray(normalizedReceipts) ? normalizedReceipts : []);
           lastError = undefined;
           break;
         } catch (error) {
