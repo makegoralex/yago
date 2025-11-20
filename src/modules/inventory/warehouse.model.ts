@@ -4,6 +4,7 @@ export interface Warehouse {
   name: string;
   location?: string;
   description?: string;
+  lastInventoryAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,6 +27,10 @@ const warehouseSchema = new Schema<WarehouseDocument>(
       type: String,
       required: false,
       trim: true,
+    },
+    lastInventoryAt: {
+      type: Date,
+      required: false,
     },
   },
   {

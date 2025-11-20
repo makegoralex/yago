@@ -8,6 +8,8 @@ export interface StockReceiptItem {
 }
 
 export interface StockReceipt {
+  type: 'receipt' | 'writeOff' | 'inventory';
+  occurredAt: Date;
   warehouseId: Types.ObjectId;
   supplierId?: Types.ObjectId;
   createdBy: Types.ObjectId;
@@ -30,6 +32,13 @@ const stockReceiptItemSchema = new Schema<StockReceiptItem>(
 
 const stockReceiptSchema = new Schema<StockReceiptDocument>(
   {
+    type: {
+      type: String,
+      enum: ['receipt', 'writeOff', 'inventory'],
+      required: true,
+      default: 'receipt',
+    },
+    occurredAt: { type: Date, required: true, default: () => new Date() },
     warehouseId: { type: Schema.Types.ObjectId, ref: 'Warehouse', required: true },
     supplierId: { type: Schema.Types.ObjectId, ref: 'Supplier', required: false },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },

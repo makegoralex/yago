@@ -6,7 +6,8 @@ import { InventoryItemDocument, InventoryItemModel } from './inventoryItem.model
 import { WarehouseModel } from './warehouse.model';
 import { StockReceiptModel, type StockReceiptDocument } from './stockReceipt.model';
 import { SupplierModel } from '../suppliers/supplier.model';
-import { recalculateAverageCostForItem } from './inventoryCost.service';
+import { adjustInventoryQuantity, recalculateAverageCostForItem } from './inventoryCost.service';
+import { InventoryAuditModel, type InventoryAuditDocument } from './inventoryAudit.model';
 
 type LeanInventoryItem = {
   _id: Types.ObjectId;
@@ -43,40 +44,54 @@ export interface CreateReceiptInput {
   warehouseId?: unknown;
   supplierId?: unknown;
   items?: unknown;
+  type?: unknown;
+  occurredAt?: unknown;
   createdBy: string;
 }
 
-export const createStockReceipt = async ({
-  warehouseId,
-  supplierId,
-  items,
-  createdBy,
-}: CreateReceiptInput): Promise<StockReceiptDocument> => {
-  if (typeof warehouseId !== 'string' || !Types.ObjectId.isValid(warehouseId)) {
-    throw new InventoryReceiptError(400, 'warehouseId обязателен');
+type StockReceiptType = StockReceiptDocument['type'];
+
+const parseReceiptType = (type: unknown, allowInventory = false): StockReceiptType => {
+  if (type === undefined) {
+    return 'receipt';
   }
 
-  const warehouseExists = await WarehouseModel.exists({ _id: warehouseId });
-  if (!warehouseExists) {
-    throw new InventoryReceiptError(404, 'Склад не найден');
+  if (type === 'receipt' || type === 'writeOff' || (allowInventory && type === 'inventory')) {
+    return type;
   }
 
-  const supplierObjectId =
-    typeof supplierId === 'string' && Types.ObjectId.isValid(supplierId)
-      ? new Types.ObjectId(supplierId)
-      : undefined;
+  throw new InventoryReceiptError(400, 'Некорректный тип движения');
+};
 
-  if (supplierId && !supplierObjectId) {
-    throw new InventoryReceiptError(400, 'Некорректный поставщик');
+const ensureNotLockedByInventory = async (
+  warehouseId: Types.ObjectId,
+  receiptDate: Date
+): Promise<void> => {
+  const warehouse = await WarehouseModel.findById(warehouseId).select('lastInventoryAt');
+
+  if (warehouse?.lastInventoryAt && receiptDate <= warehouse.lastInventoryAt) {
+    throw new InventoryReceiptError(
+      409,
+      'Документ попадает до последней инвентаризации и не может быть изменен'
+    );
+  }
+};
+
+const parseReceiptDate = (value: unknown): Date => {
+  if (!value) {
+    return new Date();
   }
 
-  if (supplierObjectId) {
-    const supplierExists = await SupplierModel.exists({ _id: supplierObjectId });
-    if (!supplierExists) {
-      throw new InventoryReceiptError(404, 'Поставщик не найден');
-    }
+  const date = new Date(String(value));
+
+  if (Number.isNaN(date.getTime())) {
+    throw new InventoryReceiptError(400, 'Некорректная дата документа');
   }
 
+  return date;
+};
+
+const normalizeReceiptItems = async (items: unknown): Promise<StockReceiptDocument['items']> => {
   if (!Array.isArray(items) || items.length === 0) {
     throw new InventoryReceiptError(400, 'Добавьте хотя бы одну позицию');
   }
@@ -129,7 +144,51 @@ export const createStockReceipt = async ({
     });
   }
 
+  return normalizedItems;
+};
+
+export const createStockReceipt = async ({
+  warehouseId,
+  supplierId,
+  items,
+  createdBy,
+  type,
+  occurredAt,
+}: CreateReceiptInput): Promise<StockReceiptDocument> => {
+  if (typeof warehouseId !== 'string' || !Types.ObjectId.isValid(warehouseId)) {
+    throw new InventoryReceiptError(400, 'warehouseId обязателен');
+  }
+
+  const warehouseExists = await WarehouseModel.exists({ _id: warehouseId });
+  if (!warehouseExists) {
+    throw new InventoryReceiptError(404, 'Склад не найден');
+  }
+
+  const supplierObjectId =
+    typeof supplierId === 'string' && Types.ObjectId.isValid(supplierId)
+      ? new Types.ObjectId(supplierId)
+      : undefined;
+
+  if (supplierId && !supplierObjectId) {
+    throw new InventoryReceiptError(400, 'Некорректный поставщик');
+  }
+
+  if (supplierObjectId) {
+    const supplierExists = await SupplierModel.exists({ _id: supplierObjectId });
+    if (!supplierExists) {
+      throw new InventoryReceiptError(404, 'Поставщик не найден');
+    }
+  }
+
+  const normalizedItems = await normalizeReceiptItems(items);
+  const receiptType = parseReceiptType(type);
+  const happenedAt = parseReceiptDate(occurredAt);
+
+  await ensureNotLockedByInventory(new Types.ObjectId(warehouseId), happenedAt);
+
   const receipt = await StockReceiptModel.create({
+    type: receiptType,
+    occurredAt: happenedAt,
     warehouseId: new Types.ObjectId(warehouseId),
     supplierId: supplierObjectId,
     createdBy: new Types.ObjectId(createdBy),
@@ -137,11 +196,13 @@ export const createStockReceipt = async ({
   });
 
   for (const entry of normalizedItems) {
+    const delta = receiptType === 'writeOff' ? -entry.quantity : entry.quantity;
+
     const item = await InventoryItemModel.findOneAndUpdate(
       { warehouseId, itemType: entry.itemType, itemId: entry.itemId },
       {
         $set: { unitCost: entry.unitCost },
-        $inc: { quantity: entry.quantity },
+        $inc: { quantity: delta },
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
@@ -152,6 +213,229 @@ export const createStockReceipt = async ({
   }
 
   return receipt;
+};
+
+export const listStockReceipts = async (
+  filter: FilterQuery<StockReceiptDocument> = {}
+): Promise<StockReceiptDocument[]> => {
+  return StockReceiptModel.find(filter).sort({ occurredAt: -1, createdAt: -1 });
+};
+
+export const updateStockReceipt = async (
+  id: string,
+  payload: Partial<CreateReceiptInput>
+): Promise<StockReceiptDocument> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new InventoryReceiptError(400, 'Некорректный идентификатор документа');
+  }
+
+  const receipt = await StockReceiptModel.findById(id);
+
+  if (!receipt) {
+    throw new InventoryReceiptError(404, 'Документ не найден');
+  }
+
+  if (receipt.type === 'inventory') {
+    throw new InventoryReceiptError(409, 'Инвентаризации нельзя изменять');
+  }
+
+  await ensureNotLockedByInventory(receipt.warehouseId, receipt.occurredAt);
+
+  const updatedItems = payload.items ? await normalizeReceiptItems(payload.items) : receipt.items;
+  const supplierObjectId =
+    typeof payload.supplierId === 'string' && Types.ObjectId.isValid(payload.supplierId)
+      ? new Types.ObjectId(payload.supplierId)
+      : undefined;
+
+  if (payload.supplierId && !supplierObjectId) {
+    throw new InventoryReceiptError(400, 'Некорректный поставщик');
+  }
+
+  if (supplierObjectId) {
+    const supplierExists = await SupplierModel.exists({ _id: supplierObjectId });
+    if (!supplierExists) {
+      throw new InventoryReceiptError(404, 'Поставщик не найден');
+    }
+  }
+
+  const newDate = payload.occurredAt ? parseReceiptDate(payload.occurredAt) : receipt.occurredAt;
+
+  await ensureNotLockedByInventory(receipt.warehouseId, newDate);
+
+  const sign = receipt.type === 'writeOff' ? -1 : 1;
+
+  for (const entry of receipt.items) {
+    await adjustInventoryQuantity(receipt.warehouseId, entry.itemType, entry.itemId, -sign * entry.quantity);
+  }
+
+  for (const entry of updatedItems) {
+    await adjustInventoryQuantity(receipt.warehouseId, entry.itemType, entry.itemId, sign * entry.quantity);
+    await recalculateAverageCostForItem(entry.itemType, entry.itemId);
+  }
+
+  receipt.items = updatedItems;
+  receipt.supplierId = supplierObjectId ?? receipt.supplierId;
+  receipt.occurredAt = newDate;
+
+  await receipt.save();
+
+  return receipt;
+};
+
+export const deleteStockReceipt = async (id: string): Promise<void> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new InventoryReceiptError(400, 'Некорректный идентификатор документа');
+  }
+
+  const receipt = await StockReceiptModel.findById(id);
+
+  if (!receipt) {
+    return;
+  }
+
+  if (receipt.type === 'inventory') {
+    throw new InventoryReceiptError(409, 'Инвентаризации нельзя удалять');
+  }
+
+  await ensureNotLockedByInventory(receipt.warehouseId, receipt.occurredAt);
+
+  const sign = receipt.type === 'writeOff' ? -1 : 1;
+
+  for (const entry of receipt.items) {
+    await adjustInventoryQuantity(receipt.warehouseId, entry.itemType, entry.itemId, -sign * entry.quantity);
+    await recalculateAverageCostForItem(entry.itemType, entry.itemId);
+  }
+
+  await receipt.deleteOne();
+};
+
+export interface InventoryAuditInput {
+  warehouseId?: unknown;
+  items?: unknown;
+  performedAt?: unknown;
+  performedBy: string;
+}
+
+type InventoryAuditItemInput = {
+  itemType?: unknown;
+  itemId?: unknown;
+  countedQuantity?: unknown;
+};
+
+export const performInventoryAudit = async ({
+  warehouseId,
+  items,
+  performedAt,
+  performedBy,
+}: InventoryAuditInput): Promise<InventoryAuditDocument> => {
+  if (typeof warehouseId !== 'string' || !Types.ObjectId.isValid(warehouseId)) {
+    throw new InventoryReceiptError(400, 'warehouseId обязателен');
+  }
+
+  const warehouseObjectId = new Types.ObjectId(warehouseId);
+
+  const warehouseExists = await WarehouseModel.exists({ _id: warehouseObjectId });
+  if (!warehouseExists) {
+    throw new InventoryReceiptError(404, 'Склад не найден');
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new InventoryReceiptError(400, 'Укажите позиции для инвентаризации');
+  }
+
+  const snapshotDate = parseReceiptDate(performedAt);
+
+  await ensureNotLockedByInventory(warehouseObjectId, snapshotDate);
+
+  const normalized: InventoryAuditDocument['items'] = [];
+
+  const existingItems = await InventoryItemModel.find({ warehouseId: warehouseObjectId }).lean();
+  const existingMap = new Map(
+    existingItems.map((item) => [`${item.itemType}:${item.itemId.toString()}`, item])
+  );
+
+  let totalLossValue = 0;
+  let totalGainValue = 0;
+
+  for (const raw of items as InventoryAuditItemInput[]) {
+    if (!raw || typeof raw !== 'object') {
+      throw new InventoryReceiptError(400, 'Неверный формат позиции');
+    }
+
+    if (raw.itemType !== 'ingredient' && raw.itemType !== 'product') {
+      throw new InventoryReceiptError(400, 'itemType должен быть ingredient или product');
+    }
+
+    if (typeof raw.itemId !== 'string' || !Types.ObjectId.isValid(raw.itemId)) {
+      throw new InventoryReceiptError(400, 'itemId обязателен');
+    }
+
+    const countedQuantity = Number(raw.countedQuantity ?? 0);
+    if (!Number.isFinite(countedQuantity) || countedQuantity < 0) {
+      throw new InventoryReceiptError(400, 'Количество должно быть неотрицательным');
+    }
+
+    const itemId = new Types.ObjectId(raw.itemId);
+
+    if (raw.itemType === 'ingredient') {
+      const exists = await IngredientModel.exists({ _id: itemId });
+      if (!exists) {
+        throw new InventoryReceiptError(404, 'Ингредиент не найден');
+      }
+    } else {
+      const exists = await ProductModel.exists({ _id: itemId });
+      if (!exists) {
+        throw new InventoryReceiptError(404, 'Товар не найден');
+      }
+    }
+
+    const key = `${raw.itemType}:${itemId.toString()}`;
+    const currentItem = existingMap.get(key);
+    const previousQuantity = currentItem?.quantity ?? 0;
+    const difference = countedQuantity - previousQuantity;
+    const unitCostSnapshot = currentItem?.unitCost;
+
+    normalized.push({
+      itemType: raw.itemType,
+      itemId,
+      previousQuantity,
+      countedQuantity,
+      difference,
+      unitCostSnapshot,
+    });
+
+    await adjustInventoryQuantity(warehouseObjectId, raw.itemType, itemId, difference);
+
+    if (unitCostSnapshot !== undefined) {
+      const valueDelta = difference * unitCostSnapshot;
+      if (valueDelta < 0) {
+        totalLossValue += Math.abs(valueDelta);
+      } else if (valueDelta > 0) {
+        totalGainValue += valueDelta;
+      }
+    }
+  }
+
+  const audit = await InventoryAuditModel.create({
+    warehouseId: warehouseObjectId,
+    performedBy: new Types.ObjectId(performedBy),
+    performedAt: snapshotDate,
+    items: normalized,
+    totalLossValue,
+    totalGainValue,
+  });
+
+  await WarehouseModel.findByIdAndUpdate(warehouseObjectId, { lastInventoryAt: snapshotDate });
+
+  await StockReceiptModel.create({
+    type: 'inventory',
+    occurredAt: snapshotDate,
+    warehouseId: warehouseObjectId,
+    createdBy: new Types.ObjectId(performedBy),
+    items: [],
+  });
+
+  return audit;
 };
 
 export const fetchInventoryItemsWithReferences = async (
