@@ -102,7 +102,7 @@ export const updateRestaurantBranding = async (payload: Partial<RestaurantBrandi
   const updated = await RestaurantSettingsModel.findOneAndUpdate(
     { singletonKey: 'singleton' },
     {
-      $setOnInsert: DEFAULT_BRANDING,
+      $setOnInsert: { ...DEFAULT_BRANDING, singletonKey: 'singleton' },
       ...(Object.keys(updatePayload).length ? { $set: updatePayload } : {}),
     },
     {

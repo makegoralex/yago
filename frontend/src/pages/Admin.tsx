@@ -369,15 +369,46 @@ const DAY_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 0, label: 'Вс' },
 ];
 
+const formatInputDate = (date: Date): string => date.toISOString().slice(0, 10);
+const parseDateInput = (value: string): Date => {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+};
+
+const startOfDay = (value: Date): Date => {
+  const result = new Date(value);
+  result.setHours(0, 0, 0, 0);
+  return result;
+};
+
+const endOfDay = (value: Date): Date => {
+  const result = new Date(value);
+  result.setHours(23, 59, 59, 999);
+  return result;
+};
+
 const AdminPage: React.FC = () => {
   const { notify } = useToast();
   const [activeTab, setActiveTab] = useState<
     'dashboard' | 'menu' | 'inventory' | 'loyalty' | 'suppliers' | 'discounts' | 'staff' | 'branding'
   >('dashboard');
+  const [inventoryTab, setInventoryTab] = useState<'warehouses' | 'documents' | 'audit' | 'stock'>(
+    'warehouses'
+  );
   const [menuSection, setMenuSection] = useState<'products' | 'categories' | 'ingredients' | 'modifiers'>(
     'products'
   );
   const [loyaltySection, setLoyaltySection] = useState<'settings' | 'guests'>('settings');
+  const todayInputValue = useMemo(() => formatInputDate(new Date()), []);
+  const inventoryTabs = useMemo(
+    () => [
+      { id: 'warehouses' as const, label: 'Склады', description: 'Локации и сводка' },
+      { id: 'documents' as const, label: 'Документы', description: 'Поставка/списание и фильтры' },
+      { id: 'audit' as const, label: 'Инвентаризация', description: 'Проверка и результаты' },
+      { id: 'stock' as const, label: 'Остатки', description: 'Текущие позиции' },
+    ],
+    []
+  );
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [summary, setSummary] = useState({
     totalOrders: 0,
@@ -483,16 +514,23 @@ const AdminPage: React.FC = () => {
       },
     ],
   });
+  const receiptItems = receiptForm.items;
   const [receiptType, setReceiptType] = useState<'receipt' | 'writeOff'>('receipt');
-  const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [receiptDate, setReceiptDate] = useState(() => todayInputValue);
   const [stockReceipts, setStockReceipts] = useState<StockReceipt[]>([]);
   const [stockReceiptsLoading, setStockReceiptsLoading] = useState(false);
   const [stockReceiptsError, setStockReceiptsError] = useState<string | null>(null);
   const [selectedStockReceipt, setSelectedStockReceipt] = useState<StockReceipt | null>(null);
   const [receiptFilter, setReceiptFilter] = useState<'all' | StockReceipt['type']>('all');
+  const [receiptDateFrom, setReceiptDateFrom] = useState('');
+  const [receiptDateTo, setReceiptDateTo] = useState('');
+  const [receiptDatePreset, setReceiptDatePreset] = useState('');
+  const [receiptSupplierFilter, setReceiptSupplierFilter] = useState('');
+  const [receiptAmountMin, setReceiptAmountMin] = useState('');
+  const [receiptAmountMax, setReceiptAmountMax] = useState('');
   const [inventoryAuditForm, setInventoryAuditForm] = useState({
     warehouseId: '',
-    performedAt: new Date().toISOString().slice(0, 10),
+    performedAt: todayInputValue,
     items: [] as Array<{ itemType: 'ingredient' | 'product'; itemId: string; countedQuantity: string }>,
   });
   const [auditSubmitting, setAuditSubmitting] = useState(false);
@@ -924,15 +962,151 @@ const AdminPage: React.FC = () => {
     [ingredientMap, productMap]
   );
 
-  const filteredStockReceipts = useMemo(
+  const filteredStockReceipts = useMemo(() => {
+    if (!selectedWarehouse) {
+      return [];
+    }
+
+    const fromDate = receiptDateFrom ? startOfDay(parseDateInput(receiptDateFrom)) : null;
+    const toDate = receiptDateTo ? endOfDay(parseDateInput(receiptDateTo)) : null;
+    const minAmount = receiptAmountMin.trim() ? Number(receiptAmountMin) : null;
+    const maxAmount = receiptAmountMax.trim() ? Number(receiptAmountMax) : null;
+
+    return stockReceipts.filter((receipt) => {
+      if (receipt.warehouseId !== selectedWarehouse._id) {
+        return false;
+      }
+
+      if (receiptFilter !== 'all' && receipt.type !== receiptFilter) {
+        return false;
+      }
+
+      const occurredAt = new Date(receipt.occurredAt);
+
+      if (fromDate && occurredAt < fromDate) {
+        return false;
+      }
+
+      if (toDate && occurredAt > toDate) {
+        return false;
+      }
+
+      if (receiptSupplierFilter && receipt.supplierId !== receiptSupplierFilter) {
+        return false;
+      }
+
+      const total = calculateReceiptTotal(receipt);
+
+      if (minAmount !== null && Number.isFinite(minAmount) && total < minAmount) {
+        return false;
+      }
+
+      if (maxAmount !== null && Number.isFinite(maxAmount) && total > maxAmount) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [
+    calculateReceiptTotal,
+    receiptAmountMax,
+    receiptAmountMin,
+    receiptDateFrom,
+    receiptDateTo,
+    receiptFilter,
+    receiptSupplierFilter,
+    selectedWarehouse,
+    stockReceipts,
+  ]);
+
+  const receiptTotals = useMemo(() => {
+    const totalsMap = new Map<string, number>();
+    let overall = 0;
+
+    for (const receipt of filteredStockReceipts) {
+      const total = calculateReceiptTotal(receipt);
+      totalsMap.set(receipt._id, total);
+      overall += total;
+    }
+
+    return { totalsMap, overall };
+  }, [calculateReceiptTotal, filteredStockReceipts]);
+
+  const receiptTotal = useMemo(
     () =>
-      stockReceipts.filter((receipt) =>
-        selectedWarehouse
-          ? receipt.warehouseId === selectedWarehouse._id &&
-            (receiptFilter === 'all' ? true : receipt.type === receiptFilter)
-          : false
+      receiptItems.reduce(
+        (acc, item) => acc + Number(item.quantity || 0) * Number(item.unitCost || 0),
+        0
       ),
-    [stockReceipts, receiptFilter, selectedWarehouse]
+    [receiptItems]
+  );
+
+  const receiptLastTouchedLabel = useMemo(() => {
+    const timestamp =
+      selectedStockReceipt?.updatedAt ??
+      selectedStockReceipt?.createdAt ??
+      selectedStockReceipt?.occurredAt;
+
+    return timestamp ? formatDateTime(timestamp) : '—';
+  }, [selectedStockReceipt]);
+
+  const inventoryQuantityLookup = useMemo(() => {
+    const map = new Map<string, number>();
+
+    for (const item of inventoryItems) {
+      map.set(`${item.warehouseId}-${item.itemType}-${item.itemId}`, item.quantity);
+    }
+
+    return map;
+  }, [inventoryItems]);
+
+  const applyReceiptDatePreset = useCallback(
+    (preset: string) => {
+      let from: Date | null = null;
+      let to: Date | null = null;
+      const now = new Date();
+
+      switch (preset) {
+        case 'today':
+          from = startOfDay(now);
+          to = now;
+          break;
+        case 'yesterday': {
+          const base = startOfDay(now);
+          base.setDate(base.getDate() - 1);
+          from = base;
+          to = base;
+          break;
+        }
+        case 'week':
+          from = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6));
+          to = now;
+          break;
+        case 'month':
+          from = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
+          to = now;
+          break;
+        case 'lastMonth':
+          from = startOfDay(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+          to = endOfDay(new Date(now.getFullYear(), now.getMonth(), 0));
+          break;
+        case 'year':
+          from = startOfDay(new Date(now.getFullYear(), 0, 1));
+          to = now;
+          break;
+        case 'lastYear':
+          from = startOfDay(new Date(now.getFullYear() - 1, 0, 1));
+          to = endOfDay(new Date(now.getFullYear() - 1, 11, 31));
+          break;
+        default:
+          break;
+      }
+
+      setReceiptDatePreset(preset);
+      setReceiptDateFrom(from ? formatInputDate(from) : '');
+      setReceiptDateTo(to ? formatInputDate(to) : '');
+    },
+    [setReceiptDateFrom, setReceiptDateTo]
   );
 
   const loadCashiersData = useCallback(async () => {
@@ -2070,7 +2244,7 @@ const AdminPage: React.FC = () => {
   const resetReceiptForm = (preserveWarehouse = false) => {
     setSelectedStockReceipt(null);
     setReceiptType('receipt');
-    setReceiptDate(new Date().toISOString().slice(0, 10));
+    setReceiptDate(formatInputDate(new Date()));
     setReceiptForm({
       warehouseId: preserveWarehouse ? receiptForm.warehouseId : '',
       supplierId: '',
@@ -2094,6 +2268,18 @@ const AdminPage: React.FC = () => {
 
     if (!receiptDate) {
       notify({ title: 'Укажите дату документа', type: 'info' });
+      return;
+    }
+
+    const occurredDate = parseDateInput(receiptDate);
+
+    if (Number.isNaN(occurredDate.getTime())) {
+      notify({ title: 'Некорректная дата документа', type: 'info' });
+      return;
+    }
+
+    if (occurredDate.getTime() > endOfDay(new Date()).getTime()) {
+      notify({ title: 'Дата документа не может быть в будущем', type: 'info' });
       return;
     }
 
@@ -2249,6 +2435,23 @@ const AdminPage: React.FC = () => {
       return;
     }
 
+    if (!inventoryAuditForm.performedAt) {
+      notify({ title: 'Укажите дату инвентаризации', type: 'info' });
+      return;
+    }
+
+    const performedDate = parseDateInput(inventoryAuditForm.performedAt);
+
+    if (Number.isNaN(performedDate.getTime())) {
+      notify({ title: 'Некорректная дата инвентаризации', type: 'info' });
+      return;
+    }
+
+    if (performedDate.getTime() > endOfDay(new Date()).getTime()) {
+      notify({ title: 'Дата инвентаризации не может быть в будущем', type: 'info' });
+      return;
+    }
+
     const payloadItems = inventoryAuditForm.items
       .map((item) => ({
         itemType: item.itemType,
@@ -2287,7 +2490,7 @@ const AdminPage: React.FC = () => {
 
       setInventoryAuditForm((prev) => ({
         ...prev,
-        performedAt: new Date().toISOString().slice(0, 10),
+        performedAt: formatInputDate(new Date()),
         items: [],
       }));
 
@@ -2350,6 +2553,26 @@ const AdminPage: React.FC = () => {
       void loadSuppliersData();
     } catch (error) {
       notify({ title: 'Не удалось обновить поставщика', type: 'error' });
+    }
+  };
+
+  const handleDeleteSupplier = async (supplierId: string) => {
+    if (!supplierId) return;
+    if (!window.confirm('Удалить поставщика? Документы останутся без привязки.')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/api/suppliers/${supplierId}`);
+      notify({ title: 'Поставщик удалён', type: 'success' });
+      setSuppliers((prev) => prev.filter((supplier) => supplier._id !== supplierId));
+
+      if (selectedSupplier?._id === supplierId) {
+        setSelectedSupplier(null);
+        setSupplierEditForm({ name: '', contactName: '', phone: '', email: '', address: '', notes: '' });
+      }
+    } catch (error) {
+      notify({ title: 'Не удалось удалить поставщика', type: 'error' });
     }
   };
 
@@ -3804,568 +4027,725 @@ const AdminPage: React.FC = () => {
       ) : null}
       {activeTab === 'inventory' ? (
         <div className="space-y-6">
-          <section className="grid gap-6 lg:grid-cols-3">
-            <Card title="Склады">
-              <form onSubmit={handleCreateWarehouse} className="space-y-3 text-sm">
-                <input
-                  type="text"
-                  value={newWarehouse.name}
-                  onChange={(event) => setNewWarehouse((prev) => ({ ...prev, name: event.target.value }))}
-                  placeholder="Название"
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                />
-                <input
-                  type="text"
-                  value={newWarehouse.location}
-                  onChange={(event) => setNewWarehouse((prev) => ({ ...prev, location: event.target.value }))}
-                  placeholder="Адрес"
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                />
-                <textarea
-                  value={newWarehouse.description}
-                  onChange={(event) => setNewWarehouse((prev) => ({ ...prev, description: event.target.value }))}
-                  placeholder="Описание"
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                  rows={3}
-                />
-                <button type="submit" className="w-full rounded-2xl bg-slate-900 py-2 text-sm font-semibold text-white">
-                  Добавить склад
-                </button>
-              </form>
-              <div className="mt-4 space-y-2">
-                <p className="text-xs uppercase text-slate-400">Список складов</p>
-                <ul className="space-y-2 text-sm">
-                  {warehouses.map((warehouse) => (
-                    <li
-                      key={warehouse._id}
-                      onClick={() => handleSelectWarehouse(warehouse)}
-                      className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 transition hover:bg-emerald-50 ${
-                        selectedWarehouse?._id === warehouse._id ? 'bg-emerald-100' : 'bg-slate-50'
-                      }`}
-                    >
-                      <div>
-                        <p className="font-medium text-slate-700">{warehouse.name}</p>
-                        <p className="text-xs text-slate-400">{warehouse.location || 'Адрес не задан'}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              {selectedWarehouse ? (
-                <form onSubmit={handleUpdateWarehouse} className="mt-4 space-y-3 text-sm">
-                  <p className="text-xs uppercase text-slate-400">Редактирование склада</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {inventoryTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setInventoryTab(tab.id)}
+                className={`flex flex-col rounded-2xl border px-4 py-3 text-left shadow-soft transition hover:border-emerald-300 ${
+                  inventoryTab === tab.id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'
+                }`}
+              >
+                <span className="text-sm font-semibold text-slate-800">{tab.label}</span>
+                <span className="text-xs text-slate-500">{tab.description}</span>
+              </button>
+            ))}
+          </div>
+
+          {inventoryTab === 'warehouses' ? (
+            <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+              <Card title="Склады">
+                <form onSubmit={handleCreateWarehouse} className="space-y-3 text-sm">
                   <input
                     type="text"
-                    value={warehouseEditForm.name}
-                    onChange={(event) =>
-                      setWarehouseEditForm((prev) => ({ ...prev, name: event.target.value }))
-                    }
+                    value={newWarehouse.name}
+                    onChange={(event) => setNewWarehouse((prev) => ({ ...prev, name: event.target.value }))}
+                    placeholder="Название"
                     className="w-full rounded-2xl border border-slate-200 px-4 py-2"
                   />
                   <input
                     type="text"
-                    value={warehouseEditForm.location}
-                    onChange={(event) =>
-                      setWarehouseEditForm((prev) => ({ ...prev, location: event.target.value }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    value={newWarehouse.location}
+                    onChange={(event) => setNewWarehouse((prev) => ({ ...prev, location: event.target.value }))}
                     placeholder="Адрес"
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
                   />
                   <textarea
-                    value={warehouseEditForm.description}
+                    value={newWarehouse.description}
+                    onChange={(event) => setNewWarehouse((prev) => ({ ...prev, description: event.target.value }))}
+                    placeholder="Описание"
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    rows={3}
+                  />
+                  <button type="submit" className="w-full rounded-2xl bg-slate-900 py-2 text-sm font-semibold text-white">
+                    Добавить склад
+                  </button>
+                </form>
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs uppercase text-slate-400">Список складов</p>
+                  <ul className="space-y-2 text-sm">
+                    {warehouses.map((warehouse) => (
+                      <li
+                        key={warehouse._id}
+                        onClick={() => handleSelectWarehouse(warehouse)}
+                        className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 transition hover:bg-emerald-50 ${
+                          selectedWarehouse?._id === warehouse._id ? 'bg-emerald-100' : 'bg-slate-50'
+                        }`}
+                      >
+                        <div>
+                          <p className="font-medium text-slate-700">{warehouse.name}</p>
+                          <p className="text-xs text-slate-400">{warehouse.location || 'Адрес не задан'}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                {selectedWarehouse ? (
+                  <form onSubmit={handleUpdateWarehouse} className="mt-4 space-y-3 text-sm">
+                    <p className="text-xs uppercase text-slate-400">Редактирование склада</p>
+                    <input
+                      type="text"
+                      value={warehouseEditForm.name}
+                      onChange={(event) =>
+                        setWarehouseEditForm((prev) => ({ ...prev, name: event.target.value }))
+                      }
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    />
+                    <input
+                      type="text"
+                      value={warehouseEditForm.location}
+                      onChange={(event) =>
+                        setWarehouseEditForm((prev) => ({ ...prev, location: event.target.value }))
+                      }
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                      placeholder="Адрес"
+                    />
+                    <textarea
+                      value={warehouseEditForm.description}
+                      onChange={(event) =>
+                        setWarehouseEditForm((prev) => ({ ...prev, description: event.target.value }))
+                      }
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                      rows={2}
+                      placeholder="Описание"
+                    />
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="submit"
+                        className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
+                      >
+                        Сохранить склад
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteWarehouse(selectedWarehouse._id)}
+                        className="w-full rounded-2xl border border-red-200 bg-red-50 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                      >
+                        Удалить склад
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+              </Card>
+              <Card title="Сводка">
+                {inventorySummary ? (
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex items-center justify-between">
+                      <span className="text-slate-500">Продуктов</span>
+                      <span className="font-semibold text-slate-800">{inventorySummary.productsTracked}</span>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span className="text-slate-500">Ингредиентов</span>
+                      <span className="font-semibold text-slate-800">{inventorySummary.ingredientsTracked}</span>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span className="text-slate-500">Стоимость запасов</span>
+                      <span className="font-semibold text-slate-800">{inventorySummary.stockValue.toFixed(2)} ₽</span>
+                    </li>
+                  </ul>
+                ) : (
+                  <p className="text-sm text-slate-400">Нет данных</p>
+                )}
+              </Card>
+            </section>
+          ) : null}
+
+          {inventoryTab === 'documents' ? (
+            <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+              <Card title="Поставка / списание">
+                <form onSubmit={handleSaveStockReceipt} className="space-y-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                    <span>
+                      {selectedStockReceipt
+                        ? `Редактирование: ${receiptTypeLabels[selectedStockReceipt.type]}`
+                        : 'Новый документ склада'}
+                    </span>
+                    {selectedStockReceipt ? (
+                      <button
+                        type="button"
+                        onClick={() => resetReceiptForm()}
+                        className="font-semibold text-slate-600 hover:text-slate-800"
+                      >
+                        Очистить форму
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <select
+                      value={receiptType}
+                      onChange={(event) => setReceiptType(event.target.value as typeof receiptType)}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    >
+                      <option value="receipt">Поставка</option>
+                      <option value="writeOff">Списание</option>
+                    </select>
+                    <input
+                      type="date"
+                      value={receiptDate}
+                      max={todayInputValue}
+                      onChange={(event) => setReceiptDate(event.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    />
+                  </div>
+                  <select
+                    value={receiptForm.warehouseId}
                     onChange={(event) =>
-                      setWarehouseEditForm((prev) => ({ ...prev, description: event.target.value }))
+                      setReceiptForm((prev) => ({ ...prev, warehouseId: event.target.value }))
                     }
                     className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                    rows={2}
-                    placeholder="Описание"
-                  />
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <button
-                      type="submit"
-                      className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
-                    >
-                      Сохранить склад
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteWarehouse(selectedWarehouse._id)}
-                      className="w-full rounded-2xl border border-red-200 bg-red-50 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                    >
-                      Удалить склад
-                    </button>
-                  </div>
-                </form>
-              ) : null}
-            </Card>
-            <Card title="Сводка">
-              {inventorySummary ? (
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-center justify-between">
-                    <span className="text-slate-500">Продуктов</span>
-                    <span className="font-semibold text-slate-800">{inventorySummary.productsTracked}</span>
-                  </li>
-                  <li className="flex items-center justify-between">
-                    <span className="text-slate-500">Ингредиентов</span>
-                    <span className="font-semibold text-slate-800">{inventorySummary.ingredientsTracked}</span>
-                  </li>
-                  <li className="flex items-center justify-between">
-                    <span className="text-slate-500">Стоимость запасов</span>
-                    <span className="font-semibold text-slate-800">{inventorySummary.stockValue.toFixed(2)} ₽</span>
-                  </li>
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-400">Нет данных</p>
-              )}
-            </Card>
-            <Card title="Поставка / списание">
-              <form onSubmit={handleSaveStockReceipt} className="space-y-3 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
-                  <span>
-                    {selectedStockReceipt
-                      ? `Редактирование: ${receiptTypeLabels[selectedStockReceipt.type]}`
-                      : 'Новый документ склада'}
-                  </span>
-                  {selectedStockReceipt ? (
-                    <button
-                      type="button"
-                      onClick={() => resetReceiptForm()}
-                      className="font-semibold text-slate-600 hover:text-slate-800"
-                    >
-                      Очистить форму
-                    </button>
-                  ) : null}
-                </div>
-                <div className="grid gap-2 md:grid-cols-2">
+                  >
+                    <option value="">Выберите склад</option>
+                    {warehouses.map((warehouse) => (
+                      <option key={warehouse._id} value={warehouse._id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
                   <select
-                    value={receiptType}
-                    onChange={(event) => setReceiptType(event.target.value as typeof receiptType)}
+                    value={receiptForm.supplierId ?? ''}
+                    onChange={(event) => setReceiptForm((prev) => ({ ...prev, supplierId: event.target.value }))}
                     className="w-full rounded-2xl border border-slate-200 px-4 py-2"
                   >
-                    <option value="receipt">Поставка</option>
-                    <option value="writeOff">Списание</option>
+                    <option value="">Поставщик (опционально)</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier._id} value={supplier._id}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="space-y-3 rounded-2xl bg-slate-50 p-3">
+                    <div className="flex items-center justify-between text-[11px] uppercase text-slate-400">
+                      <span>Позиции документа</span>
+                      <button
+                        type="button"
+                        onClick={addReceiptItemRow}
+                        className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                      >
+                        + Добавить
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {receiptItems.map((item, index) => (
+                        <div key={`${item.itemId}-${index}`} className="rounded-2xl bg-white p-3 shadow-soft">
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <select
+                              value={item.itemType}
+                              onChange={(event) =>
+                                handleReceiptItemChange(index, 'itemType', event.target.value as 'ingredient' | 'product')
+                              }
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                            >
+                              <option value="ingredient">Ингредиент</option>
+                              <option value="product">Продукт</option>
+                            </select>
+                            <select
+                              value={item.itemId}
+                              onChange={(event) => handleReceiptItemChange(index, 'itemId', event.target.value)}
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                            >
+                              <option value="">Выберите позицию</option>
+                              {item.itemType === 'ingredient'
+                                ? ingredients.map((ingredient) => (
+                                    <option key={ingredient._id} value={ingredient._id}>
+                                      {ingredient.name}
+                                    </option>
+                                  ))
+                                : products.map((product) => (
+                                    <option key={product._id} value={product._id}>
+                                      {product.name}
+                                    </option>
+                                  ))}
+                            </select>
+                          </div>
+                          <div className="grid gap-2 md:grid-cols-3">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.quantity}
+                              onChange={(event) => handleReceiptItemChange(index, 'quantity', event.target.value)}
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                              placeholder="Количество"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unitCost}
+                              onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                              placeholder="Цена за ед."
+                            />
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                                <p>Стоимость</p>
+                                <p className="text-sm font-semibold text-slate-800">
+                                  {(Number(item.quantity) * Number(item.unitCost || 0)).toFixed(2)} ₽
+                                </p>
+                              </div>
+                              {receiptItems.length > 1 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => removeReceiptItemRow(index)}
+                                  className="h-10 w-10 rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100"
+                                  aria-label="Удалить позицию"
+                                >
+                                  ✕
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Итого</span>
+                      <span className="text-lg font-semibold text-slate-800">{receiptTotal.toFixed(2)} ₽</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-x-2 text-[11px] text-slate-500">
+                      <span>Последний ввод:</span>
+                      <span className="font-semibold text-slate-700">{receiptLastTouchedLabel}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {selectedStockReceipt && selectedStockReceipt.type !== 'inventory' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteStockReceipt(selectedStockReceipt._id)}
+                          className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                        >
+                          Удалить
+                        </button>
+                      ) : null}
+                      <button
+                        type="submit"
+                        className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        {selectedStockReceipt ? 'Обновить документ' : 'Сохранить документ'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </Card>
+              <Card title="Документы склада">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <span>Показать:</span>
+                    <select
+                      value={receiptFilter}
+                      onChange={(event) => setReceiptFilter(event.target.value as typeof receiptFilter)}
+                      className="rounded-xl border border-slate-200 px-3 py-1"
+                    >
+                      <option value="all">Все</option>
+                      <option value="receipt">Поставки</option>
+                      <option value="writeOff">Списания</option>
+                      <option value="inventory">Инвентаризации</option>
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadStockReceipts()}
+                    className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                  >
+                    Обновить список
+                  </button>
+                </div>
+                <div className="mt-3 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
+                  <label className="flex flex-col gap-1 text-slate-600">
+                    <span className="text-[11px] uppercase text-slate-400">Период с</span>
+                    <input
+                      type="date"
+                      value={receiptDateFrom}
+                      max={todayInputValue}
+                      onChange={(event) => {
+                        setReceiptDatePreset('');
+                        setReceiptDateFrom(event.target.value);
+                      }}
+                      className="rounded-2xl border border-slate-200 px-3 py-2"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-slate-600">
+                    <span className="text-[11px] uppercase text-slate-400">Период по</span>
+                    <input
+                      type="date"
+                      value={receiptDateTo}
+                      max={todayInputValue}
+                      onChange={(event) => {
+                        setReceiptDatePreset('');
+                        setReceiptDateTo(event.target.value);
+                      }}
+                      className="rounded-2xl border border-slate-200 px-3 py-2"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-slate-600">
+                    <span className="text-[11px] uppercase text-slate-400">Поставщик</span>
+                    <select
+                      value={receiptSupplierFilter}
+                      onChange={(event) => setReceiptSupplierFilter(event.target.value)}
+                      className="rounded-2xl border border-slate-200 px-3 py-2"
+                    >
+                      <option value="">Все поставщики</option>
+                      {suppliers.map((supplier) => (
+                        <option key={supplier._id} value={supplier._id}>
+                          {supplier.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex flex-col gap-1 text-slate-600">
+                      <span className="text-[11px] uppercase text-slate-400">Сумма от</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={receiptAmountMin}
+                        onChange={(event) => setReceiptAmountMin(event.target.value)}
+                        className="rounded-2xl border border-slate-200 px-3 py-2"
+                        placeholder="0"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-slate-600">
+                      <span className="text-[11px] uppercase text-slate-400">Сумма до</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={receiptAmountMax}
+                        onChange={(event) => setReceiptAmountMax(event.target.value)}
+                        className="rounded-2xl border border-slate-200 px-3 py-2"
+                        placeholder="∞"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">Быстрый выбор:</span>
+                  {[{ id: 'today', label: 'Сегодня' }, { id: 'yesterday', label: 'Вчера' }, { id: 'week', label: '7 дней' }, { id: 'month', label: 'Этот месяц' }, { id: 'lastMonth', label: 'Прошлый месяц' }, { id: 'year', label: 'Этот год' }, { id: 'lastYear', label: 'Прошлый год' }].map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => applyReceiptDatePreset(preset.id)}
+                      className={`rounded-full px-3 py-1 font-semibold transition ${
+                        receiptDatePreset === preset.id
+                          ? 'bg-emerald-600 text-white shadow-soft'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead>
+                      <tr className="text-xs uppercase text-slate-400">
+                        <th className="px-3 py-2">Дата</th>
+                        <th className="px-3 py-2">Тип</th>
+                        <th className="px-3 py-2">Склад</th>
+                        <th className="px-3 py-2">Поставщик</th>
+                        <th className="px-3 py-2 text-right">Сумма</th>
+                        <th className="px-3 py-2 text-right">Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredStockReceipts.map((receipt) => (
+                        <tr key={receipt._id} className="transition hover:bg-slate-50">
+                          <td className="px-3 py-2 text-slate-500">
+                            <div>{formatDateTime(receipt.occurredAt)}</div>
+                            {receipt.createdAt ? (
+                              <div className="text-[11px] text-slate-400">Создано: {formatDateTime(receipt.createdAt)}</div>
+                            ) : null}
+                          </td>
+                          <td className="px-3 py-2 font-semibold text-slate-800">
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs ${
+                                receipt.type === 'receipt'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : receipt.type === 'writeOff'
+                                    ? 'bg-orange-50 text-orange-700'
+                                    : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {receiptTypeLabels[receipt.type]}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">{warehouseMap.get(receipt.warehouseId)?.name ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {receipt.supplierId ? supplierMap.get(receipt.supplierId)?.name ?? '—' : 'Не указан'}
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold text-slate-700">
+                            {receipt.items.reduce((acc, item) => acc + item.quantity * item.unitCost, 0).toFixed(2)} ₽
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleSelectStockReceipt(receipt)}
+                                className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-600 shadow-inner transition hover:bg-emerald-50"
+                              >
+                                Редактировать
+                              </button>
+                              {receipt.type !== 'inventory' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteStockReceipt(receipt._id)}
+                                  className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-600 transition hover:bg-slate-200"
+                                >
+                                  Удалить
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="text-sm font-semibold text-slate-700">
+                        <td className="px-3 py-2" colSpan={4}>
+                          Всего документов: {filteredStockReceipts.length}
+                        </td>
+                        <td className="px-3 py-2 text-right" colSpan={2}>
+                          Сумма: {filteredStockReceipts
+                            .reduce((acc, receipt) => acc + receipt.items.reduce((sum, item) => sum + item.quantity * item.unitCost, 0), 0)
+                            .toFixed(2)} ₽
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </Card>
+            </section>
+          ) : null}
+
+          {inventoryTab === 'audit' ? (
+            <section className="space-y-6">
+              <Card title="Инвентаризация">
+                <form onSubmit={handleSubmitInventoryAudit} className="space-y-3 text-sm">
+                  <p className="text-[11px] text-amber-700">
+                    Документы до выбранной даты будут заблокированы для изменений после проведения инвентаризации.
+                  </p>
+                  <select
+                    value={inventoryAuditForm.warehouseId}
+                    onChange={(event) =>
+                      setInventoryAuditForm((prev) => ({ ...prev, warehouseId: event.target.value }))
+                    }
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                  >
+                    <option value="">Выберите склад</option>
+                    {warehouses.map((warehouse) => (
+                      <option key={warehouse._id} value={warehouse._id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
                   </select>
                   <input
                     type="date"
-                    value={receiptDate}
-                    onChange={(event) => setReceiptDate(event.target.value)}
+                    value={inventoryAuditForm.performedAt}
+                    max={todayInputValue}
+                    onChange={(event) =>
+                      setInventoryAuditForm((prev) => ({ ...prev, performedAt: event.target.value }))
+                    }
                     className="w-full rounded-2xl border border-slate-200 px-4 py-2"
                   />
-                </div>
-                <select
-                  value={receiptForm.warehouseId}
-                  onChange={(event) =>
-                    setReceiptForm((prev) => ({ ...prev, warehouseId: event.target.value }))
-                  }
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                >
-                  <option value="">Выберите склад</option>
-                  {warehouses.map((warehouse) => (
-                    <option key={warehouse._id} value={warehouse._id}>
-                      {warehouse.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={receiptForm.supplierId}
-                  onChange={(event) =>
-                    setReceiptForm((prev) => ({ ...prev, supplierId: event.target.value }))
-                  }
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                >
-                  <option value="">Поставщик не выбран</option>
-                  {suppliers.map((supplier) => (
-                    <option key={supplier._id} value={supplier._id}>
-                      {supplier.name}
-                    </option>
-                  ))}
-                </select>
-                {receiptForm.warehouseId ? (
-                  <p className="text-[11px] text-slate-500">
-                    Последняя инвентаризация склада:{' '}
-                    {warehouseMap.get(receiptForm.warehouseId)?.lastInventoryAt
-                      ? formatDateTime(warehouseMap.get(receiptForm.warehouseId)?.lastInventoryAt)
-                      : 'нет данных'}
-                  </p>
-                ) : null}
-                <div className="space-y-3">
-                  {receiptForm.items.map((item, index) => (
-                    <div key={index} className="rounded-2xl border border-slate-200 p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          value={item.itemType}
-                          onChange={(event) =>
-                            handleReceiptItemChange(index, 'itemType', event.target.value)
-                          }
-                          className="rounded-2xl border border-slate-200 px-3 py-2"
-                        >
-                          <option value="ingredient">Ингредиент</option>
-                          <option value="product">Продукт</option>
-                        </select>
-                        <select
-                          value={item.itemId}
-                          onChange={(event) =>
-                            handleReceiptItemChange(index, 'itemId', event.target.value)
-                          }
-                          className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
-                        >
-                          <option value="">Позиция</option>
-                          {(item.itemType === 'ingredient' ? ingredients : products).map((entry) => (
-                            <option key={entry._id} value={entry._id}>
-                              {'unit' in entry ? `${entry.name} (${entry.unit})` : entry.name}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.quantity}
-                          onChange={(event) =>
-                            handleReceiptItemChange(index, 'quantity', event.target.value)
-                          }
-                          className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
-                          placeholder="Кол-во"
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.unitCost}
-                          onChange={(event) =>
-                            handleReceiptItemChange(index, 'unitCost', event.target.value)
-                          }
-                          className="w-32 rounded-2xl border border-slate-200 px-3 py-2"
-                          placeholder="Цена"
-                        />
-                        {receiptForm.items.length > 1 ? (
-                          <button
-                            type="button"
-                            onClick={() => removeReceiptItemRow(index)}
-                            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-200"
-                          >
-                            Удалить
-                          </button>
-                        ) : null}
-                      </div>
+                  <div className="space-y-2 rounded-2xl bg-slate-50 p-3">
+                    <div className="flex items-center justify-between text-[11px] uppercase text-slate-400">
+                      <span>Позиции</span>
+                      <button
+                        type="button"
+                        onClick={addAuditItemRow}
+                        className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                      >
+                        + Добавить
+                      </button>
                     </div>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-3">
+                    {inventoryAuditForm.items.map((item, index) => {
+                      const previousQuantity = inventoryQuantityLookup.get(
+                        `${inventoryAuditForm.warehouseId}-${item.itemType}-${item.itemId}`
+                      );
+
+                      return (
+                        <div key={`${item.itemId}-${index}`} className="space-y-2 rounded-2xl bg-white p-3 shadow-soft">
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <select
+                              value={item.itemType}
+                              onChange={(event) =>
+                                handleAuditItemChange(index, 'itemType', event.target.value as 'ingredient' | 'product')
+                              }
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                            >
+                              <option value="ingredient">Ингредиент</option>
+                              <option value="product">Продукт</option>
+                            </select>
+                            <select
+                              value={item.itemId}
+                              onChange={(event) => handleAuditItemChange(index, 'itemId', event.target.value)}
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                            >
+                              <option value="">Выберите позицию</option>
+                              {item.itemType === 'ingredient'
+                                ? ingredients.map((ingredient) => (
+                                    <option key={ingredient._id} value={ingredient._id}>
+                                      {ingredient.name}
+                                    </option>
+                                  ))
+                                : products.map((product) => (
+                                    <option key={product._id} value={product._id}>
+                                      {product.name}
+                                    </option>
+                                  ))}
+                            </select>
+                          </div>
+                          <div className="grid gap-2 md:grid-cols-[repeat(3,_minmax(0,_1fr))_auto]">
+                            <div>
+                              <p className="text-[11px] uppercase text-slate-400">Было</p>
+                              <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                                {previousQuantity ?? '—'}
+                              </p>
+                            </div>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.countedQuantity}
+                              onChange={(event) =>
+                                handleAuditItemChange(index, 'countedQuantity', event.target.value)
+                              }
+                              className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
+                              placeholder="Кол-во"
+                            />
+                            {inventoryAuditForm.items.length > 1 ? (
+                              <button
+                                type="button"
+                                onClick={() => removeAuditItemRow(index)}
+                                className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-200"
+                              >
+                                Удалить
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <button
                       type="button"
-                      onClick={addReceiptItemRow}
+                      onClick={addAuditItemRow}
                       className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
                     >
                       + Добавить позицию
                     </button>
-                    <p className="text-[11px] text-amber-600">
-                      После инвентаризации документы с более ранней датой будут заблокированы для изменений.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {selectedStockReceipt && selectedStockReceipt.type !== 'inventory' ? (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteStockReceipt(selectedStockReceipt._id)}
-                        className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                      >
-                        Удалить
-                      </button>
-                    ) : null}
                     <button
                       type="submit"
-                      className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
+                      disabled={auditSubmitting}
+                      className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                     >
-                      {selectedStockReceipt ? 'Обновить документ' : 'Сохранить документ'}
+                      {auditSubmitting ? 'Сохраняем…' : 'Провести инвентаризацию'}
                     </button>
                   </div>
-                </div>
-              </form>
-            </Card>
-          </section>
+                </form>
 
-          <section className="grid gap-6 lg:grid-cols-2">
-            <Card title="Документы склада">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span>Показать:</span>
-                  <select
-                    value={receiptFilter}
-                    onChange={(event) => setReceiptFilter(event.target.value as typeof receiptFilter)}
-                    className="rounded-xl border border-slate-200 px-3 py-1"
-                  >
-                    <option value="all">Все</option>
-                    <option value="receipt">Поставки</option>
-                    <option value="writeOff">Списания</option>
-                    <option value="inventory">Инвентаризации</option>
-                  </select>
-                </div>
-              <button
-                type="button"
-                onClick={() => void loadStockReceipts()}
-                className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
-              >
-                Обновить список
-              </button>
-            </div>
-            {!selectedWarehouse ? (
-              <p className="mt-3 text-sm text-slate-500">Выберите склад, чтобы увидеть документы.</p>
-            ) : stockReceiptsLoading ? (
-              <div className="mt-3 h-24 animate-pulse rounded-2xl bg-slate-200/70" />
-            ) : stockReceiptsError ? (
-              <p className="mt-3 text-sm text-red-600">{stockReceiptsError}</p>
-            ) : filteredStockReceipts.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-400">Документы не найдены.</p>
-              ) : (
-                <ul className="mt-3 space-y-3">
-                  {filteredStockReceipts.map((receipt) => {
-                    const total = calculateReceiptTotal(receipt);
-                    const warehouseName = warehouseMap.get(receipt.warehouseId)?.name ?? '—';
-                    const supplierName = receipt.supplierId
-                      ? supplierMap.get(receipt.supplierId)?.name ?? '—'
-                      : '—';
-
-                    return (
-                      <li
-                        key={receipt._id}
-                        className={`rounded-2xl border px-3 py-2 text-sm transition hover:border-emerald-300 ${
-                          selectedStockReceipt?._id === receipt._id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200'
-                        }`}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-700">
-                                {receiptTypeLabels[receipt.type]}
-                              </span>
-                              <span className="text-[11px] text-slate-500">
-                                {formatReceiptDateTime(receipt.occurredAt)}
-                              </span>
-                            </div>
+                {lastAuditResult ? (
+                  <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-semibold text-slate-800">Последняя инвентаризация</p>
+                      <p className="text-xs text-slate-500">
+                        {formatDateTime(lastAuditResult.performedAt)} · Склад:{' '}
+                        {warehouseMap.get(lastAuditResult.warehouseId)?.name ?? '—'}
+                      </p>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Потери: {lastAuditResult.totalLossValue.toFixed(2)} ₽ · Излишки:{' '}
+                      {lastAuditResult.totalGainValue.toFixed(2)} ₽
+                    </p>
+                    <div className="mt-3 max-h-48 space-y-2 overflow-y-auto text-xs text-slate-700">
+                      {lastAuditResult.items.map((item, index) => (
+                        <div key={`${item.itemId}-${index}`} className="rounded-xl bg-white px-3 py-2">
+                          <p className="font-semibold text-slate-800">
+                            {getInventoryItemName(item.itemType, item.itemId)}
+                          </p>
+                          <p>
+                            Было {item.previousQuantity} → Стало {item.countedQuantity} ({item.difference >= 0 ? '+' : ''}
+                            {item.difference})
+                          </p>
+                          {item.unitCostSnapshot !== undefined ? (
                             <p className="text-[11px] text-slate-500">
-                              Склад: {warehouseName} · Поставщик: {supplierName}
+                              Стоимость изменения: {(item.difference * (item.unitCostSnapshot ?? 0)).toFixed(2)} ₽
                             </p>
-                            <p className="text-[11px] text-slate-500">
-                              Позиции: {receipt.items.length} · Сумма: {total.toFixed(2)} ₽
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {receipt.type !== 'inventory' ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSelectStockReceipt(receipt)}
-                                  className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-600 shadow-inner hover:bg-emerald-50"
-                                >
-                                  Редактировать
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteStockReceipt(receipt._id)}
-                                  className="rounded-full px-3 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100"
-                                >
-                                  Удалить
-                                </button>
-                              </>
-                            ) : (
-                              <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">
-                                Заблокировано
-                              </span>
-                            )}
-                          </div>
+                          ) : null}
                         </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </Card>
+            </section>
+          ) : null}
+
+          {inventoryTab === 'stock' ? (
+            <Card title="Складские остатки">
+              {inventoryLoading ? (
+                <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead>
+                      <tr className="text-xs uppercase text-slate-400">
+                        <th className="px-3 py-2">Склад</th>
+                        <th className="px-3 py-2">Позиция</th>
+                        <th className="px-3 py-2">Количество</th>
+                        <th className="px-3 py-2">Стоимость</th>
+                        <th className="px-3 py-2 text-right">Корректировка</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {inventoryItems.map((item) => (
+                        <tr key={item._id}>
+                          <td className="px-3 py-2 text-slate-500">{item.warehouse?.name ?? '—'}</td>
+                          <td className="px-3 py-2 font-medium text-slate-700">
+                            {item.itemType === 'ingredient'
+                              ? item.ingredient?.name
+                              : item.product?.name}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">{item.quantity}</td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {item.unitCost ? `${(item.unitCost * item.quantity).toFixed(2)} ₽` : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs">
+                            <div className="flex justify-end gap-2">
+                              {[-10, -1, 1, 10].map((delta) => (
+                                <button
+                                  key={delta}
+                                  type="button"
+                                  onClick={() => handleAdjustExistingInventory(item._id, delta)}
+                                  className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-500 hover:bg-slate-200"
+                                >
+                                  {delta > 0 ? `+${delta}` : delta}
+                                </button>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </Card>
-
-            <Card title="Инвентаризация">
-              <form onSubmit={handleSubmitInventoryAudit} className="space-y-3 text-sm">
-                <p className="text-[11px] text-amber-700">
-                  После завершения инвентаризации документы до выбранной даты будут заблокированы для изменений.
-                </p>
-                <select
-                  value={inventoryAuditForm.warehouseId}
-                  onChange={(event) =>
-                    setInventoryAuditForm((prev) => ({ ...prev, warehouseId: event.target.value, items: [] }))
-                  }
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                >
-                  <option value="">Выберите склад</option>
-                  {warehouses.map((warehouse) => (
-                    <option key={warehouse._id} value={warehouse._id}>
-                      {warehouse.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="date"
-                  value={inventoryAuditForm.performedAt}
-                  onChange={(event) =>
-                    setInventoryAuditForm((prev) => ({ ...prev, performedAt: event.target.value }))
-                  }
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                />
-                <div className="space-y-3">
-                  {inventoryAuditForm.items.map((item, index) => (
-                    <div key={`${item.itemId || 'item'}-${index}`} className="rounded-2xl border border-slate-200 p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          value={item.itemType}
-                          onChange={(event) =>
-                            handleAuditItemChange(index, 'itemType', event.target.value)
-                          }
-                          className="rounded-2xl border border-slate-200 px-3 py-2"
-                        >
-                          <option value="ingredient">Ингредиент</option>
-                          <option value="product">Продукт</option>
-                        </select>
-                        <select
-                          value={item.itemId}
-                          onChange={(event) => handleAuditItemChange(index, 'itemId', event.target.value)}
-                          className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
-                        >
-                          <option value="">Позиция</option>
-                          {(item.itemType === 'ingredient' ? ingredients : products).map((entry) => (
-                            <option key={entry._id} value={entry._id}>
-                              {'unit' in entry ? `${entry.name} (${entry.unit})` : entry.name}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.countedQuantity}
-                          onChange={(event) =>
-                            handleAuditItemChange(index, 'countedQuantity', event.target.value)
-                          }
-                          className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
-                          placeholder="Кол-во"
-                        />
-                        {inventoryAuditForm.items.length > 1 ? (
-                          <button
-                            type="button"
-                            onClick={() => removeAuditItemRow(index)}
-                            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-200"
-                          >
-                            Удалить
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={addAuditItemRow}
-                    className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
-                  >
-                    + Добавить позицию
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={auditSubmitting}
-                    className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                  >
-                    {auditSubmitting ? 'Сохраняем…' : 'Провести инвентаризацию'}
-                  </button>
-                </div>
-              </form>
-
-              {lastAuditResult ? (
-                <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-semibold text-slate-800">Последняя инвентаризация</p>
-                    <p className="text-xs text-slate-500">
-                      {formatDateTime(lastAuditResult.performedAt)} · Склад:{' '}
-                      {warehouseMap.get(lastAuditResult.warehouseId)?.name ?? '—'}
-                    </p>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Потери: {lastAuditResult.totalLossValue.toFixed(2)} ₽ · Излишки:{' '}
-                    {lastAuditResult.totalGainValue.toFixed(2)} ₽
-                  </p>
-                  <div className="mt-3 max-h-48 space-y-2 overflow-y-auto text-xs text-slate-700">
-                    {lastAuditResult.items.map((item, index) => (
-                      <div key={`${item.itemId}-${index}`} className="rounded-xl bg-white px-3 py-2">
-                        <p className="font-semibold text-slate-800">
-                          {getInventoryItemName(item.itemType, item.itemId)}
-                        </p>
-                        <p>
-                          Было {item.previousQuantity} → Стало {item.countedQuantity} ({item.difference >= 0 ? '+' : ''}
-                          {item.difference})
-                        </p>
-                        {item.unitCostSnapshot !== undefined ? (
-                          <p className="text-[11px] text-slate-500">
-                            Стоимость изменения: {(item.difference * (item.unitCostSnapshot ?? 0)).toFixed(2)} ₽
-                          </p>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </Card>
-          </section>
-
-          <Card title="Складские остатки">
-            {inventoryLoading ? (
-              <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead>
-                    <tr className="text-xs uppercase text-slate-400">
-                      <th className="px-3 py-2">Склад</th>
-                      <th className="px-3 py-2">Позиция</th>
-                      <th className="px-3 py-2">Количество</th>
-                      <th className="px-3 py-2">Стоимость</th>
-                      <th className="px-3 py-2 text-right">Корректировка</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {inventoryItems.map((item) => (
-                      <tr key={item._id}>
-                        <td className="px-3 py-2 text-slate-500">{item.warehouse?.name ?? '—'}</td>
-                        <td className="px-3 py-2 font-medium text-slate-700">
-                          {item.itemType === 'ingredient'
-                            ? item.ingredient?.name
-                            : item.product?.name}
-                        </td>
-                        <td className="px-3 py-2 text-slate-500">{item.quantity}</td>
-                        <td className="px-3 py-2 text-slate-500">
-                          {item.unitCost ? `${(item.unitCost * item.quantity).toFixed(2)} ₽` : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right text-xs">
-                          <div className="flex justify-end gap-2">
-                            {[ -10, -1, 1, 10 ].map((delta) => (
-                              <button
-                                key={delta}
-                                type="button"
-                                onClick={() => handleAdjustExistingInventory(item._id, delta)}
-                                className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-500 hover:bg-slate-200"
-                              >
-                                {delta > 0 ? `+${delta}` : delta}
-                              </button>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
+          ) : null}
         </div>
       ) : null}
-
       {activeTab === 'loyalty' ? (
         <div className="lg:flex lg:items-start lg:gap-6">
           <aside className="mb-4 w-full lg:mb-0 lg:w-64">
@@ -4794,12 +5174,21 @@ const AdminPage: React.FC = () => {
                             rows={3}
                             placeholder="Заметки"
                           />
-                          <button
-                            type="submit"
-                            className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
-                          >
-                            Сохранить поставщика
-                          </button>
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <button
+                              type="submit"
+                              className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
+                            >
+                              Сохранить поставщика
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSupplier(selectedSupplier._id)}
+                              className="w-full rounded-2xl border border-red-200 bg-red-50 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                            >
+                              Удалить поставщика
+                            </button>
+                          </div>
                         </form>
                       ) : (
                         <p className="text-xs text-slate-400">Выберите поставщика для редактирования данных.</p>
@@ -5220,22 +5609,25 @@ const AdminPage: React.FC = () => {
       ) : null}
     </div>
   );
- };
+};
 
- const Card: React.FC<React.PropsWithChildren<{ title: string }>> = ({ title, children }) => (
-  <section className="rounded-3xl bg-white p-6 shadow-soft">
+const Card: React.FC<
+  React.PropsWithChildren<{ title: string; id?: string; className?: string; actions?: React.ReactNode }>
+> = ({ title, children, id, className, actions }) => (
+  <section id={id} className={`rounded-3xl bg-white p-6 shadow-soft ${className ?? ''}`}>
     <div className="mb-4 flex items-center justify-between">
       <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      {actions ?? null}
     </div>
     {children}
   </section>
- );
+);
 
- const SummaryCard: React.FC<{ title: string; value: string }> = ({ title, value }) => (
+const SummaryCard: React.FC<{ title: string; value: string }> = ({ title, value }) => (
   <div className="rounded-3xl bg-white p-6 shadow-soft">
     <p className="text-sm text-slate-500">{title}</p>
     <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
   </div>
- );
+);
 
- export default AdminPage;
+export default AdminPage;
