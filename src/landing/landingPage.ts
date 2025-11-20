@@ -39,6 +39,13 @@ export const renderLandingPage = (): string => `
           justify-content: space-between;
         }
 
+        .actions {
+          display: inline-flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          align-items: center;
+        }
+
         .logo {
           display: inline-flex;
           align-items: center;
@@ -70,6 +77,23 @@ export const renderLandingPage = (): string => `
           text-decoration: none;
           box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
           transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .secondary-link {
+          padding: 11px 16px;
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: rgba(255, 255, 255, 0.04);
+          color: var(--text);
+          font-weight: 700;
+          text-decoration: none;
+          transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .secondary-link:hover {
+          transform: translateY(-2px);
+          border-color: rgba(90, 208, 255, 0.4);
+          box-shadow: 0 12px 32px rgba(90, 208, 255, 0.18);
         }
 
         .cta-button:hover {
@@ -185,7 +209,10 @@ export const renderLandingPage = (): string => `
           <div class="logo-mark">Y</div>
           <div>Yago POS</div>
         </div>
-        <a class="cta-button" href="mailto:hello@yagopos.com">Запросить демо</a>
+        <nav class="actions" aria-label="Быстрые действия">
+          <a class="secondary-link" href="/admin">Вход для клиентов</a>
+          <a class="cta-button" href="mailto:hello@yagopos.com">Запросить демо</a>
+        </nav>
       </header>
       <main>
         <section class="hero">
