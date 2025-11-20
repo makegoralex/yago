@@ -1,4 +1,4 @@
-# Yago Repository Snapshot1
+# Yago Repository Snapshot
 
 
 
