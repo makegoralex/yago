@@ -9,6 +9,7 @@ export interface InventoryItem {
   quantity: number;
   unitCost?: number;
   updatedBy?: Types.ObjectId;
+  organizationId?: Schema.Types.ObjectId;
   updatedAt: Date;
   createdAt: Date;
 }
@@ -21,6 +22,12 @@ const inventoryItemSchema = new Schema<InventoryItemDocument>(
       type: Schema.Types.ObjectId,
       ref: 'Warehouse',
       required: true,
+    },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: false,
+      index: true,
     },
     itemType: {
       type: String,

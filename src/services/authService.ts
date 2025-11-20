@@ -13,6 +13,7 @@ interface TokenPayload {
   sub: string;
   email: string;
   role: string;
+  organizationId?: string;
 }
 
 const resolveUserId = (user: IUser): string => {
@@ -33,6 +34,7 @@ const buildTokenPayload = (user: IUser): TokenPayload => ({
   sub: resolveUserId(user),
   email: user.email,
   role: user.role,
+  organizationId: user.organizationId ? String(user.organizationId) : undefined,
 });
 
 export const generateTokens = (user: IUser): AuthTokens => {
@@ -64,9 +66,17 @@ export const registerUser = async (params: {
   name: string;
   email: string;
   password: string;
+  organizationId?: string;
   role?: UserRole;
 }): Promise<{ user: IUser; tokens: AuthTokens }> => {
-  const existingUser = await UserModel.findOne({ email: params.email.toLowerCase() });
+  if (!params.organizationId && params.role !== 'superAdmin') {
+    throw new Error('organizationId is required');
+  }
+
+  const existingUser = await UserModel.findOne({
+    email: params.email.toLowerCase(),
+    organizationId: params.organizationId,
+  });
 
   if (existingUser) {
     throw new Error('User with this email already exists');
@@ -78,6 +88,7 @@ export const registerUser = async (params: {
     name: params.name,
     email: params.email.toLowerCase(),
     passwordHash,
+    organizationId: params.organizationId,
     role: params.role ?? 'cashier',
   });
 
@@ -88,9 +99,13 @@ export const registerUser = async (params: {
 
 export const authenticateUser = async (
   email: string,
-  password: string
+  password: string,
+  organizationId?: string
 ): Promise<{ user: IUser; tokens: AuthTokens }> => {
-  const user = await UserModel.findOne({ email: email.toLowerCase() });
+  const user = await UserModel.findOne({
+    email: email.toLowerCase(),
+    ...(organizationId ? { organizationId } : {}),
+  });
 
   if (!user) {
     throw new Error('Invalid credentials');
