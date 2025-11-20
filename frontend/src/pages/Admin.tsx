@@ -2856,6 +2856,7 @@ const AdminPage: React.FC = () => {
                           border: '1px solid #e2e8f0',
                           backgroundColor: '#ffffff',
                         }}
+                        cursor={{ fill: 'rgba(16, 185, 129, 0.12)' }}
                       />
                       <Bar dataKey="revenue" fill="#10B981" radius={[12, 12, 0, 0]} />
                     </BarChart>
@@ -2875,6 +2876,7 @@ const AdminPage: React.FC = () => {
                           border: '1px solid #e2e8f0',
                           backgroundColor: '#ffffff',
                         }}
+                        cursor={{ fill: 'rgba(59, 130, 246, 0.12)' }}
                       />
                       <Bar dataKey="qty" fill="#3B82F6" radius={[0, 12, 12, 0]} />
                     </BarChart>
