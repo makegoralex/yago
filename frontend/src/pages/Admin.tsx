@@ -775,6 +775,17 @@ const AdminPage: React.FC = () => {
     const stack: unknown[] = [];
     const seen = new WeakSet<object>();
 
+    const isStockReceiptArray = (value: unknown): value is StockReceipt[] =>
+      Array.isArray(value) &&
+      value.every(
+        (entry) =>
+          entry &&
+          typeof entry === 'object' &&
+          'type' in entry &&
+          (entry as { type?: unknown }).type &&
+          ['receipt', 'writeOff', 'inventory'].includes((entry as { type: string }).type)
+      );
+
     const collectCandidates = (value: unknown) => {
       if (!value) return;
       if (Array.isArray(value)) {
@@ -799,8 +810,8 @@ const AdminPage: React.FC = () => {
     collectCandidates(payload);
 
     for (const candidate of stack) {
-      if (Array.isArray(candidate)) {
-        return candidate as StockReceipt[];
+      if (isStockReceiptArray(candidate)) {
+        return candidate;
       }
     }
 
@@ -2247,6 +2258,43 @@ const AdminPage: React.FC = () => {
       if (audit) {
         setLastAuditResult(audit);
       }
+      await loadInventoryData();
+      await loadStockReceipts();
+      await loadMenuData();
+    } catch (error) {
+      const message = extractErrorMessage(error, 'Не удалось удалить документ');
+      notify({ title: message, type: 'error' });
+    }
+  };
+
+  const handleAuditItemChange = (
+    index: number,
+    field: 'itemType' | 'itemId' | 'countedQuantity',
+    value: string
+  ) => {
+    setInventoryAuditForm((prev) => {
+      const items = [...prev.items];
+      items[index] = { ...items[index], [field]: value };
+      return { ...prev, items };
+    });
+  };
+
+  const addAuditItemRow = () => {
+    setInventoryAuditForm((prev) => ({
+      ...prev,
+      items: [...prev.items, { itemType: 'ingredient', itemId: '', countedQuantity: '' }],
+    }));
+  };
+
+  const removeAuditItemRow = (index: number) => {
+    setInventoryAuditForm((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, itemIndex) => itemIndex !== index),
+    }));
+  };
+
+  const handleSubmitInventoryAudit = async (event: React.FormEvent) => {
+    event.preventDefault();
 
       notify({
         title: 'Инвентаризация завершена. Документы до этой даты будут заблокированы.',
