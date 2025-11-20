@@ -4724,7 +4724,7 @@ const AdminPage: React.FC = () => {
                           </td>
                           <td className="px-3 py-2 text-right text-xs">
                             <div className="flex justify-end gap-2">
-                              {[ -10, -1, 1, 10 ].map((delta) => (
+                              {[-10, -1, 1, 10].map((delta) => (
                                 <button
                                   key={delta}
                                   type="button"
