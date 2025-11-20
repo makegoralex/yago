@@ -1,6 +1,9 @@
 const express = require("express");
 const app = express();
 
+const path = require("path");
+const fs = require("fs");
+
 const renderLandingPage = () => `
     <!doctype html>
     <html lang="ru">
@@ -267,6 +270,23 @@ app.get("/", (_req, res) => {
   res.set("Cache-Control", "no-store, max-age=0");
   res.type("html").send(renderLandingPage());
 });
+
+const frontendPublicPath = path.resolve(__dirname, "frontend", "public");
+if (fs.existsSync(frontendPublicPath)) {
+  app.use(
+    express.static(frontendPublicPath, {
+      setHeaders: (res, filePath) => {
+        if (path.basename(filePath) === "service-worker.js") {
+          res.setHeader("Cache-Control", "no-cache");
+        }
+      },
+    })
+  );
+
+  app.get("/service-worker.js", (_req, res) => {
+    res.sendFile(path.join(frontendPublicPath, "service-worker.js"));
+  });
+}
 
 app.listen(3000, "0.0.0.0", () => {
   console.log("Listening on port 3000...");
