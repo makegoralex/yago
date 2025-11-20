@@ -8,6 +8,7 @@ interface TokenPayload {
   sub: string;
   email: string;
   role: string;
+  organizationId?: string;
 }
 
 const TOKEN_COOKIE_NAMES = ['accessToken', 'token'];
@@ -128,7 +129,7 @@ export const authMiddleware = async (
 
     const payload = jwt.verify(token, appConfig.jwtAccessSecret) as TokenPayload;
 
-    const user = await UserModel.findById(payload.sub).select('name email role');
+    const user = await UserModel.findById(payload.sub).select('name email role organizationId');
 
     if (!user) {
       res.status(401).json({ data: null, error: 'User not found' });
@@ -140,7 +141,12 @@ export const authMiddleware = async (
       email: user.email,
       name: user.name,
       role: user.role,
+      organizationId: user.organizationId ? String(user.organizationId) : undefined,
     };
+
+    if (req.user.organizationId) {
+      req.organization = { id: req.user.organizationId };
+    }
 
     next();
   } catch (error) {

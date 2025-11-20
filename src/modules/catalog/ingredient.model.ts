@@ -6,6 +6,7 @@ export interface Ingredient {
   costPerUnit?: number;
   supplierId?: Types.ObjectId;
   description?: string;
+  organizationId?: Schema.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -18,6 +19,12 @@ const ingredientSchema = new Schema<IngredientDocument>(
       type: String,
       required: true,
       trim: true,
+    },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: false,
+      index: true,
     },
     unit: {
       type: String,
