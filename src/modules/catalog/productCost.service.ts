@@ -56,7 +56,7 @@ export const recalculateIngredientCost = async (ingredientId: Types.ObjectId): P
 
 const sumIngredientsCost = async (
   productId: Types.ObjectId,
-  ingredientRefs: Array<{ ingredientId: Types.ObjectId; quantity: number }>
+  ingredientRefs: Array<{ ingredientId: Types.ObjectId; quantity: number; unit?: string }>
 ): Promise<number> => {
   if (!ingredientRefs.length) {
     return 0;

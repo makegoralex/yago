@@ -1,6 +1,7 @@
 import { isValidObjectId } from 'mongoose';
 
 import { CustomerModel, type CustomerDocument } from '../customers/customer.model';
+import { getLoyaltyAccrualRate } from '../restaurant/restaurantSettings.service';
 
 const roundTwoDecimals = (value: number): number => Number(value.toFixed(2));
 
@@ -27,7 +28,8 @@ export const earnLoyaltyPoints = async (
     throw new Error('amount must be a positive number');
   }
 
-  const pointsEarned = roundTwoDecimals(normalizedAmount * 0.05);
+  const loyaltyRate = await getLoyaltyAccrualRate();
+  const pointsEarned = roundTwoDecimals((normalizedAmount * loyaltyRate) / 100);
 
   if (pointsEarned <= 0) {
     throw new Error('Calculated points must be greater than zero');

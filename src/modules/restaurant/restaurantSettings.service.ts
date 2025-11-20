@@ -5,6 +5,7 @@ export type RestaurantBranding = {
   logoUrl: string;
   enableOrderTags: boolean;
   measurementUnits: string[];
+  loyaltyRate: number;
 };
 
 const DEFAULT_BRANDING: RestaurantBranding = {
@@ -12,6 +13,14 @@ const DEFAULT_BRANDING: RestaurantBranding = {
   logoUrl: '',
   enableOrderTags: false,
   measurementUnits: ['гр', 'кг', 'мл', 'л', 'шт'],
+  loyaltyRate: 5,
+};
+
+const clampLoyaltyRate = (value: unknown): number => {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : DEFAULT_BRANDING.loyaltyRate;
+  if (numeric < 0) return 0;
+  if (numeric > 100) return 100;
+  return Number(numeric.toFixed(2));
 };
 
 const normalizeBranding = (branding: Partial<RestaurantBranding> | IRestaurantSettings | null | undefined): RestaurantBranding => ({
@@ -43,6 +52,7 @@ const normalizeBranding = (branding: Partial<RestaurantBranding> | IRestaurantSe
           return normalizedUnits.length > 0 ? normalizedUnits : DEFAULT_BRANDING.measurementUnits;
         })()
       : DEFAULT_BRANDING.measurementUnits,
+  loyaltyRate: clampLoyaltyRate(branding && typeof branding === 'object' ? (branding as any).loyaltyRate : undefined),
 });
 
 export const getRestaurantBranding = async (): Promise<RestaurantBranding> => {
@@ -85,6 +95,10 @@ export const updateRestaurantBranding = async (payload: Partial<RestaurantBrandi
     updatePayload.measurementUnits = normalizedUnits.length > 0 ? normalizedUnits : DEFAULT_BRANDING.measurementUnits;
   }
 
+  if (payload.loyaltyRate !== undefined) {
+    updatePayload.loyaltyRate = clampLoyaltyRate(payload.loyaltyRate);
+  }
+
   const updated = await RestaurantSettingsModel.findOneAndUpdate(
     { singletonKey: 'singleton' },
     {
@@ -112,3 +126,8 @@ export const resetRestaurantBranding = async (): Promise<RestaurantBranding> => 
 };
 
 export const restaurantBrandingDefaults = DEFAULT_BRANDING;
+
+export const getLoyaltyAccrualRate = async (): Promise<number> => {
+  const branding = await getRestaurantBranding();
+  return clampLoyaltyRate(branding.loyaltyRate);
+};

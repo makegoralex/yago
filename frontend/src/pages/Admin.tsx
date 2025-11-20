@@ -319,11 +319,12 @@ const DAY_OPTIONS: Array<{ value: number; label: string }> = [
 const AdminPage: React.FC = () => {
   const { notify } = useToast();
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'menu' | 'inventory' | 'suppliers' | 'discounts' | 'staff' | 'branding'
+    'dashboard' | 'menu' | 'inventory' | 'loyalty' | 'suppliers' | 'discounts' | 'staff' | 'branding'
   >('dashboard');
   const [menuSection, setMenuSection] = useState<'products' | 'categories' | 'ingredients' | 'modifiers'>(
     'products'
   );
+  const [loyaltySection, setLoyaltySection] = useState<'settings' | 'guests'>('settings');
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [summary, setSummary] = useState({
     totalOrders: 0,
@@ -473,8 +474,11 @@ const AdminPage: React.FC = () => {
   const restaurantLogo = useRestaurantStore((state) => state.logoUrl);
   const enableOrderTags = useRestaurantStore((state) => state.enableOrderTags);
   const measurementUnits = useRestaurantStore((state) => state.measurementUnits);
+  const loyaltyRate = useRestaurantStore((state) => state.loyaltyRate);
   const updateRestaurantBranding = useRestaurantStore((state) => state.updateBranding);
   const resetRestaurantBranding = useRestaurantStore((state) => state.resetBranding);
+  const [loyaltyRateDraft, setLoyaltyRateDraft] = useState(loyaltyRate.toString());
+  const [savingLoyaltyRate, setSavingLoyaltyRate] = useState(false);
   const [brandingForm, setBrandingForm] = useState({ name: restaurantName, logoUrl: restaurantLogo });
   const [brandingSaving, setBrandingSaving] = useState(false);
 
@@ -835,6 +839,10 @@ const AdminPage: React.FC = () => {
     void loadCashiersData();
   };
 
+  useEffect(() => {
+    setLoyaltyRateDraft(loyaltyRate.toString());
+  }, [loyaltyRate]);
+
   const loadCustomers = useCallback(async () => {
     setCustomersLoading(true);
     try {
@@ -847,6 +855,30 @@ const AdminPage: React.FC = () => {
       setCustomersLoading(false);
     }
   }, [notify]);
+
+  const handleSaveLoyaltyRate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const numericValue = Number(loyaltyRateDraft);
+
+    if (!Number.isFinite(numericValue) || numericValue < 0) {
+      notify({ title: 'Введите корректный процент от 0 до 100', type: 'info' });
+      return;
+    }
+
+    const clampedValue = Math.min(Math.max(Number(numericValue.toFixed(2)), 0), 100);
+    setLoyaltyRateDraft(clampedValue.toString());
+
+    try {
+      setSavingLoyaltyRate(true);
+      await updateRestaurantBranding({ loyaltyRate: clampedValue });
+      notify({ title: 'Настройки лояльности обновлены', type: 'success' });
+    } catch (error) {
+      console.error('Не удалось сохранить процент лояльности', error);
+      notify({ title: 'Не удалось сохранить процент лояльности', type: 'error' });
+    } finally {
+      setSavingLoyaltyRate(false);
+    }
+  };
 
   useEffect(() => {
     void loadDashboard();
@@ -891,6 +923,12 @@ const AdminPage: React.FC = () => {
       if (!suppliersLoading && suppliers.length === 0) {
         void loadSuppliersData();
       }
+      if (!customersLoading && customers.length === 0) {
+        void loadCustomers();
+      }
+    }
+
+    if (activeTab === 'loyalty') {
       if (!customersLoading && customers.length === 0) {
         void loadCustomers();
       }
@@ -2154,6 +2192,7 @@ const AdminPage: React.FC = () => {
             { id: 'dashboard', label: 'Дашборд' },
             { id: 'menu', label: 'Меню' },
             { id: 'inventory', label: 'Склады' },
+            { id: 'loyalty', label: 'Лояльность' },
             { id: 'staff', label: 'Персонал' },
             { id: 'suppliers', label: 'Поставщики' },
             { id: 'discounts', label: 'Скидки' },
@@ -3608,6 +3647,176 @@ const AdminPage: React.FC = () => {
         </div>
       ) : null}
 
+      {activeTab === 'loyalty' ? (
+        <div className="lg:flex lg:items-start lg:gap-6">
+          <aside className="mb-4 w-full lg:mb-0 lg:w-64">
+            <Card title="Раздел лояльности">
+              <div className="mt-2 flex flex-col gap-2">
+                {[
+                  { id: 'settings', label: 'Настройки', description: 'Процент начисления баллов' },
+                  { id: 'guests', label: 'Гости', description: 'Список гостей и их баллы' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setLoyaltySection(item.id as typeof loyaltySection)}
+                    className={`flex flex-col rounded-xl border px-3 py-2 text-left transition hover:border-emerald-300 ${
+                      loyaltySection === item.id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'
+                    }`}
+                  >
+                    <span className="text-sm font-semibold text-slate-800">{item.label}</span>
+                    <span className="text-xs text-slate-500">{item.description}</span>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          </aside>
+          <div className="flex-1 space-y-6">
+            {loyaltySection === 'settings' ? (
+              <section className="grid gap-6 lg:grid-cols-2">
+                <Card title="Начисление баллов">
+                  <form onSubmit={handleSaveLoyaltyRate} className="space-y-4 text-sm">
+                    <label className="block text-slate-600">
+                      <span className="mb-1 block text-xs uppercase text-slate-400">Процент от суммы чека</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={loyaltyRateDraft}
+                        onChange={(event) => setLoyaltyRateDraft(event.target.value)}
+                        className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                        placeholder="Например, 5"
+                      />
+                    </label>
+                    <p className="text-xs text-slate-500">
+                      Гость получит указанную долю от суммы оплаченного чека в виде баллов. Сейчас: {loyaltyRate}%.
+                    </p>
+                    <button
+                      type="submit"
+                      className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      disabled={savingLoyaltyRate}
+                    >
+                      {savingLoyaltyRate ? 'Сохранение…' : 'Сохранить настройку'}
+                    </button>
+                  </form>
+                </Card>
+                <Card title="Баллы лояльности">
+                  <div className="rounded-2xl bg-emerald-50 p-6 text-emerald-700">
+                    <p className="text-sm">Начислено</p>
+                    <p className="text-3xl font-bold">{loyaltySummary.totalPointsIssued.toFixed(0)} баллов</p>
+                    <p className="mt-4 text-sm">Использовано: {loyaltySummary.totalPointsRedeemed.toFixed(0)} баллов</p>
+                  </div>
+                </Card>
+              </section>
+            ) : null}
+
+            {loyaltySection === 'guests' ? (
+              <section className="grid gap-6 lg:grid-cols-2">
+                <Card title="Гости">
+                  {customersLoading ? (
+                    <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <ul className="space-y-3 text-sm">
+                        {customers.map((customer) => (
+                          <li
+                            key={customer._id}
+                            onClick={() => handleSelectCustomer(customer)}
+                            className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-emerald-300 ${
+                              selectedCustomer?._id === customer._id ? 'ring-2 ring-emerald-400' : ''
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">{customer.name}</p>
+                                <p className="text-xs text-slate-400">{customer.phone || 'Телефон не указан'}</p>
+                              </div>
+                              <div className="text-right text-xs text-slate-500">
+                                <p>{customer.totalSpent.toFixed(2)} ₽</p>
+                                <p>{customer.points} баллов</p>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <div>
+                        {selectedCustomer ? (
+                          <form onSubmit={handleUpdateCustomer} className="space-y-3 text-sm">
+                            <p className="text-xs uppercase text-slate-400">Карточка гостя</p>
+                            <input
+                              type="text"
+                              value={customerEditForm.name}
+                              onChange={(event) =>
+                                setCustomerEditForm((prev) => ({ ...prev, name: event.target.value }))
+                              }
+                              className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                              placeholder="Имя"
+                            />
+                            <input
+                              type="tel"
+                              value={customerEditForm.phone}
+                              onChange={(event) =>
+                                setCustomerEditForm((prev) => ({ ...prev, phone: event.target.value }))
+                              }
+                              className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                              placeholder="Телефон"
+                            />
+                            <input
+                              type="email"
+                              value={customerEditForm.email}
+                              onChange={(event) =>
+                                setCustomerEditForm((prev) => ({ ...prev, email: event.target.value }))
+                              }
+                              className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                              placeholder="Email"
+                            />
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={customerEditForm.points}
+                                onChange={(event) =>
+                                  setCustomerEditForm((prev) => ({ ...prev, points: event.target.value }))
+                                }
+                                className="rounded-2xl border border-slate-200 px-4 py-2"
+                                placeholder="Баллы"
+                              />
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={customerEditForm.totalSpent}
+                                onChange={(event) =>
+                                  setCustomerEditForm((prev) => ({ ...prev, totalSpent: event.target.value }))
+                                }
+                                className="rounded-2xl border border-slate-200 px-4 py-2"
+                                placeholder="Выручка"
+                              />
+                            </div>
+                            <button
+                              type="submit"
+                              className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
+                            >
+                              Сохранить гостя
+                            </button>
+                          </form>
+                        ) : (
+                          <p className="text-xs text-slate-400">
+                            Выберите гостя, чтобы управлять баллами и контактами.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              </section>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       {activeTab === 'staff' ? (
         <div className="space-y-6">
           <section className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -3881,104 +4090,6 @@ const AdminPage: React.FC = () => {
                 )}
               </Card>
             </div>
-          </section>
-          <section className="grid gap-6 lg:grid-cols-2">
-            <Card title="Клиенты">
-              {customersLoading ? (
-                <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <ul className="space-y-3 text-sm">
-                    {customers.map((customer) => (
-                      <li
-                        key={customer._id}
-                        onClick={() => handleSelectCustomer(customer)}
-                        className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-emerald-300 ${
-                          selectedCustomer?._id === customer._id ? 'ring-2 ring-emerald-400' : ''
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">{customer.name}</p>
-                            <p className="text-xs text-slate-400">{customer.phone || 'Телефон не указан'}</p>
-                          </div>
-                          <div className="text-right text-xs text-slate-500">
-                            <p>{customer.totalSpent.toFixed(2)} ₽</p>
-                            <p>{customer.points} баллов</p>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  <div>
-                    {selectedCustomer ? (
-                      <form onSubmit={handleUpdateCustomer} className="space-y-3 text-sm">
-                        <p className="text-xs uppercase text-slate-400">Карточка клиента</p>
-                        <input
-                          type="text"
-                          value={customerEditForm.name}
-                          onChange={(event) =>
-                            setCustomerEditForm((prev) => ({ ...prev, name: event.target.value }))
-                          }
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                          placeholder="Имя"
-                        />
-                        <input
-                          type="tel"
-                          value={customerEditForm.phone}
-                          onChange={(event) =>
-                            setCustomerEditForm((prev) => ({ ...prev, phone: event.target.value }))
-                          }
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                          placeholder="Телефон"
-                        />
-                        <input
-                          type="email"
-                          value={customerEditForm.email}
-                          onChange={(event) =>
-                            setCustomerEditForm((prev) => ({ ...prev, email: event.target.value }))
-                          }
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                          placeholder="Email"
-                        />
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={customerEditForm.points}
-                            onChange={(event) =>
-                              setCustomerEditForm((prev) => ({ ...prev, points: event.target.value }))
-                            }
-                            className="rounded-2xl border border-slate-200 px-4 py-2"
-                            placeholder="Баллы"
-                          />
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={customerEditForm.totalSpent}
-                            onChange={(event) =>
-                              setCustomerEditForm((prev) => ({ ...prev, totalSpent: event.target.value }))
-                            }
-                            className="rounded-2xl border border-slate-200 px-4 py-2"
-                            placeholder="Выручка"
-                          />
-                        </div>
-                        <button
-                          type="submit"
-                          className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
-                        >
-                          Сохранить клиента
-                        </button>
-                      </form>
-                    ) : (
-                      <p className="text-xs text-slate-400">Выберите клиента, чтобы управлять баллами и контактами.</p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </Card>
           </section>
         </div>
       ) : null}
