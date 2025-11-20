@@ -8,6 +8,9 @@ import {
   fetchInventoryItemsWithReferences,
   getInventorySummary,
   InventoryReceiptError,
+  listStockReceipts,
+  updateStockReceipt,
+  deleteStockReceipt,
 } from '../modules/inventory/inventory.service';
 import { InventoryItemModel } from '../modules/inventory/inventoryItem.model';
 import { WarehouseModel } from '../modules/inventory/warehouse.model';
@@ -201,6 +204,92 @@ router.post(
       });
 
       res.status(201).json({ data: receipt, error: null });
+    } catch (error) {
+      if (error instanceof InventoryReceiptError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
+
+router.get(
+  '/inventory/receipts',
+  requireRole('admin'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { type, warehouseId, supplierId } = req.query;
+
+    const filter: Record<string, unknown> = {};
+
+    if (type) {
+      if (type !== 'receipt' && type !== 'writeOff' && type !== 'inventory') {
+        res.status(400).json({ data: null, error: 'Некорректный тип документа' });
+        return;
+      }
+
+      filter.type = type;
+    }
+
+    if (warehouseId) {
+      if (typeof warehouseId !== 'string' || !warehouseId.trim()) {
+        res.status(400).json({ data: null, error: 'Некорректный склад' });
+        return;
+      }
+
+      filter.warehouseId = warehouseId;
+    }
+
+    if (supplierId) {
+      if (typeof supplierId !== 'string' || !supplierId.trim()) {
+        res.status(400).json({ data: null, error: 'Некорректный поставщик' });
+        return;
+      }
+
+      filter.supplierId = supplierId;
+    }
+
+    const receipts = await listStockReceipts(filter);
+
+    res.json({ data: receipts, error: null });
+  })
+);
+
+router.put(
+  '/inventory/receipts/:id',
+  requireRole('admin'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    try {
+      const receipt = await updateStockReceipt(id, {
+        items: req.body?.items,
+        supplierId: req.body?.supplierId,
+        occurredAt: req.body?.occurredAt,
+      });
+
+      res.json({ data: receipt, error: null });
+    } catch (error) {
+      if (error instanceof InventoryReceiptError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
+
+router.delete(
+  '/inventory/receipts/:id',
+  requireRole('admin'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    try {
+      await deleteStockReceipt(id);
+      res.json({ data: { id }, error: null });
     } catch (error) {
       if (error instanceof InventoryReceiptError) {
         res.status(error.status).json({ data: null, error: error.message });
