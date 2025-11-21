@@ -54,7 +54,7 @@ organizationsRouter.post('/create', async (req: Request, res: Response) => {
         { session }
       ).then((created) => created[0]);
 
-      organization.ownerUserId = user._id;
+      organization.ownerUserId = user._id as mongoose.Types.ObjectId;
       await organization.save({ session });
 
       if (Array.isArray(DEFAULT_CATEGORIES) && DEFAULT_CATEGORIES.length > 0) {

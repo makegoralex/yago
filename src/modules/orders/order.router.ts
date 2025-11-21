@@ -100,8 +100,8 @@ const getOrganizationObjectId = (req: Request): Types.ObjectId | null => {
 const findOrderForOrganization = (
   orderId: string,
   organizationId: Types.ObjectId
-): ReturnType<typeof OrderModel.findOne> => {
-  return OrderModel.findOne({ _id: orderId, organizationId });
+): ReturnType<typeof OrderModel.findOne<OrderDocument>> => {
+  return OrderModel.findOne<OrderDocument>({ _id: orderId, organizationId });
 };
 
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
@@ -654,10 +654,10 @@ router.post(
       return;
     }
 
-    const order = await findOrderForOrganization(id, organizationId).populate(
+    const order = (await findOrderForOrganization(id, organizationId).populate(
       'customerId',
       CUSTOMER_PROJECTION
-    );
+    )) as OrderDocument | null;
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });
@@ -783,7 +783,7 @@ router.post(
       return;
     }
 
-    const order = await findOrderForOrganization(id, organizationId);
+    const order = (await findOrderForOrganization(id, organizationId)) as OrderDocument | null;
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });
@@ -871,7 +871,7 @@ router.post(
       return;
     }
 
-    const order = await findOrderForOrganization(id, organizationId);
+    const order = (await findOrderForOrganization(id, organizationId)) as OrderDocument | null;
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });
@@ -918,7 +918,7 @@ router.delete(
       return;
     }
 
-    const order = await findOrderForOrganization(id, organizationId);
+    const order = (await findOrderForOrganization(id, organizationId)) as OrderDocument | null;
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });
@@ -1156,10 +1156,10 @@ router.get(
       return;
     }
 
-    const order = await findOrderForOrganization(id, organizationId).populate(
+    const order = (await findOrderForOrganization(id, organizationId).populate(
       'customerId',
       CUSTOMER_PROJECTION
-    );
+    )) as OrderDocument | null;
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });

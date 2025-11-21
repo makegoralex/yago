@@ -6,6 +6,7 @@ export interface IRestaurantSettings extends Document {
   enableOrderTags: boolean;
   measurementUnits: string[];
   loyaltyRate: number;
+  singletonKey: string;
   organizationId?: Schema.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -18,6 +19,13 @@ const restaurantSettingsSchema = new Schema<IRestaurantSettings>(
       ref: 'Organization',
       required: false,
       index: true,
+    },
+    singletonKey: {
+      type: String,
+      required: true,
+      unique: true,
+      default: 'singleton',
+      trim: true,
     },
     name: {
       type: String,
