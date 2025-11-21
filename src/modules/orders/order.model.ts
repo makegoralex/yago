@@ -56,7 +56,7 @@ export interface OrderPayment {
 
 export interface Order {
   orgId: string;
-  organizationId: Schema.Types.ObjectId;
+  organizationId: Types.ObjectId;
   locationId: string;
   registerId: string;
   shiftId?: Types.ObjectId;
