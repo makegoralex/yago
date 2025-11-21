@@ -102,10 +102,20 @@ export const authenticateUser = async (
   password: string,
   organizationId?: string
 ): Promise<{ user: IUser; tokens: AuthTokens }> => {
-  const user = await UserModel.findOne({
-    email: email.toLowerCase(),
-    ...(organizationId ? { organizationId } : {}),
-  });
+  const normalizedEmail = email.toLowerCase();
+  let user: IUser | null = null;
+
+  if (organizationId) {
+    user = await UserModel.findOne({ email: normalizedEmail, organizationId });
+  } else {
+    const users = await UserModel.find({ email: normalizedEmail });
+
+    if (users.length > 1) {
+      throw new Error('organizationId is required for this account');
+    }
+
+    user = users[0] ?? null;
+  }
 
   if (!user) {
     throw new Error('Invalid credentials');

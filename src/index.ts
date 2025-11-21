@@ -4,6 +4,7 @@ import app from './app';
 import { appConfig, validateConfig } from './config/env';
 import { ensureDefaultAdminExists } from './startup/createAdmin';
 import { ensureDemoCatalogSeeded } from './startup/seedCatalog';
+import { migrateUserIndexes } from './startup/migrateUserIndexes';
 
 const startServer = async (): Promise<void> => {
   try {
@@ -11,6 +12,8 @@ const startServer = async (): Promise<void> => {
 
     await mongoose.connect(appConfig.mongoUri);
     console.log('Connected to MongoDB');
+
+    await migrateUserIndexes();
 
     await ensureDefaultAdminExists();
     await ensureDemoCatalogSeeded();
