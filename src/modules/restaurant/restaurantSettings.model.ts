@@ -1,24 +1,23 @@
 import { Schema, model, type Document } from 'mongoose';
 
 export interface IRestaurantSettings extends Document {
-  singletonKey: string;
   name: string;
   logoUrl?: string;
   enableOrderTags: boolean;
   measurementUnits: string[];
   loyaltyRate: number;
+  organizationId?: Schema.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const restaurantSettingsSchema = new Schema<IRestaurantSettings>(
   {
-    singletonKey: {
-      type: String,
-      default: 'singleton',
-      unique: true,
-      required: true,
-      immutable: true,
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: false,
+      index: true,
     },
     name: {
       type: String,
@@ -49,6 +48,6 @@ const restaurantSettingsSchema = new Schema<IRestaurantSettings>(
   { timestamps: true }
 );
 
-restaurantSettingsSchema.index({ singletonKey: 1 }, { unique: true });
+restaurantSettingsSchema.index({ organizationId: 1 }, { unique: true, sparse: true });
 
 export const RestaurantSettingsModel = model<IRestaurantSettings>('RestaurantSettings', restaurantSettingsSchema);

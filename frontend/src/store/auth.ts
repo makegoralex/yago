@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 
-export type UserRole = 'admin' | 'manager' | 'cashier' | 'barista';
+export type UserRole = 'admin' | 'manager' | 'cashier' | 'barista' | 'owner' | 'superAdmin';
 
 export type AuthUser = {
   _id: string;
   name: string;
   email: string;
   role: UserRole;
+  organizationId?: string;
   id?: string;
 };
 
