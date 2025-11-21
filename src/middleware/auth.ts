@@ -136,12 +136,19 @@ export const authMiddleware = async (
       return;
     }
 
+    const organizationId = user.organizationId ? String(user.organizationId) : undefined;
+
+    if (user.role !== 'superAdmin' && !organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
     req.user = {
       id: typeof user.id === 'string' && user.id ? user.id : String(user._id),
       email: user.email,
       name: user.name,
       role: user.role,
-      organizationId: user.organizationId ? String(user.organizationId) : undefined,
+      organizationId,
     };
 
     if (req.user.organizationId) {
