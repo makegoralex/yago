@@ -6,9 +6,19 @@ import AdminPage from './pages/Admin';
 import SettingsPage from './pages/Settings';
 import LandingPage from './pages/Landing';
 import ProtectedRoute from './components/layout/ProtectedRoute';
-import { useAuthStore } from './store/auth';
+import { type AuthUser, type UserRole, useAuthStore } from './store/auth';
 import MobileNav from './components/ui/MobileNav';
 import { useRestaurantStore } from './store/restaurant';
+
+const ADMIN_ROLES: UserRole[] = ['admin', 'owner', 'superAdmin'];
+
+const getLandingRoute = (user: AuthUser | null): string => {
+  if (!user) {
+    return '/';
+  }
+
+  return ADMIN_ROLES.includes(user.role) ? '/admin' : '/pos';
+};
 
 const App: React.FC = () => {
   const { user } = useAuthStore();
@@ -33,7 +43,7 @@ const App: React.FC = () => {
         <Route element={<ProtectedRoute allowed={['admin', 'owner', 'superAdmin']} />}>
           <Route path="/admin" element={<AdminPage />} />
         </Route>
-        <Route path="/" element={user ? <Navigate to="/pos" replace /> : <LandingPage />} />
+        <Route path="/" element={user ? <Navigate to={getLandingRoute(user)} replace /> : <LandingPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <MobileNav />
