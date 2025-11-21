@@ -12,6 +12,19 @@ const router = Router();
 
 router.use(authMiddleware);
 
+const requireOrganization: RequestHandler = (req, res, next) => {
+  const organizationId = req.organization?.id;
+
+  if (!organizationId) {
+    res.status(400).json({ data: null, error: 'organizationId is required' });
+    return;
+  }
+
+  next();
+};
+
+router.use(requireOrganization);
+
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (async (req, res, next) => {
     try {
@@ -23,7 +36,8 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
 };
 
 const normalizeIngredients = async (
-  ingredients: unknown
+  ingredients: unknown,
+  organizationId: string
 ): Promise<ProductIngredient[] | undefined> => {
   if (ingredients === undefined) {
     return undefined;
@@ -67,7 +81,10 @@ const normalizeIngredients = async (
     collected.push({ ingredientId, quantity, unit: typeof unit === 'string' ? unit.trim() : undefined });
   }
 
-  const ingredientsData = await IngredientModel.find({ _id: { $in: Array.from(ingredientIds) } })
+  const ingredientsData = await IngredientModel.find({
+    _id: { $in: Array.from(ingredientIds) },
+    organizationId,
+  })
     .select('_id unit')
     .lean();
 
@@ -101,7 +118,8 @@ const normalizeIngredients = async (
 };
 
 const normalizeModifierGroups = async (
-  modifierGroups: unknown
+  modifierGroups: unknown,
+  organizationId: string
 ): Promise<Types.ObjectId[] | undefined> => {
   if (modifierGroups === undefined) {
     return undefined;
@@ -129,7 +147,10 @@ const normalizeModifierGroups = async (
     uniqueIds.add(id);
   }
 
-  const existing = await ModifierGroupModel.find({ _id: { $in: Array.from(uniqueIds) } })
+  const existing = await ModifierGroupModel.find({
+    _id: { $in: Array.from(uniqueIds) },
+    organizationId,
+  })
     .select('_id')
     .lean();
 
@@ -189,8 +210,12 @@ const computeProductPricing = (
 
 router.get(
   '/categories',
-  asyncHandler(async (_req, res) => {
-    const categories = await CategoryModel.find().sort({ sortOrder: 1, name: 1 });
+  asyncHandler(async (req, res) => {
+    const organizationId = req.organization!.id;
+
+    const categories = await CategoryModel.find({ organizationId })
+      .sort({ sortOrder: 1, name: 1 })
+      .lean();
 
     res.json({ data: categories, error: null });
   })
@@ -198,8 +223,12 @@ router.get(
 
 router.get(
   '/modifier-groups',
-  asyncHandler(async (_req, res) => {
-    const groups = await ModifierGroupModel.find().sort({ sortOrder: 1, name: 1 });
+  asyncHandler(async (req, res) => {
+    const organizationId = req.organization!.id;
+
+    const groups = await ModifierGroupModel.find({ organizationId })
+      .sort({ sortOrder: 1, name: 1 })
+      .lean();
 
     res.json({ data: groups, error: null });
   })
@@ -207,7 +236,7 @@ router.get(
 
 router.post(
   '/modifier-groups',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { name, selectionType, required, sortOrder, options } = req.body ?? {};
 
@@ -242,12 +271,15 @@ router.post(
         return;
       }
 
+    const organizationId = req.organization!.id;
+
     const group = new ModifierGroupModel({
       name: name.trim(),
       selectionType,
       required: Boolean(required),
       sortOrder,
       options: normalizedOptions,
+      organizationId,
     });
 
     await group.save();
@@ -258,7 +290,7 @@ router.post(
 
 router.put(
   '/modifier-groups/:id',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { name, selectionType, required, sortOrder, options } = req.body ?? {};
@@ -321,7 +353,9 @@ router.put(
       update.options = normalizedOptions;
     }
 
-    const group = await ModifierGroupModel.findByIdAndUpdate(id, update, {
+    const organizationId = req.organization!.id;
+
+    const group = await ModifierGroupModel.findOneAndUpdate({ _id: id, organizationId }, update, {
       new: true,
       runValidators: true,
     });
@@ -337,7 +371,7 @@ router.put(
 
 router.delete(
   '/modifier-groups/:id',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -346,7 +380,9 @@ router.delete(
       return;
     }
 
-    const group = await ModifierGroupModel.findById(id);
+    const organizationId = req.organization!.id;
+
+    const group = await ModifierGroupModel.findOne({ _id: id, organizationId });
 
     if (!group) {
       res.status(404).json({ data: null, error: 'Modifier group not found' });
@@ -361,7 +397,7 @@ router.delete(
 
 router.post(
   '/categories',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { name, sortOrder } = req.body;
 
@@ -370,7 +406,9 @@ router.post(
       return;
     }
 
-    const category = new CategoryModel({ name: name.trim(), sortOrder });
+    const organizationId = req.organization!.id;
+
+    const category = new CategoryModel({ name: name.trim(), sortOrder, organizationId });
     await category.save();
 
     res.status(201).json({ data: category, error: null });
@@ -379,7 +417,7 @@ router.post(
 
 router.put(
   '/categories/:id',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -405,7 +443,9 @@ router.put(
       update.sortOrder = sortOrder;
     }
 
-    const category = await CategoryModel.findByIdAndUpdate(id, update, {
+    const organizationId = req.organization!.id;
+
+    const category = await CategoryModel.findOneAndUpdate({ _id: id, organizationId }, update, {
       new: true,
       runValidators: true,
     });
@@ -421,7 +461,7 @@ router.put(
 
 router.delete(
   '/categories/:id',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -430,7 +470,9 @@ router.delete(
       return;
     }
 
-    const category = await CategoryModel.findById(id);
+    const organizationId = req.organization!.id;
+
+    const category = await CategoryModel.findOne({ _id: id, organizationId });
 
     if (!category) {
       res.status(404).json({ data: null, error: 'Category not found' });
@@ -447,8 +489,9 @@ router.get(
   '/products',
   asyncHandler(async (req, res) => {
     const { categoryId, includeInactive } = req.query;
+    const organizationId = req.organization!.id;
 
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { organizationId };
 
     if (categoryId) {
       if (typeof categoryId !== 'string' || !isValidObjectId(categoryId)) {
@@ -465,7 +508,8 @@ router.get(
 
     const products = await ProductModel.find(filter)
       .populate('modifierGroups')
-      .sort({ name: 1 });
+      .sort({ name: 1 })
+      .lean();
 
     res.json({ data: products, error: null });
   })
@@ -473,7 +517,7 @@ router.get(
 
 router.post(
   '/products',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const {
       name,
@@ -504,7 +548,9 @@ router.post(
       return;
     }
 
-    const categoryExists = await CategoryModel.exists({ _id: categoryId });
+    const organizationId = req.organization!.id;
+
+    const categoryExists = await CategoryModel.exists({ _id: categoryId, organizationId });
 
     if (!categoryExists) {
       res.status(400).json({ data: null, error: 'Category not found' });
@@ -514,7 +560,7 @@ router.post(
     let normalizedModifierGroups: Types.ObjectId[] | undefined;
 
     try {
-      normalizedModifierGroups = await normalizeModifierGroups(modifierGroups);
+      normalizedModifierGroups = await normalizeModifierGroups(modifierGroups, organizationId);
     } catch (error) {
       res.status(400).json({ data: null, error: error instanceof Error ? error.message : 'Invalid modifierGroups' });
       return;
@@ -523,7 +569,7 @@ router.post(
     let normalizedIngredients: ProductIngredient[] | undefined;
 
     try {
-      normalizedIngredients = await normalizeIngredients(ingredients);
+      normalizedIngredients = await normalizeIngredients(ingredients, organizationId);
     } catch (error) {
       res.status(400).json({ data: null, error: error instanceof Error ? error.message : 'Invalid ingredients' });
       return;
@@ -541,6 +587,7 @@ router.post(
     const product = new ProductModel({
       name: name.trim(),
       categoryId,
+      organizationId,
       description: description?.trim(),
       imageUrl: imageUrl?.trim(),
       price: pricing.price,
@@ -562,7 +609,7 @@ router.post(
 
 router.put(
   '/products/:id',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const {
       name,
@@ -578,6 +625,7 @@ router.put(
       ingredients,
     } = req.body;
     const { id } = req.params;
+    const organizationId = req.organization!.id;
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid product id' });
@@ -600,7 +648,7 @@ router.put(
         return;
       }
 
-      const categoryExists = await CategoryModel.exists({ _id: categoryId });
+      const categoryExists = await CategoryModel.exists({ _id: categoryId, organizationId });
 
       if (!categoryExists) {
         res.status(400).json({ data: null, error: 'Category not found' });
@@ -612,7 +660,7 @@ router.put(
 
     if (modifierGroups !== undefined) {
       try {
-        update.modifierGroups = await normalizeModifierGroups(modifierGroups);
+        update.modifierGroups = await normalizeModifierGroups(modifierGroups, organizationId);
       } catch (error) {
         res.status(400).json({ data: null, error: error instanceof Error ? error.message : 'Invalid modifierGroups' });
         return;
@@ -638,7 +686,7 @@ router.put(
 
     if (ingredients !== undefined) {
       try {
-        update.ingredients = await normalizeIngredients(ingredients);
+        update.ingredients = await normalizeIngredients(ingredients, organizationId);
       } catch (error) {
         res.status(400).json({ data: null, error: error instanceof Error ? error.message : 'Invalid ingredients' });
         return;
@@ -668,7 +716,7 @@ router.put(
       }
     }
 
-    const product = await ProductModel.findByIdAndUpdate(id, update, {
+    const product = await ProductModel.findOneAndUpdate({ _id: id, organizationId }, update, {
       new: true,
       runValidators: true,
     });
@@ -686,7 +734,7 @@ router.put(
 
 router.delete(
   '/products/:id',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -695,7 +743,9 @@ router.delete(
       return;
     }
 
-    const product = await ProductModel.findById(id);
+    const organizationId = req.organization!.id;
+
+    const product = await ProductModel.findOne({ _id: id, organizationId });
 
     if (!product) {
       res.status(404).json({ data: null, error: 'Product not found' });
@@ -710,9 +760,11 @@ router.delete(
 
 router.get(
   '/ingredients',
-  requireRole('admin'),
-  asyncHandler(async (_req, res) => {
-    const ingredients = await IngredientModel.find().sort({ name: 1 });
+  requireRole(['admin', 'owner', 'superAdmin']),
+  asyncHandler(async (req, res) => {
+    const organizationId = req.organization!.id;
+
+    const ingredients = await IngredientModel.find({ organizationId }).sort({ name: 1 }).lean();
 
     res.json({ data: ingredients, error: null });
   })
@@ -720,7 +772,7 @@ router.get(
 
 router.post(
   '/ingredients',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { name, unit, costPerUnit, supplierId, description } = req.body;
 
@@ -739,12 +791,15 @@ router.post(
       return;
     }
 
+    const organizationId = req.organization!.id;
+
     const ingredient = new IngredientModel({
       name: name.trim(),
       unit: unit.trim(),
       costPerUnit: costPerUnit ?? undefined,
       supplierId: supplierId || undefined,
       description: description?.trim(),
+      organizationId,
     });
 
     await ingredient.save();
@@ -757,7 +812,7 @@ router.post(
 
 router.put(
   '/ingredients/:id',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -808,7 +863,9 @@ router.put(
       update.description = description?.trim() || undefined;
     }
 
-    const ingredient = await IngredientModel.findByIdAndUpdate(id, update, {
+    const organizationId = req.organization!.id;
+
+    const ingredient = await IngredientModel.findOneAndUpdate({ _id: id, organizationId }, update, {
       new: true,
       runValidators: true,
     });
@@ -826,7 +883,7 @@ router.put(
 
 router.delete(
   '/ingredients/:id',
-  requireRole('admin'),
+  requireRole(['admin', 'owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -835,7 +892,9 @@ router.delete(
       return;
     }
 
-    const ingredient = await IngredientModel.findById(id);
+    const organizationId = req.organization!.id;
+
+    const ingredient = await IngredientModel.findOne({ _id: id, organizationId });
 
     if (!ingredient) {
       res.status(404).json({ data: null, error: 'Ingredient not found' });

@@ -4,7 +4,7 @@ import { authMiddleware, requireRole } from '../../middleware/auth';
 import { CustomerModel } from './customer.model';
 
 const router = Router();
-const MANAGER_ROLES = ['admin', 'cashier'];
+const MANAGER_ROLES = ['admin', 'cashier', 'owner', 'superAdmin'];
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (async (req, res, next) => {
@@ -19,10 +19,24 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
 router.use(authMiddleware);
 router.use(requireRole(MANAGER_ROLES));
 
+const requireOrganization: RequestHandler = (req, res, next) => {
+  const organizationId = req.organization?.id;
+
+  if (!organizationId) {
+    res.status(400).json({ data: null, error: 'organizationId is required' });
+    return;
+  }
+
+  next();
+};
+
+router.use(requireOrganization);
+
 router.get(
   '/',
-  asyncHandler(async (_req, res) => {
-    const customers = await CustomerModel.find().sort({ createdAt: -1 });
+  asyncHandler(async (req, res) => {
+    const organizationId = req.organization!.id;
+    const customers = await CustomerModel.find({ organizationId }).sort({ createdAt: -1 }).lean();
 
     res.json({ data: customers, error: null });
   })
@@ -38,7 +52,9 @@ router.get(
       return;
     }
 
-    const customer = await CustomerModel.findById(id.trim());
+    const organizationId = req.organization!.id;
+
+    const customer = await CustomerModel.findOne({ _id: id.trim(), organizationId });
 
     if (!customer) {
       res.status(404).json({ data: null, error: 'Customer not found' });
@@ -59,7 +75,9 @@ router.get(
       return;
     }
 
-    const customer = await CustomerModel.findOne({ phone: phone.trim() });
+    const organizationId = req.organization!.id;
+
+    const customer = await CustomerModel.findOne({ phone: phone.trim(), organizationId });
 
     if (!customer) {
       res.status(404).json({ data: null, error: 'Customer not found' });
@@ -90,11 +108,14 @@ router.post(
       return;
     }
 
+    const organizationId = req.organization!.id;
+
     try {
       const customer = await CustomerModel.create({
         name: name.trim(),
         phone: phone.trim(),
         email: email?.trim() || undefined,
+        organizationId,
       });
 
       res.status(201).json({ data: customer, error: null });
@@ -125,6 +146,7 @@ router.put(
     }
 
     const { name, phone, email, points, totalSpent } = req.body ?? {};
+    const organizationId = req.organization!.id;
     const update: Record<string, unknown> = {};
 
     if (name !== undefined) {
@@ -175,10 +197,10 @@ router.put(
     }
 
     try {
-      const customer = await CustomerModel.findByIdAndUpdate(id.trim(), update, {
-        new: true,
-        runValidators: true,
-      });
+    const customer = await CustomerModel.findOneAndUpdate({ _id: id.trim(), organizationId }, update, {
+      new: true,
+      runValidators: true,
+    });
 
       if (!customer) {
         res.status(404).json({ data: null, error: 'Customer not found' });
