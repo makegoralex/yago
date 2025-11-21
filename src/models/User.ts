@@ -29,7 +29,6 @@ const userSchema = new Schema<IUser>(
       type: String,
       required: true,
       lowercase: true,
-      unique: true,
       trim: true,
     },
     passwordHash: {
