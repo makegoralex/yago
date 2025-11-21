@@ -56,6 +56,7 @@ export interface OrderPayment {
 
 export interface Order {
   orgId: string;
+  organizationId: Schema.Types.ObjectId;
   locationId: string;
   registerId: string;
   shiftId?: Types.ObjectId;
@@ -139,6 +140,7 @@ const paymentSchema = new Schema<OrderPayment>(
 const orderSchema = new Schema<OrderDocument>(
   {
     orgId: { type: String, required: true, trim: true },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     locationId: { type: String, required: true, trim: true },
     registerId: { type: String, required: true, trim: true },
     shiftId: { type: Schema.Types.ObjectId, ref: 'Shift' },
@@ -169,5 +171,6 @@ orderSchema.index({ customerId: 1 });
 orderSchema.index({ cashierId: 1, status: 1 });
 orderSchema.index({ warehouseId: 1 });
 orderSchema.index({ registerId: 1, createdAt: -1 });
+orderSchema.index({ organizationId: 1, createdAt: -1 });
 
 export const OrderModel = model<OrderDocument>('Order', orderSchema);

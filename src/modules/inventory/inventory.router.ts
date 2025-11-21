@@ -1,4 +1,4 @@
-import { Router, type RequestHandler } from 'express';
+import { Router, type Request, type RequestHandler } from 'express';
 import { isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
@@ -21,7 +21,7 @@ import { recalculateAverageCostForItem } from './inventoryCost.service';
 const router = Router();
 
 router.use(authMiddleware);
-router.use(requireRole('admin'));
+router.use(requireRole(['admin', 'owner', 'superAdmin']));
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (async (req, res, next) => {
@@ -33,10 +33,27 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
   }) as RequestHandler;
 };
 
+const getOrganizationObjectId = (req: Request): Types.ObjectId | null => {
+  const organizationId = req.organization?.id;
+
+  if (!organizationId || !isValidObjectId(organizationId)) {
+    return null;
+  }
+
+  return new Types.ObjectId(organizationId);
+};
+
 router.get(
   '/warehouses',
-  asyncHandler(async (_req, res) => {
-    const warehouses = await WarehouseModel.find().sort({ name: 1 });
+  asyncHandler(async (req, res) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const warehouses = await WarehouseModel.find({ organizationId }).sort({ name: 1 });
     res.json({ data: warehouses, error: null });
   })
 );
@@ -45,6 +62,12 @@ router.post(
   '/warehouses',
   asyncHandler(async (req, res) => {
     const { name, location, description } = req.body;
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     if (!name?.trim()) {
       res.status(400).json({ data: null, error: 'Name is required' });
@@ -55,6 +78,7 @@ router.post(
       name: name.trim(),
       location: location?.trim(),
       description: description?.trim(),
+      organizationId,
     });
 
     await warehouse.save();
@@ -67,9 +91,15 @@ router.put(
   '/warehouses/:id',
   asyncHandler(async (req, res) => {
     const { id } = req.params;
+    const organizationId = getOrganizationObjectId(req);
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid warehouse id' });
+      return;
+    }
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
       return;
     }
 
@@ -93,7 +123,7 @@ router.put(
       update.description = description?.trim() || undefined;
     }
 
-    const warehouse = await WarehouseModel.findByIdAndUpdate(id, update, {
+    const warehouse = await WarehouseModel.findOneAndUpdate({ _id: id, organizationId }, update, {
       new: true,
       runValidators: true,
     });
@@ -111,13 +141,19 @@ router.delete(
   '/warehouses/:id',
   asyncHandler(async (req, res) => {
     const { id } = req.params;
+    const organizationId = getOrganizationObjectId(req);
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid warehouse id' });
       return;
     }
 
-    const warehouse = await WarehouseModel.findById(id);
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const warehouse = await WarehouseModel.findOne({ _id: id, organizationId });
 
     if (!warehouse) {
       res.status(404).json({ data: null, error: 'Warehouse not found' });

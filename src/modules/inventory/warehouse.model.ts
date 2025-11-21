@@ -5,6 +5,7 @@ export interface Warehouse {
   location?: string;
   description?: string;
   lastInventoryAt?: Date;
+  organizationId: Schema.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,6 +32,12 @@ const warehouseSchema = new Schema<WarehouseDocument>(
     lastInventoryAt: {
       type: Date,
       required: false,
+    },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
     },
   },
   {
