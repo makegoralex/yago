@@ -1,4 +1,4 @@
-import { Router, type RequestHandler } from 'express';
+import { Router, type Request, type RequestHandler } from 'express';
 import { FilterQuery, isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
@@ -6,11 +6,21 @@ import { OrderModel, type OrderDocument, type OrderStatus } from '../orders/orde
 import { ShiftModel, type ShiftDocument, type ShiftTotals } from './shift.model';
 
 const router = Router();
-const SHIFT_ROLES = ['admin', 'cashier', 'barista'];
+const SHIFT_ROLES = ['admin', 'cashier', 'barista', 'owner', 'superAdmin'];
 const FULFILLED_ORDER_STATUSES: OrderStatus[] = ['paid', 'completed'];
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
+};
+
+const getOrganizationObjectId = (req: Request): Types.ObjectId | null => {
+  const organizationId = req.organization?.id;
+
+  if (!organizationId || !isValidObjectId(organizationId)) {
+    return null;
+  }
+
+  return new Types.ObjectId(organizationId);
 };
 
 const buildShiftOrderFilter = (
@@ -26,6 +36,7 @@ const buildShiftOrderFilter = (
 
   return {
     orgId: shift.orgId,
+    organizationId: shift.organizationId,
     locationId: shift.locationId,
     registerId: shift.registerId,
     status: { $in: FULFILLED_ORDER_STATUSES },
@@ -63,25 +74,32 @@ const calculateShiftTotals = async (
 router.use(authMiddleware);
 
 const openShiftHandler: RequestHandler = asyncHandler(async (req, res) => {
-    const { orgId, locationId, registerId, openingBalance, openingNote } = req.body ?? {};
+    const { locationId, registerId, openingBalance, openingNote } = req.body ?? {};
+    const organizationId = getOrganizationObjectId(req);
     const cashierId = req.user?.id;
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     if (!cashierId) {
       res.status(403).json({ data: null, error: 'Unable to determine cashier' });
       return;
     }
 
-    if (!orgId || !locationId || !registerId) {
-      res.status(400).json({ data: null, error: 'orgId, locationId, and registerId are required' });
+    if (!locationId || !registerId) {
+      res.status(400).json({ data: null, error: 'locationId and registerId are required' });
       return;
     }
 
-    const normalizedOrgId = String(orgId).trim();
+    const normalizedOrgId = organizationId.toString();
     const normalizedLocationId = String(locationId).trim();
     const normalizedRegisterId = String(registerId).trim();
 
     const existingShift = await ShiftModel.findOne({
       registerId: normalizedRegisterId,
+      organizationId,
       status: 'open',
     }).sort({ openedAt: -1 });
 
@@ -102,6 +120,7 @@ const openShiftHandler: RequestHandler = asyncHandler(async (req, res) => {
 
     const shift = await ShiftModel.create({
       orgId: normalizedOrgId,
+      organizationId,
       locationId: normalizedLocationId,
       registerId: normalizedRegisterId,
       cashierId: new Types.ObjectId(cashierId),
@@ -123,12 +142,18 @@ router.post(
   requireRole(SHIFT_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
+    const organizationId = getOrganizationObjectId(req);
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid shift id' });
       return;
     }
 
-    const shift = await ShiftModel.findById(id);
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const shift = await ShiftModel.findOne({ _id: id, organizationId });
     if (!shift) {
       res.status(404).json({ data: null, error: 'Shift not found' });
       return;
@@ -140,7 +165,7 @@ router.post(
     }
 
     const userId = req.user?.id;
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = ['admin', 'owner', 'superAdmin'].includes(req.user?.role ?? '');
     if (!isAdmin && (!userId || shift.cashierId.toString() !== userId)) {
       res.status(403).json({ data: null, error: 'Forbidden' });
       return;
@@ -177,7 +202,15 @@ router.get(
   requireRole(SHIFT_ROLES),
   asyncHandler(async (req, res) => {
     const { registerId, cashierId: cashierParam } = req.query;
+    const organizationId = getOrganizationObjectId(req);
     const filter: FilterQuery<ShiftDocument> = { status: 'open' };
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    filter.organizationId = organizationId;
 
     if (typeof registerId === 'string' && registerId.trim()) {
       filter.registerId = registerId.trim();

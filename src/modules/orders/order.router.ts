@@ -1,4 +1,4 @@
-import { Router, type RequestHandler } from 'express';
+import { Router, type Request, type RequestHandler } from 'express';
 import { FilterQuery, isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
@@ -28,19 +28,28 @@ const FULFILLED_ORDER_STATUSES: OrderStatus[] = ['paid', 'completed'];
 const ORDER_TAGS: OrderTag[] = ['takeaway', 'delivery'];
 const CUSTOMER_PROJECTION = 'name phone points';
 
-let cachedDefaultWarehouseId: Types.ObjectId | null | undefined;
+const cachedDefaultWarehouseIds = new Map<string, Types.ObjectId | null>();
 
-const findDefaultWarehouse = async (): Promise<Types.ObjectId | null> => {
-  if (cachedDefaultWarehouseId !== undefined) {
-    return cachedDefaultWarehouseId ?? null;
+const findDefaultWarehouse = async (organizationId: Types.ObjectId): Promise<Types.ObjectId | null> => {
+  const cacheKey = organizationId.toString();
+
+  if (cachedDefaultWarehouseIds.has(cacheKey)) {
+    return cachedDefaultWarehouseIds.get(cacheKey) ?? null;
   }
 
-  const warehouse = await WarehouseModel.findOne().sort({ createdAt: 1 }).select('_id');
-  cachedDefaultWarehouseId = warehouse?._id ? (warehouse._id as Types.ObjectId) : null;
-  return cachedDefaultWarehouseId ?? null;
+  const warehouse = await WarehouseModel.findOne({ organizationId })
+    .sort({ createdAt: 1 })
+    .select('_id');
+
+  const resolvedId = warehouse?._id ? (warehouse._id as Types.ObjectId) : null;
+  cachedDefaultWarehouseIds.set(cacheKey, resolvedId);
+  return resolvedId;
 };
 
-const resolveWarehouseId = async (candidate?: unknown): Promise<Types.ObjectId | null> => {
+const resolveWarehouseId = async (
+  organizationId: Types.ObjectId,
+  candidate?: unknown
+): Promise<Types.ObjectId | null> => {
   if (candidate instanceof Types.ObjectId) {
     return candidate;
   }
@@ -50,7 +59,7 @@ const resolveWarehouseId = async (candidate?: unknown): Promise<Types.ObjectId |
       throw new Error('warehouseId must be a valid identifier');
     }
 
-    const exists = await WarehouseModel.exists({ _id: candidate });
+    const exists = await WarehouseModel.exists({ _id: candidate, organizationId });
     if (!exists) {
       throw new Error('Склад не найден');
     }
@@ -58,15 +67,41 @@ const resolveWarehouseId = async (candidate?: unknown): Promise<Types.ObjectId |
     return new Types.ObjectId(candidate);
   }
 
-  return findDefaultWarehouse();
+  return findDefaultWarehouse(organizationId);
 };
 
-const reloadOrderWithCustomer = async (orderId: Types.ObjectId | string | null | undefined) => {
+const reloadOrderWithCustomer = async (
+  orderId: Types.ObjectId | string | null | undefined,
+  organizationId?: Types.ObjectId
+) => {
   if (!orderId) {
     return null;
   }
 
-  return OrderModel.findById(orderId).populate('customerId', CUSTOMER_PROJECTION);
+  const filter: FilterQuery<OrderDocument> = { _id: orderId };
+
+  if (organizationId) {
+    filter.organizationId = organizationId;
+  }
+
+  return OrderModel.findOne(filter).populate('customerId', CUSTOMER_PROJECTION);
+};
+
+const getOrganizationObjectId = (req: Request): Types.ObjectId | null => {
+  const organizationId = req.organization?.id;
+
+  if (!organizationId || !isValidObjectId(organizationId)) {
+    return null;
+  }
+
+  return new Types.ObjectId(organizationId);
+};
+
+const findOrderForOrganization = (
+  orderId: string,
+  organizationId: Types.ObjectId
+): ReturnType<typeof OrderModel.findOne> => {
+  return OrderModel.findOne({ _id: orderId, organizationId });
 };
 
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
@@ -101,6 +136,7 @@ const buildShiftHistoryFilter = (
 
   return {
     orgId: shift.orgId,
+    organizationId: shift.organizationId,
     locationId: shift.locationId,
     registerId: shift.registerId,
     status: { $in: FULFILLED_ORDER_STATUSES },
@@ -109,11 +145,13 @@ const buildShiftHistoryFilter = (
 };
 
 const findActiveShiftForRegister = async (
+  organizationId: Types.ObjectId,
   registerId: string,
   cashierId?: string
 ): Promise<ShiftDocument | null> => {
   const filter: FilterQuery<ShiftDocument> = {
     registerId,
+    organizationId,
     status: 'open',
   };
 
@@ -149,7 +187,12 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
 };
 
 const deductInventoryForOrder = async (order: OrderDocument): Promise<void> => {
-  const warehouseId = await resolveWarehouseId(order.warehouseId);
+  const organizationId = order.organizationId as Types.ObjectId | undefined;
+  if (!organizationId) {
+    return;
+  }
+
+  const warehouseId = await resolveWarehouseId(organizationId, order.warehouseId);
 
   if (!warehouseId) {
     return;
@@ -470,8 +513,13 @@ const ensureOrderShiftIsActive = async (
   order: OrderDocument,
   cashierId?: string | null
 ): Promise<void> => {
+  const organizationId = order.organizationId as Types.ObjectId | undefined;
+  if (!organizationId) {
+    throw new Error('Организация не определена для заказа');
+  }
+
   if (order.shiftId) {
-    const shift = await ShiftModel.findById(order.shiftId);
+    const shift = await ShiftModel.findOne({ _id: order.shiftId, organizationId });
     if (shift && shift.status === 'open') {
       return;
     }
@@ -483,7 +531,11 @@ const ensureOrderShiftIsActive = async (
     order.shiftId = undefined;
   }
 
-  const fallbackShift = await findActiveShiftForRegister(order.registerId, cashierId ?? undefined);
+  const fallbackShift = await findActiveShiftForRegister(
+    organizationId,
+    order.registerId,
+    cashierId ?? undefined
+  );
   if (!fallbackShift) {
     throw new Error('Сначала откройте смену на кассе');
   }
@@ -495,18 +547,24 @@ router.post(
   '/start',
   requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
-    const { orgId, locationId, registerId, customerId, warehouseId, orderTag } = req.body ?? {};
+    const { locationId, registerId, customerId, warehouseId, orderTag } = req.body ?? {};
+    const organizationId = getOrganizationObjectId(req);
     const cashierId = req.user?.id;
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     if (!cashierId) {
       res.status(403).json({ data: null, error: 'Unable to determine cashier' });
       return;
     }
 
-    if (!orgId || !locationId || !registerId) {
+    if (!locationId || !registerId) {
       res
         .status(400)
-        .json({ data: null, error: 'orgId, locationId, and registerId are required to start an order' });
+        .json({ data: null, error: 'locationId and registerId are required to start an order' });
       return;
     }
 
@@ -528,7 +586,7 @@ router.post(
     }
 
     try {
-      normalizedWarehouseId = await resolveWarehouseId(warehouseId);
+      normalizedWarehouseId = await resolveWarehouseId(organizationId, warehouseId);
     } catch (error) {
       res.status(400).json({ data: null, error: error instanceof Error ? error.message : 'Invalid warehouseId' });
       return;
@@ -542,11 +600,11 @@ router.post(
       return;
     }
 
-    const normalizedOrgId = String(orgId).trim();
+    const normalizedOrgId = organizationId.toString();
     const normalizedLocationId = String(locationId).trim();
     const normalizedRegisterId = String(registerId).trim();
 
-    const activeShift = await findActiveShiftForRegister(normalizedRegisterId, cashierId);
+    const activeShift = await findActiveShiftForRegister(organizationId, normalizedRegisterId, cashierId);
 
     if (!activeShift) {
       res.status(409).json({ data: null, error: 'Сначала откройте смену на кассе' });
@@ -555,6 +613,7 @@ router.post(
 
     const order = await OrderModel.create({
       orgId: normalizedOrgId,
+      organizationId,
       locationId: normalizedLocationId,
       registerId: normalizedRegisterId,
       shiftId: activeShift._id,
@@ -571,7 +630,8 @@ router.post(
       status: 'draft',
     });
 
-    const populatedOrder = (await reloadOrderWithCustomer(order._id as Types.ObjectId)) ?? order;
+    const populatedOrder =
+      (await reloadOrderWithCustomer(order._id as Types.ObjectId, organizationId)) ?? order;
 
     res.status(201).json({ data: populatedOrder, error: null });
   })
@@ -582,13 +642,22 @@ router.post(
   requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid order id' });
       return;
     }
 
-    const order = await OrderModel.findById(id).populate('customerId', CUSTOMER_PROJECTION);
+    const order = await findOrderForOrganization(id, organizationId).populate(
+      'customerId',
+      CUSTOMER_PROJECTION
+    );
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });
@@ -679,7 +748,8 @@ router.post(
 
     await order.save();
 
-    const populatedOrder = (await reloadOrderWithCustomer(order._id as Types.ObjectId)) ?? order;
+    const populatedOrder =
+      (await reloadOrderWithCustomer(order._id as Types.ObjectId, order.organizationId)) ?? order;
 
     res.json({ data: populatedOrder, error: null });
   })
@@ -691,6 +761,12 @@ router.post(
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { method, amount, change } = req.body ?? {};
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid order id' });
@@ -707,7 +783,7 @@ router.post(
       return;
     }
 
-    const order = await OrderModel.findById(id);
+    const order = await findOrderForOrganization(id, organizationId);
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });
@@ -771,7 +847,8 @@ router.post(
       }
     }
 
-    const populatedOrder = (await reloadOrderWithCustomer(order._id as Types.ObjectId)) ?? order;
+    const populatedOrder =
+      (await reloadOrderWithCustomer(order._id as Types.ObjectId, order.organizationId)) ?? order;
 
     res.json({ data: populatedOrder, error: null });
   })
@@ -782,13 +859,19 @@ router.post(
   requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid order id' });
       return;
     }
 
-    const order = await OrderModel.findById(id);
+    const order = await findOrderForOrganization(id, organizationId);
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });
@@ -811,7 +894,8 @@ router.post(
     order.status = 'completed';
     await order.save();
 
-    const populatedOrder = (await reloadOrderWithCustomer(order._id as Types.ObjectId)) ?? order;
+    const populatedOrder =
+      (await reloadOrderWithCustomer(order._id as Types.ObjectId, order.organizationId)) ?? order;
 
     res.json({ data: populatedOrder, error: null });
   })
@@ -822,20 +906,26 @@ router.delete(
   requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid order id' });
       return;
     }
 
-    const order = await OrderModel.findById(id);
+    const order = await findOrderForOrganization(id, organizationId);
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });
       return;
     }
 
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = ['admin', 'owner', 'superAdmin'].includes(req.user?.role ?? '');
     if (!isAdmin && (!req.user?.id || order.cashierId.toString() !== req.user.id)) {
       res.status(403).json({ data: null, error: 'Forbidden' });
       return;
@@ -856,7 +946,13 @@ router.get(
   '/active',
   requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
+    const organizationId = getOrganizationObjectId(req);
     const cashierId = req.user?.id;
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
     if (!cashierId) {
       res.status(403).json({ data: null, error: 'Unable to determine cashier' });
       return;
@@ -867,6 +963,7 @@ router.get(
     const filter: Record<string, unknown> = {
       cashierId: new Types.ObjectId(cashierId),
       status: { $in: ACTIVE_ORDER_STATUSES },
+      organizationId,
     };
 
     if (registerId && typeof registerId === 'string') {
@@ -886,10 +983,16 @@ router.get(
   requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
     const { registerId, cashierId: cashierParam } = req.query;
+    const organizationId = getOrganizationObjectId(req);
     const normalizedRegisterId = typeof registerId === 'string' && registerId.trim() ? registerId.trim() : undefined;
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = ['admin', 'owner', 'superAdmin'].includes(req.user?.role ?? '');
 
-    const shiftFilter: FilterQuery<ShiftDocument> = { status: 'open' };
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const shiftFilter: FilterQuery<ShiftDocument> = { status: 'open', organizationId };
 
     if (normalizedRegisterId) {
       shiftFilter.registerId = normalizedRegisterId;
@@ -939,13 +1042,19 @@ router.get(
 
 router.get(
   '/history/by-date',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { date, registerId, cashierId } = req.query;
+    const organizationId = getOrganizationObjectId(req);
 
     const resolvedRange =
       (typeof date === 'string' && date ? resolveDateRange(date) : null) ??
       resolveDateRange(new Date().toISOString());
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     if (!resolvedRange) {
       res.status(400).json({ data: null, error: 'Не удалось определить дату' });
@@ -955,6 +1064,7 @@ router.get(
     const filter: FilterQuery<OrderDocument> = {
       status: { $in: FULFILLED_ORDER_STATUSES },
       createdAt: { $gte: resolvedRange.from, $lte: resolvedRange.to },
+      organizationId,
     };
 
     if (typeof registerId === 'string' && registerId.trim()) {
@@ -991,20 +1101,27 @@ router.get(
   '/today',
   requireRole(CASHIER_ROLES),
   asyncHandler(async (req, res) => {
+    const organizationId = getOrganizationObjectId(req);
     const now = new Date();
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(now);
     endOfDay.setHours(23, 59, 59, 999);
 
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
     const filter: Record<string, unknown> = {
       createdAt: { $gte: startOfDay, $lte: endOfDay },
       status: { $in: FULFILLED_ORDER_STATUSES },
+      organizationId,
     };
 
     const { cashierId: cashierParam } = req.query;
 
-    if (req.user?.role === 'admin' && typeof cashierParam === 'string') {
+    if (['admin', 'owner', 'superAdmin'].includes(req.user?.role ?? '') && typeof cashierParam === 'string') {
       if (!isValidObjectId(cashierParam)) {
         res.status(400).json({ data: null, error: 'cashierId must be a valid identifier' });
         return;
@@ -1027,13 +1144,22 @@ router.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const { id } = req.params;
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid order id' });
       return;
     }
 
-    const order = await OrderModel.findById(id).populate('customerId', CUSTOMER_PROJECTION);
+    const order = await findOrderForOrganization(id, organizationId).populate(
+      'customerId',
+      CUSTOMER_PROJECTION
+    );
 
     if (!order) {
       res.status(404).json({ data: null, error: 'Order not found' });
@@ -1048,8 +1174,16 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { status, from, to, cashierId, registerId } = req.query;
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     const filter: Record<string, unknown> = {};
+
+    filter.organizationId = organizationId;
 
     if (status) {
       if (typeof status !== 'string' || !ORDER_STATUSES.includes(status as OrderStatus)) {

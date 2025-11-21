@@ -10,6 +10,7 @@ export interface ShiftTotals {
 
 export interface Shift {
   orgId: string;
+  organizationId: Schema.Types.ObjectId;
   locationId: string;
   registerId: string;
   cashierId: Types.ObjectId;
@@ -41,6 +42,7 @@ const totalsSchema = new Schema<ShiftTotals>(
 const shiftSchema = new Schema<ShiftDocument>(
   {
     orgId: { type: String, required: true, trim: true },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     locationId: { type: String, required: true, trim: true },
     registerId: { type: String, required: true, trim: true },
     cashierId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -67,6 +69,7 @@ shiftSchema.index({ registerId: 1, openedAt: -1 });
 shiftSchema.index({ locationId: 1, openedAt: -1 });
 shiftSchema.index({ cashierId: 1, openedAt: -1 });
 shiftSchema.index({ status: 1 });
+shiftSchema.index({ organizationId: 1, status: 1 });
 
 shiftSchema.pre('save', function updateStatus(this: ShiftDocument, next: () => void) {
   this.status = this.closedAt ? 'closed' : 'open';
