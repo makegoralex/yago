@@ -11,9 +11,11 @@ const parseNumber = (value: string | undefined, fallback: number): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const mongoUri = process.env.MONGO_URI ?? process.env.MONGODB_URI ?? '';
+
 export const appConfig = {
   port: parseNumber(process.env.PORT, 3000),
-  mongoUri: process.env.MONGO_URI ?? '',
+  mongoUri,
   jwtAccessSecret: process.env.JWT_ACCESS_SECRET ?? '',
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET ?? '',
   bcryptSaltRounds: parseNumber(process.env.BCRYPT_SALT_ROUNDS, 10),
@@ -22,7 +24,7 @@ export const appConfig = {
 
 export const validateConfig = (): void => {
   if (!appConfig.mongoUri) {
-    throw new Error('MONGO_URI environment variable is required');
+    throw new Error('MongoDB connection string is required (MONGO_URI or MONGODB_URI)');
   }
 
   if (!appConfig.jwtAccessSecret) {
