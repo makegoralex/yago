@@ -3,6 +3,7 @@ import { Schema, model, Document, Types } from 'mongoose';
 export type UserRole = 'cashier' | 'owner' | 'superAdmin';
 
 export interface IUser extends Document {
+  _id: Types.ObjectId;
   name: string;
   email: string;
   passwordHash: string;
