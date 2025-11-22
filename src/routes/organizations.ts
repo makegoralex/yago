@@ -7,12 +7,50 @@ import { UserModel } from '../models/User';
 import { CategoryModel } from '../modules/catalog/catalog.model';
 import { RestaurantSettingsModel } from '../modules/restaurant/restaurantSettings.model';
 import { generateTokens, hashPassword } from '../services/authService';
+import { requireAuth, requireRole } from '../middleware/auth';
 
 export const organizationsRouter = Router();
 
 const DEFAULT_CATEGORIES = ['Горячие напитки', 'Холодные напитки', 'Десерты'];
 
-organizationsRouter.post('/create', async (req: Request, res: Response) => {
+organizationsRouter.get('/', requireAuth, requireRole('superAdmin'), async (_req: Request, res: Response) => {
+  try {
+    const organizations = await OrganizationModel.find()
+      .select('name subscriptionPlan subscriptionStatus ownerUserId createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const ownerIds = organizations
+      .map((org) => org.ownerUserId)
+      .filter((id): id is mongoose.Types.ObjectId => Boolean(id));
+
+    const ownersById = await UserModel.find({ _id: { $in: ownerIds } })
+      .select('name email role')
+      .lean()
+      .then((owners) =>
+        owners.reduce<Record<string, { name: string; email: string; role: string }>>((acc, owner) => {
+          acc[String(owner._id)] = { name: owner.name, email: owner.email, role: owner.role };
+          return acc;
+        }, {})
+      );
+
+    const payload = organizations.map((org) => ({
+      id: String(org._id),
+      name: org.name,
+      subscriptionPlan: org.subscriptionPlan ?? null,
+      subscriptionStatus: org.subscriptionStatus,
+      createdAt: org.createdAt,
+      owner: org.ownerUserId ? ownersById[String(org.ownerUserId)] ?? null : null,
+    }));
+
+    res.json({ data: payload, error: null });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to load organizations';
+    res.status(500).json({ data: null, error: message });
+  }
+});
+
+organizationsRouter.post('/create', requireAuth, requireRole('superAdmin'), async (req: Request, res: Response) => {
   try {
     const { name, owner, subscriptionPlan, settings } = req.body ?? {};
 
@@ -120,5 +158,104 @@ organizationsRouter.post('/create', async (req: Request, res: Response) => {
     res.status(status).json({ data: null, error: message });
   }
 });
+
+organizationsRouter.patch(
+  '/:organizationId',
+  requireAuth,
+  requireRole('superAdmin'),
+  async (req: Request, res: Response) => {
+    try {
+      const { organizationId } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+        res.status(400).json({ data: null, error: 'Invalid organization id' });
+        return;
+      }
+
+      const updates: Record<string, unknown> = {};
+
+      if (typeof req.body?.name === 'string' && req.body.name.trim()) {
+        updates.name = req.body.name.trim();
+      }
+
+      if (typeof req.body?.subscriptionPlan === 'string') {
+        updates.subscriptionPlan = req.body.subscriptionPlan.trim() || undefined;
+      }
+
+      if (
+        typeof req.body?.subscriptionStatus === 'string' &&
+        ['active', 'expired', 'trial', 'paused'].includes(req.body.subscriptionStatus)
+      ) {
+        updates.subscriptionStatus = req.body.subscriptionStatus;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        res.status(400).json({ data: null, error: 'No valid fields to update' });
+        return;
+      }
+
+      const organization = await OrganizationModel.findByIdAndUpdate(
+        organizationId,
+        { $set: updates },
+        { new: true }
+      );
+
+      if (!organization) {
+        res.status(404).json({ data: null, error: 'Organization not found' });
+        return;
+      }
+
+      if (updates.subscriptionPlan) {
+        await SubscriptionPlanModel.findOneAndUpdate(
+          { name: updates.subscriptionPlan },
+          { $setOnInsert: { name: updates.subscriptionPlan } },
+          { upsert: true }
+        );
+      }
+
+      res.json({
+        data: {
+          id: String(organization._id),
+          name: organization.name,
+          subscriptionPlan: organization.subscriptionPlan ?? null,
+          subscriptionStatus: organization.subscriptionStatus,
+          createdAt: organization.createdAt,
+        },
+        error: null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to update organization';
+      res.status(500).json({ data: null, error: message });
+    }
+  }
+);
+
+organizationsRouter.delete(
+  '/:organizationId',
+  requireAuth,
+  requireRole('superAdmin'),
+  async (req: Request, res: Response) => {
+    try {
+      const { organizationId } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+        res.status(400).json({ data: null, error: 'Invalid organization id' });
+        return;
+      }
+
+      const result = await OrganizationModel.findByIdAndDelete(organizationId);
+
+      if (!result) {
+        res.status(404).json({ data: null, error: 'Organization not found' });
+        return;
+      }
+
+      res.json({ data: { id: organizationId }, error: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete organization';
+      res.status(500).json({ data: null, error: message });
+    }
+  }
+);
 
 export default organizationsRouter;
