@@ -1,4 +1,5 @@
 import { Router, type Request, type RequestHandler, type Response } from 'express';
+import { isValidObjectId } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { fetchSalesAndShiftStats } from './adminStats.service';
@@ -49,7 +50,14 @@ router.get(
       return;
     }
 
-    const stats = await fetchSalesAndShiftStats({ from, to });
+    const organizationId = req.organization?.id;
+
+    if (!organizationId || !isValidObjectId(organizationId)) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const stats = await fetchSalesAndShiftStats({ organizationId, from, to });
 
     res.json({ data: stats, error: null });
   })

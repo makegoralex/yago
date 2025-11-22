@@ -1,6 +1,7 @@
-import { Schema, model, type Document } from 'mongoose';
+import { Schema, model, type Document, type Types } from 'mongoose';
 
 export interface Supplier {
+  organizationId: Types.ObjectId;
   name: string;
   contactName?: string;
   phone?: string;
@@ -15,6 +16,12 @@ export interface SupplierDocument extends Document, Supplier {}
 
 const supplierSchema = new Schema<SupplierDocument>(
   {
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
     name: {
       type: String,
       required: true,
@@ -51,5 +58,7 @@ const supplierSchema = new Schema<SupplierDocument>(
     timestamps: true,
   }
 );
+
+supplierSchema.index({ organizationId: 1, name: 1 }, { unique: true });
 
 export const SupplierModel = model<SupplierDocument>('Supplier', supplierSchema);
