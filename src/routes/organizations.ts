@@ -112,35 +112,16 @@ organizationsRouter.post('/create', requireAuth, requireRole('superAdmin'), asyn
         await CategoryModel.insertMany(docs);
       }
 
-      try {
-        await RestaurantSettingsModel.create({
-          organizationId: organization._id,
-          singletonKey: String(organization._id),
-          currency: 'RUB',
-          locale: 'ru-RU',
-        });
-      } catch (settingsError) {
-        const isDuplicateSettings =
-          typeof settingsError === 'object' &&
-          settingsError !== null &&
-          'code' in settingsError &&
-          (settingsError as any).code === 11000;
-
-        if (isDuplicateSettings) {
-          await RestaurantSettingsModel.findOneAndUpdate(
-            { organizationId: organization._id },
-            {
-              $set: {
-                organizationId: organization._id,
-                singletonKey: String(organization._id),
-              },
-            },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-          );
-        } else {
-          throw settingsError;
-        }
-      }
+      await RestaurantSettingsModel.findOneAndUpdate(
+        { organizationId: organization._id },
+        {
+          $set: {
+            organizationId: organization._id,
+            singletonKey: String(organization._id),
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
 
       if (normalizedPlan) {
         await SubscriptionPlanModel.findOneAndUpdate(
