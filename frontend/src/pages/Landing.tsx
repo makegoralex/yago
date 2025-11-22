@@ -119,7 +119,7 @@ const LandingPage: React.FC = () => {
             to="#signup"
             className="rounded-xl bg-secondary px-4 py-2 text-white shadow-soft transition hover:bg-secondary/90"
           >
-            Начать бесплатно
+            Регистрация
           </Link>
         </div>
       </header>
@@ -136,6 +136,17 @@ const LandingPage: React.FC = () => {
             Создайте организацию, получите доступ владельца и начните добавлять товары. Все данные изолированы по
             organizationId, поэтому ваш кабинет готов к росту сети.
           </p>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              to="#signup"
+              className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark"
+            >
+              Регистрация
+            </Link>
+            <Link to="/login" className="rounded-2xl px-5 py-3 text-sm font-semibold text-secondary hover:bg-secondary/10">
+              Уже есть доступ?
+            </Link>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="text-base font-semibold">Общий код, отдельные данные</div>
