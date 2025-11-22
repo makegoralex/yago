@@ -18,7 +18,6 @@ import discountRouter, { createPosDiscountRouter } from './modules/discounts/dis
 import { appConfig } from './config/env';
 import shiftRouter from './modules/shifts/shift.router';
 import restaurantSettingsRouter from './modules/restaurant/restaurantSettings.router';
-import { renderLandingPage } from './landing/landingPage';
 import organizationsRouter from './routes/organizations';
 
 const app = express();
@@ -44,11 +43,6 @@ if (fs.existsSync(frontendPublicPath)) {
 }
 
 const posDiscountRouter = createPosDiscountRouter();
-
-app.get('/', (_req, res) => {
-  res.set('Cache-Control', 'no-store, max-age=0');
-  res.type('html').send(renderLandingPage());
-});
 
 app.get('/healthz', (_req, res) => {
   res.json({ status: 'ok' });
@@ -134,10 +128,6 @@ const refreshFrontendBundle = (): void => {
 };
 
 const serveFrontendStatic: express.RequestHandler = (req, res, next) => {
-  if (req.path === '/') {
-    return next();
-  }
-
   if (req.path.startsWith('/api') || req.path.startsWith('/docs') || req.path.startsWith('/healthz')) {
     return next();
   }
@@ -160,15 +150,7 @@ const serveFrontendStatic: express.RequestHandler = (req, res, next) => {
 };
 
 const serveSpaFallback = (req: Request, res: Response, next: NextFunction): void => {
-  if (req.path.startsWith('/api/')) {
-    return next();
-  }
-
-  if (req.path.startsWith('/docs') || req.path.startsWith('/healthz')) {
-    return next();
-  }
-
-  if (req.path === '/') {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/docs') || req.path.startsWith('/healthz')) {
     return next();
   }
 
