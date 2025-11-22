@@ -125,15 +125,24 @@ const LandingPage: React.FC = () => {
       </header>
 
       <div className="mx-auto flex max-w-6xl flex-col gap-3 rounded-2xl border border-secondary/20 bg-secondary/10 px-6 py-4 shadow-soft">
-        <div className="text-base font-semibold text-slate-900">Регистрация открыта</div>
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
-          <span>Создайте организацию и сразу войдите в кабинет владельца — без менеджеров и интеграторов.</span>
-          <Link
-            to="#signup"
-            className="rounded-xl bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-secondary/90"
-          >
-            Зарегистрироваться
-          </Link>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold uppercase tracking-wide text-secondary">Регистрация открыта</div>
+            <div className="text-base font-semibold text-slate-900">
+              Создайте организацию и сразу войдите в кабинет владельца — без менеджеров и интеграторов.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="#signup"
+              className="rounded-xl bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-secondary/90"
+            >
+              Зарегистрироваться
+            </Link>
+            <Link to="/login" className="rounded-xl px-4 py-2 text-sm font-semibold text-secondary hover:bg-secondary/10">
+              Войти
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -154,7 +163,7 @@ const LandingPage: React.FC = () => {
               to="#signup"
               className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark"
             >
-              Регистрация
+              Зарегистрироваться сейчас
             </Link>
             <Link to="/login" className="rounded-2xl px-5 py-3 text-sm font-semibold text-secondary hover:bg-secondary/10">
               Уже есть доступ?
