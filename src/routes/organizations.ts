@@ -12,7 +12,7 @@ import { authMiddleware, requireRole } from '../middleware/auth';
 export const organizationsRouter = Router();
 
 const DEFAULT_CATEGORIES = ['Горячие напитки', 'Холодные напитки', 'Десерты'];
-const ALLOWED_ROLES: UserRole[] = ['admin', 'manager', 'cashier', 'barista', 'owner', 'superAdmin'];
+const ALLOWED_ROLES: UserRole[] = ['cashier', 'owner', 'superAdmin'];
 
 organizationsRouter.get('/', authMiddleware, requireRole('superAdmin'), async (_req: Request, res: Response) => {
   try {

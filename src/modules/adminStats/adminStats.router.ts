@@ -4,7 +4,7 @@ import { authMiddleware, requireRole } from '../../middleware/auth';
 import { fetchSalesAndShiftStats } from './adminStats.service';
 
 const router = Router();
-const ADMIN_ROLES = ['admin'];
+const ADMIN_ROLES = ['owner', 'superAdmin'];
 
 const parseDateOnly = (value: unknown): Date | undefined => {
   if (typeof value !== 'string') {
