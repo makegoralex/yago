@@ -71,13 +71,17 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const organizationId = getOrganizationObjectId(req);
     const isSuperAdmin = req.user?.role === 'superAdmin';
+    const requestedOrganizationId =
+      isSuperAdmin && typeof req.query.organizationId === 'string' && Types.ObjectId.isValid(req.query.organizationId)
+        ? new Types.ObjectId(req.query.organizationId)
+        : null;
 
     if (!isSuperAdmin && !organizationId) {
       res.status(403).json({ data: null, error: 'Organization context is required' });
       return;
     }
 
-    const filter = organizationId ? { organizationId } : {};
+    const filter = organizationId ? { organizationId } : requestedOrganizationId ? { organizationId: requestedOrganizationId } : {};
     const cashiers = await listCashiers(isSuperAdmin ? filter : filter);
 
     res.json({
@@ -91,12 +95,26 @@ router.post(
   '/cashiers',
   asyncHandler(async (req: Request, res: Response) => {
     const { name, email, password } = req.body ?? {};
+    const organizationId =
+      getOrganizationObjectId(req) ??
+      (typeof req.body?.organizationId === 'string' && Types.ObjectId.isValid(req.body.organizationId)
+        ? new Types.ObjectId(req.body.organizationId)
+        : null) ??
+      (typeof req.query.organizationId === 'string' && Types.ObjectId.isValid(req.query.organizationId)
+        ? new Types.ObjectId(req.query.organizationId)
+        : null);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     try {
       const cashier = await createCashierAccount({
         name: typeof name === 'string' ? name : '',
         email: typeof email === 'string' ? email : '',
         password: typeof password === 'string' ? password : '',
+        organizationId,
       });
 
       res.status(201).json({ data: { cashier }, error: null });
@@ -117,6 +135,19 @@ router.put(
     const { id } = req.params;
     const { name, email, password, role } = req.body ?? {};
     const normalizedRole = role === 'cashier' ? role : undefined;
+    const organizationId =
+      getOrganizationObjectId(req) ??
+      (typeof req.body?.organizationId === 'string' && Types.ObjectId.isValid(req.body.organizationId)
+        ? new Types.ObjectId(req.body.organizationId)
+        : null) ??
+      (typeof req.query.organizationId === 'string' && Types.ObjectId.isValid(req.query.organizationId)
+        ? new Types.ObjectId(req.query.organizationId)
+        : null);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     try {
       const cashier = await updateCashierAccount({
@@ -125,6 +156,7 @@ router.put(
         email: typeof email === 'string' ? email : undefined,
         password: typeof password === 'string' ? password : undefined,
         role: normalizedRole,
+        organizationId,
       });
 
       res.json({ data: { cashier }, error: null });
@@ -143,9 +175,22 @@ router.delete(
   '/cashiers/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const organizationId =
+      getOrganizationObjectId(req) ??
+      (typeof req.body?.organizationId === 'string' && Types.ObjectId.isValid(req.body.organizationId)
+        ? new Types.ObjectId(req.body.organizationId)
+        : null) ??
+      (typeof req.query.organizationId === 'string' && Types.ObjectId.isValid(req.query.organizationId)
+        ? new Types.ObjectId(req.query.organizationId)
+        : null);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     try {
-      await deleteCashierAccount(id);
+      await deleteCashierAccount(id, organizationId);
       res.json({ data: { deleted: true }, error: null });
     } catch (error) {
       if (error instanceof CashierServiceError) {

@@ -19,6 +19,7 @@ export interface CreateCashierParams {
   name: string;
   email: string;
   password: string;
+  organizationId?: string | Types.ObjectId;
 }
 
 export interface UpdateCashierParams {
@@ -27,6 +28,7 @@ export interface UpdateCashierParams {
   email?: string;
   password?: string;
   role?: IUser['role'];
+  organizationId?: string | Types.ObjectId;
 }
 
 export class CashierServiceError extends Error {
@@ -66,6 +68,7 @@ const sanitizeUser = (user: IUser): CashierSummary => ({
   name: user.name,
   email: user.email,
   role: user.role,
+  organizationId: user.organizationId ? user.organizationId.toString() : undefined,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
@@ -123,6 +126,7 @@ export const createCashierAccount = async (
   const trimmedName = params.name.trim();
   const normalizedEmail = normalizeEmail(params.email);
   const password = params.password.trim();
+  const organizationId = params.organizationId;
 
   if (!trimmedName) {
     throw new CashierServiceError('Имя кассира обязательно');
@@ -136,7 +140,16 @@ export const createCashierAccount = async (
     throw new CashierServiceError('Пароль кассира обязателен');
   }
 
-  const existingUser = await UserModel.findOne({ email: normalizedEmail });
+  const normalizedOrgId = organizationId ? new Types.ObjectId(organizationId) : null;
+
+  if (!normalizedOrgId) {
+    throw new CashierServiceError('Организация кассира обязательна');
+  }
+
+  const existingUser = await UserModel.findOne({
+    email: normalizedEmail,
+    organizationId: normalizedOrgId,
+  });
 
   if (existingUser) {
     throw new CashierServiceError('Пользователь с таким email уже существует', 409);
@@ -149,14 +162,21 @@ export const createCashierAccount = async (
     email: normalizedEmail,
     passwordHash,
     role: 'cashier',
+    organizationId: normalizedOrgId,
   });
 
   return sanitizeUser(user);
 };
 
-const findCashierById = async (id: string) => {
+const findCashierById = async (id: string, organizationId?: Types.ObjectId | null) => {
   const objectId = ensureValidId(id);
-  const cashier = await UserModel.findOne({ _id: objectId, role: { $in: STAFF_ROLES } });
+  const match: FilterQuery<IUser> = { _id: objectId, role: { $in: STAFF_ROLES } };
+
+  if (organizationId) {
+    match.organizationId = organizationId;
+  }
+
+  const cashier = await UserModel.findOne(match);
 
   if (!cashier) {
     throw new CashierServiceError('Кассир не найден', 404);
@@ -168,7 +188,8 @@ const findCashierById = async (id: string) => {
 export const updateCashierAccount = async (
   params: UpdateCashierParams
 ): Promise<CashierSummary> => {
-  const cashier = await findCashierById(params.id);
+  const organizationFilter = params.organizationId ? new Types.ObjectId(params.organizationId) : undefined;
+  const cashier = await findCashierById(params.id, organizationFilter);
 
   if (params.name !== undefined) {
     const trimmedName = params.name.trim();
@@ -186,6 +207,7 @@ export const updateCashierAccount = async (
 
     const existingUser = await UserModel.findOne({
       email: normalizedEmail,
+      organizationId: cashier.organizationId,
       _id: { $ne: cashier._id },
     });
 
@@ -213,11 +235,15 @@ export const updateCashierAccount = async (
     cashier.role = params.role;
   }
 
+  if (organizationFilter) {
+    cashier.organizationId = organizationFilter;
+  }
+
   await cashier.save();
   return sanitizeUser(cashier);
 };
 
-export const deleteCashierAccount = async (id: string): Promise<void> => {
-  const cashier = await findCashierById(id);
+export const deleteCashierAccount = async (id: string, organizationId?: Types.ObjectId): Promise<void> => {
+  const cashier = await findCashierById(id, organizationId);
   await UserModel.deleteOne({ _id: cashier._id });
 };
