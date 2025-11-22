@@ -108,6 +108,7 @@ organizationsRouter.post('/create', requireAuth, requireRole('superAdmin'), asyn
         [
           {
             organizationId: organization._id,
+            singletonKey: String(organization._id),
             currency: 'RUB',
             locale: 'ru-RU',
           },
@@ -152,10 +153,12 @@ organizationsRouter.post('/create', requireAuth, requireRole('superAdmin'), asyn
       session.endSession();
       throw error;
     }
-  } catch (error) {
+  } catch (error: unknown) {
+    const isDuplicateKey = typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 11000;
     const message = error instanceof Error ? error.message : 'Unable to create organization';
-    const status = message.toLowerCase().includes('required') ? 400 : 500;
-    res.status(status).json({ data: null, error: message });
+    const status = isDuplicateKey || message.toLowerCase().includes('duplicate') ? 409 : message.toLowerCase().includes('required') ? 400 : 500;
+
+    res.status(status).json({ data: null, error: isDuplicateKey ? 'Organization or owner already exists' : message });
   }
 });
 
