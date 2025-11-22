@@ -166,6 +166,7 @@ const SuperAdminPage: React.FC = () => {
       setCreateMessage('Организация создана. Данные отправлены владельцу.');
       setCreateForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', subscriptionPlan: '' });
       await fetchOrganizations();
+      await fetchUsers();
     } catch (error) {
       setCreateError(extractErrorMessage(error, 'Не удалось создать организацию'));
     } finally {

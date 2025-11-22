@@ -283,24 +283,30 @@ organizationsRouter.get(
   requireRole('superAdmin'),
   async (_req: Request, res: Response) => {
     try {
-      const users = await UserModel.find()
-        .select('name email role organizationId createdAt')
-        .sort({ createdAt: -1 })
-        .lean();
-
-      const organizationIds = users
-        .map((user) => user.organizationId)
-        .filter((id): id is mongoose.Types.ObjectId => Boolean(id));
-
-      const organizationsById = await OrganizationModel.find({ _id: { $in: organizationIds } })
-        .select('name')
-        .lean()
-        .then((orgs) =>
-          orgs.reduce<Record<string, { name: string }>>((acc, org) => {
-            acc[String(org._id)] = { name: org.name };
-            return acc;
-          }, {})
-        );
+      const users = await UserModel.aggregate([
+        { $sort: { createdAt: -1 } },
+        {
+          $lookup: {
+            from: 'organizations',
+            localField: 'organizationId',
+            foreignField: '_id',
+            as: 'organization',
+          },
+        },
+        { $unwind: { path: '$organization', preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            name: 1,
+            email: 1,
+            role: 1,
+            createdAt: 1,
+            organization: {
+              id: '$organization._id',
+              name: '$organization.name',
+            },
+          },
+        },
+      ]);
 
       const payload = users.map((user) => ({
         id: String(user._id),
@@ -308,8 +314,8 @@ organizationsRouter.get(
         email: user.email,
         role: user.role,
         createdAt: user.createdAt,
-        organization: user.organizationId
-          ? { id: String(user.organizationId), name: organizationsById[String(user.organizationId)]?.name ?? '—' }
+        organization: user.organization?.id
+          ? { id: String(user.organization.id), name: user.organization.name ?? '—' }
           : null,
       }));
 
