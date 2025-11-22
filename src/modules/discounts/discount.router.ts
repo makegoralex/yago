@@ -11,6 +11,16 @@ const router = Router();
 const ADMIN_ROLES = ['owner', 'superAdmin'];
 const CASHIER_ROLES = ['cashier', 'owner', 'superAdmin'];
 
+const getOrganizationObjectId = (req: Request): Types.ObjectId | null => {
+  const organizationId = req.organization?.id;
+
+  if (!organizationId || !isValidObjectId(organizationId)) {
+    return null;
+  }
+
+  return new Types.ObjectId(organizationId);
+};
+
 type DiscountPayload = {
   name?: unknown;
   description?: unknown;
@@ -78,15 +88,21 @@ const parseDays = (value: unknown): number[] | undefined => {
   return normalized.length ? Array.from(new Set(normalized)) : undefined;
 };
 
-const ensureCategoryExists = async (categoryId: Types.ObjectId): Promise<void> => {
-  const exists = await CategoryModel.exists({ _id: categoryId });
+const ensureCategoryExists = async (
+  categoryId: Types.ObjectId,
+  organizationId: Types.ObjectId
+): Promise<void> => {
+  const exists = await CategoryModel.exists({ _id: categoryId, organizationId });
   if (!exists) {
     throw new Error('Категория не найдена');
   }
 };
 
-const ensureProductExists = async (productId: Types.ObjectId): Promise<void> => {
-  const exists = await ProductModel.exists({ _id: productId });
+const ensureProductExists = async (
+  productId: Types.ObjectId,
+  organizationId: Types.ObjectId
+): Promise<void> => {
+  const exists = await ProductModel.exists({ _id: productId, organizationId });
   if (!exists) {
     throw new Error('Товар не найден');
   }
@@ -150,7 +166,10 @@ const toValidStringId = (value: unknown): string | undefined => {
   return Types.ObjectId.isValid(stringId) ? stringId : undefined;
 };
 
-const mapDiscountResponse = async (discounts: DiscountRecord[]) => {
+const mapDiscountResponse = async (
+  discounts: DiscountRecord[],
+  organizationId: Types.ObjectId
+) => {
   const categoryIds = new Set<string>();
   const productIds = new Set<string>();
 
@@ -168,6 +187,7 @@ const mapDiscountResponse = async (discounts: DiscountRecord[]) => {
   const categories = categoryIds.size
     ? await CategoryModel.find({
         _id: { $in: Array.from(categoryIds, (id) => new Types.ObjectId(id)) },
+        organizationId,
       })
         .select('name')
         .lean()
@@ -175,6 +195,7 @@ const mapDiscountResponse = async (discounts: DiscountRecord[]) => {
   const products = productIds.size
     ? await ProductModel.find({
         _id: { $in: Array.from(productIds, (id) => new Types.ObjectId(id)) },
+        organizationId,
       })
         .select('name')
         .lean()
@@ -241,24 +262,45 @@ type RouterRequest = Request;
 type RouterResponse = Response;
 
 export const handleGetAvailableDiscounts = async (
-  _req: RouterRequest,
+  req: RouterRequest,
   res: RouterResponse
 ): Promise<void> => {
-  const discounts = await getAvailableDiscounts();
-  const mapped = await mapDiscountResponse(discounts);
+  const organizationId = getOrganizationObjectId(req);
+
+  if (!organizationId) {
+    res.status(403).json({ data: null, error: 'Organization context is required' });
+    return;
+  }
+
+  const discounts = await getAvailableDiscounts(organizationId);
+  const mapped = await mapDiscountResponse(discounts, organizationId);
   res.json({ data: mapped, error: null });
 };
 
 export const handleListDiscounts = async (
-  _req: RouterRequest,
+  req: RouterRequest,
   res: RouterResponse
 ): Promise<void> => {
-  const discounts = (await DiscountModel.find().sort({ createdAt: -1 }).lean().exec()) as unknown as DiscountRecord[];
-  const mapped = await mapDiscountResponse(discounts);
+  const organizationId = getOrganizationObjectId(req);
+
+  if (!organizationId) {
+    res.status(403).json({ data: null, error: 'Organization context is required' });
+    return;
+  }
+
+  const discounts = (await DiscountModel.find({ organizationId })
+    .sort({ createdAt: -1 })
+    .lean()
+    .exec()) as unknown as DiscountRecord[];
+  const mapped = await mapDiscountResponse(discounts, organizationId);
   res.json({ data: mapped, error: null });
 };
 
-const parseDiscountPayload = async (payload: DiscountPayload, partial = false) => {
+const parseDiscountPayload = async (
+  payload: DiscountPayload,
+  organizationId: Types.ObjectId,
+  partial = false
+) => {
   const name = normalizeString(payload.name);
   const description = normalizeString(payload.description);
   const type = payload.type === 'percentage' || payload.type === 'fixed' ? payload.type : undefined;
@@ -284,7 +326,7 @@ const parseDiscountPayload = async (payload: DiscountPayload, partial = false) =
       throw new Error('Некорректный идентификатор категории');
     }
     categoryId = new Types.ObjectId(payload.categoryId);
-    await ensureCategoryExists(categoryId);
+    await ensureCategoryExists(categoryId, organizationId);
   }
 
   let productId: Types.ObjectId | undefined;
@@ -293,7 +335,7 @@ const parseDiscountPayload = async (payload: DiscountPayload, partial = false) =
       throw new Error('Некорректный идентификатор товара');
     }
     productId = new Types.ObjectId(payload.productId);
-    await ensureProductExists(productId);
+    await ensureProductExists(productId, organizationId);
   }
 
   if (!partial) {
@@ -384,7 +426,14 @@ export const handleCreateDiscount = async (
   req: RouterRequest,
   res: RouterResponse
 ): Promise<void> => {
-  const parsed = await parseDiscountPayload(req.body ?? {}, false);
+  const organizationId = getOrganizationObjectId(req);
+
+  if (!organizationId) {
+    res.status(403).json({ data: null, error: 'Organization context is required' });
+    return;
+  }
+
+  const parsed = await parseDiscountPayload(req.body ?? {}, organizationId, false);
   const created = await DiscountModel.create({
     name: parsed.name!,
     description: parsed.description,
@@ -398,6 +447,7 @@ export const handleCreateDiscount = async (
     autoApplyStart: parsed.autoApply ? parsed.autoApplyStart : undefined,
     autoApplyEnd: parsed.autoApply ? parsed.autoApplyEnd : undefined,
     isActive: parsed.isActive,
+    organizationId,
   });
 
   const discount = (await DiscountModel.findById(created._id).lean()) as DiscountRecord | null;
@@ -405,7 +455,7 @@ export const handleCreateDiscount = async (
     throw new Error('Не удалось загрузить созданную скидку');
   }
 
-  const mapped = await mapDiscountResponse([discount]);
+  const mapped = await mapDiscountResponse([discount], organizationId);
   res.status(201).json({ data: mapped[0], error: null });
 };
 
@@ -414,15 +464,21 @@ export const handleUpdateDiscount = async (
   res: RouterResponse
 ): Promise<void> => {
   const { id } = req.params;
+  const organizationId = getOrganizationObjectId(req);
   if (!isValidObjectId(id)) {
     res.status(400).json({ data: null, error: 'Некорректный идентификатор скидки' });
     return;
   }
 
-  const parsed = await parseDiscountPayload(req.body ?? {}, true);
+  if (!organizationId) {
+    res.status(403).json({ data: null, error: 'Organization context is required' });
+    return;
+  }
+
+  const parsed = await parseDiscountPayload(req.body ?? {}, organizationId, true);
   const update = buildDiscountUpdate(parsed);
 
-  const discount = (await DiscountModel.findByIdAndUpdate(id, update, { new: true }).lean()) as
+  const discount = (await DiscountModel.findOneAndUpdate({ _id: id, organizationId }, update, { new: true }).lean()) as
     | DiscountRecord
     | null;
   if (!discount) {
@@ -430,7 +486,7 @@ export const handleUpdateDiscount = async (
     return;
   }
 
-  const mapped = await mapDiscountResponse([discount]);
+  const mapped = await mapDiscountResponse([discount], organizationId);
   res.json({ data: mapped[0], error: null });
 };
 
@@ -439,12 +495,18 @@ export const handleDeleteDiscount = async (
   res: RouterResponse
 ): Promise<void> => {
   const { id } = req.params;
+  const organizationId = getOrganizationObjectId(req);
   if (!isValidObjectId(id)) {
     res.status(400).json({ data: null, error: 'Некорректный идентификатор скидки' });
     return;
   }
 
-  const discount = await DiscountModel.findByIdAndDelete(id);
+  if (!organizationId) {
+    res.status(403).json({ data: null, error: 'Organization context is required' });
+    return;
+  }
+
+  const discount = await DiscountModel.findOneAndDelete({ _id: id, organizationId });
   if (!discount) {
     res.status(404).json({ data: null, error: 'Скидка не найдена' });
     return;

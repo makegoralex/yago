@@ -1,4 +1,4 @@
-import { isValidObjectId } from 'mongoose';
+import { isValidObjectId, Types } from 'mongoose';
 
 import { CustomerModel, type CustomerDocument } from '../customers/customer.model';
 import { getLoyaltyAccrualRate } from '../restaurant/restaurantSettings.service';
@@ -23,12 +23,18 @@ export const earnLoyaltyPoints = async (
     throw new Error('Customer not found');
   }
 
+  const organizationId = customer.organizationId as Types.ObjectId | undefined;
+
+  if (!organizationId) {
+    throw new Error('Organization context is required');
+  }
+
   const normalizedAmount = roundTwoDecimals(amount);
   if (normalizedAmount <= 0) {
     throw new Error('amount must be a positive number');
   }
 
-  const loyaltyRate = await getLoyaltyAccrualRate();
+  const loyaltyRate = await getLoyaltyAccrualRate(organizationId);
   const pointsEarned = roundTwoDecimals((normalizedAmount * loyaltyRate) / 100);
 
   if (pointsEarned <= 0) {

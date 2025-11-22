@@ -7,9 +7,10 @@ export const adjustInventoryQuantity = async (
   warehouseId: Types.ObjectId,
   itemType: 'ingredient' | 'product',
   itemId: Types.ObjectId,
-  delta: number
+  delta: number,
+  organizationId: Types.ObjectId
 ): Promise<void> => {
-  const item = await InventoryItemModel.findOne({ warehouseId, itemType, itemId });
+  const item = await InventoryItemModel.findOne({ warehouseId, itemType, itemId, organizationId });
 
   if (!item) {
     if (delta <= 0) {
@@ -20,6 +21,7 @@ export const adjustInventoryQuantity = async (
       warehouseId,
       itemType,
       itemId,
+      organizationId,
       quantity: delta,
     });
     return;
