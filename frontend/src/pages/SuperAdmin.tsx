@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
@@ -65,6 +66,14 @@ const SuperAdminPage: React.FC = () => {
     return name ? `Привет, ${name}!` : 'Привет, суперадмин!';
   }, [user?.name]);
 
+  const extractErrorMessage = (error: unknown, fallback: string) => {
+    if (isAxiosError(error)) {
+      return error.response?.data?.error ?? error.message;
+    }
+
+    return error instanceof Error ? error.message : fallback;
+  };
+
   const handleOpenOrganization = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalizedId = organizationId.trim();
@@ -85,8 +94,7 @@ const SuperAdminPage: React.FC = () => {
       const payload = response.data?.data ?? [];
       setOrganizations(payload);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось загрузить организации';
-      setOrganizationsError(message);
+      setOrganizationsError(extractErrorMessage(error, 'Не удалось загрузить организации'));
     } finally {
       setLoadingOrganizations(false);
     }
@@ -117,8 +125,7 @@ const SuperAdminPage: React.FC = () => {
       setCreateForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', subscriptionPlan: '' });
       await fetchOrganizations();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось создать организацию';
-      setCreateError(message);
+      setCreateError(extractErrorMessage(error, 'Не удалось создать организацию'));
     } finally {
       setCreateLoading(false);
     }
@@ -152,8 +159,7 @@ const SuperAdminPage: React.FC = () => {
       await fetchOrganizations();
       setEditingOrganization(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось обновить организацию';
-      setUpdateError(message);
+      setUpdateError(extractErrorMessage(error, 'Не удалось обновить организацию'));
     } finally {
       setUpdateLoading(false);
     }
@@ -168,8 +174,7 @@ const SuperAdminPage: React.FC = () => {
       await api.delete(`/api/organizations/${organizationId}`);
       await fetchOrganizations();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось удалить организацию';
-      setOrganizationsError(message);
+      setOrganizationsError(extractErrorMessage(error, 'Не удалось удалить организацию'));
     } finally {
       setDeleteLoadingId(null);
     }

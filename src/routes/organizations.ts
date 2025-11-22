@@ -62,38 +62,46 @@ organizationsRouter.post('/create', requireAuth, requireRole('superAdmin'), asyn
     const normalizedPlan =
       typeof subscriptionPlan === 'string' && subscriptionPlan.trim() ? subscriptionPlan.trim() : undefined;
 
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    const normalizedName = name.trim();
+    const normalizedEmail = owner.email.toLowerCase();
+
+    const existingOrganization = await OrganizationModel.findOne({ name: normalizedName }).lean();
+    if (existingOrganization) {
+      res.status(409).json({ data: null, error: 'Organization already exists' });
+      return;
+    }
+
+    const existingOwner = await UserModel.findOne({ email: normalizedEmail }).lean();
+    if (existingOwner) {
+      res.status(409).json({ data: null, error: 'Owner with this email already exists' });
+      return;
+    }
+
+    const createdResources: { organizationId?: mongoose.Types.ObjectId; userId?: mongoose.Types.ObjectId } = {};
 
     try {
-      const organization = await OrganizationModel.create(
-        [
-          {
-            name: name.trim(),
-            subscriptionPlan: normalizedPlan,
-            subscriptionStatus: 'trial',
-            settings: settings && typeof settings === 'object' ? settings : {},
-          },
-        ],
-        { session }
-      ).then((created) => created[0]);
+      const organization = await OrganizationModel.create({
+        name: normalizedName,
+        subscriptionPlan: normalizedPlan,
+        subscriptionStatus: 'trial',
+        settings: settings && typeof settings === 'object' ? settings : {},
+      });
+
+      createdResources.organizationId = organization._id as mongoose.Types.ObjectId;
 
       const passwordHash = await hashPassword(owner.password);
-      const user = await UserModel.create(
-        [
-          {
-            name: owner.name,
-            email: owner.email.toLowerCase(),
-            passwordHash,
-            role: 'owner',
-            organizationId: organization._id,
-          },
-        ],
-        { session }
-      ).then((created) => created[0]);
+      const user = await UserModel.create({
+        name: owner.name,
+        email: normalizedEmail,
+        passwordHash,
+        role: 'owner',
+        organizationId: organization._id,
+      });
+
+      createdResources.userId = user._id as mongoose.Types.ObjectId;
 
       organization.ownerUserId = user._id as mongoose.Types.ObjectId;
-      await organization.save({ session });
+      await organization.save();
 
       if (Array.isArray(DEFAULT_CATEGORIES) && DEFAULT_CATEGORIES.length > 0) {
         const docs = DEFAULT_CATEGORIES.map((categoryName, index) => ({
@@ -101,31 +109,23 @@ organizationsRouter.post('/create', requireAuth, requireRole('superAdmin'), asyn
           sortOrder: index + 1,
           organizationId: organization._id,
         }));
-        await CategoryModel.insertMany(docs, { session });
+        await CategoryModel.insertMany(docs);
       }
 
-      await RestaurantSettingsModel.create(
-        [
-          {
-            organizationId: organization._id,
-            singletonKey: String(organization._id),
-            currency: 'RUB',
-            locale: 'ru-RU',
-          },
-        ],
-        { session }
-      );
+      await RestaurantSettingsModel.create({
+        organizationId: organization._id,
+        singletonKey: String(organization._id),
+        currency: 'RUB',
+        locale: 'ru-RU',
+      });
 
       if (normalizedPlan) {
         await SubscriptionPlanModel.findOneAndUpdate(
           { name: normalizedPlan },
           { $setOnInsert: { name: normalizedPlan } },
-          { upsert: true, new: true, session }
+          { upsert: true, new: true }
         );
       }
-
-      await session.commitTransaction();
-      session.endSession();
 
       const tokens = generateTokens(user);
 
@@ -149,8 +149,19 @@ organizationsRouter.post('/create', requireAuth, requireRole('superAdmin'), asyn
         error: null,
       });
     } catch (error) {
-      await session.abortTransaction();
-      session.endSession();
+      if (createdResources.organizationId) {
+        await OrganizationModel.deleteOne({ _id: createdResources.organizationId });
+      }
+
+      if (createdResources.userId) {
+        await UserModel.deleteOne({ _id: createdResources.userId });
+      }
+
+      if (createdResources.organizationId) {
+        await CategoryModel.deleteMany({ organizationId: createdResources.organizationId });
+        await RestaurantSettingsModel.deleteMany({ organizationId: createdResources.organizationId });
+      }
+
       throw error;
     }
   } catch (error: unknown) {
