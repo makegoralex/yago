@@ -47,6 +47,7 @@ export interface CreateReceiptInput {
   type?: unknown;
   occurredAt?: unknown;
   createdBy: string;
+  organizationId: Types.ObjectId;
 }
 
 type StockReceiptType = StockReceiptDocument['type'];
@@ -116,7 +117,10 @@ const parseReceiptDate = (value: unknown): Date => {
     : date;
 };
 
-const normalizeReceiptItems = async (items: unknown): Promise<StockReceiptDocument['items']> => {
+const normalizeReceiptItems = async (
+  items: unknown,
+  organizationId: Types.ObjectId
+): Promise<StockReceiptDocument['items']> => {
   if (!Array.isArray(items) || items.length === 0) {
     throw new InventoryReceiptError(400, 'Добавьте хотя бы одну позицию');
   }
@@ -150,12 +154,12 @@ const normalizeReceiptItems = async (items: unknown): Promise<StockReceiptDocume
     const itemObjectId = new Types.ObjectId(entry.itemId);
 
     if (entry.itemType === 'ingredient') {
-      const exists = await IngredientModel.exists({ _id: itemObjectId });
+      const exists = await IngredientModel.exists({ _id: itemObjectId, organizationId });
       if (!exists) {
         throw new InventoryReceiptError(404, 'Ингредиент не найден');
       }
     } else {
-      const exists = await ProductModel.exists({ _id: itemObjectId });
+      const exists = await ProductModel.exists({ _id: itemObjectId, organizationId });
       if (!exists) {
         throw new InventoryReceiptError(404, 'Товар не найден');
       }
@@ -179,12 +183,17 @@ export const createStockReceipt = async ({
   createdBy,
   type,
   occurredAt,
+  organizationId,
 }: CreateReceiptInput): Promise<StockReceiptDocument> => {
+  if (!organizationId) {
+    throw new InventoryReceiptError(403, 'Organization context is required');
+  }
+
   if (typeof warehouseId !== 'string' || !Types.ObjectId.isValid(warehouseId)) {
     throw new InventoryReceiptError(400, 'warehouseId обязателен');
   }
 
-  const warehouseExists = await WarehouseModel.exists({ _id: warehouseId });
+  const warehouseExists = await WarehouseModel.exists({ _id: warehouseId, organizationId });
   if (!warehouseExists) {
     throw new InventoryReceiptError(404, 'Склад не найден');
   }
@@ -199,13 +208,13 @@ export const createStockReceipt = async ({
   }
 
   if (supplierObjectId) {
-    const supplierExists = await SupplierModel.exists({ _id: supplierObjectId });
+    const supplierExists = await SupplierModel.exists({ _id: supplierObjectId, organizationId });
     if (!supplierExists) {
       throw new InventoryReceiptError(404, 'Поставщик не найден');
     }
   }
 
-  const normalizedItems = await normalizeReceiptItems(items);
+  const normalizedItems = await normalizeReceiptItems(items, organizationId);
   const receiptType = parseReceiptType(type);
   const happenedAt = parseReceiptDate(occurredAt);
 
@@ -218,14 +227,16 @@ export const createStockReceipt = async ({
     supplierId: supplierObjectId,
     createdBy: new Types.ObjectId(createdBy),
     items: normalizedItems,
+    organizationId,
   });
 
   for (const entry of normalizedItems) {
     const delta = receiptType === 'writeOff' ? -entry.quantity : entry.quantity;
 
     const item = await InventoryItemModel.findOneAndUpdate(
-      { warehouseId, itemType: entry.itemType, itemId: entry.itemId },
+      { warehouseId, itemType: entry.itemType, itemId: entry.itemId, organizationId },
       {
+        organizationId,
         $set: { unitCost: entry.unitCost },
         $inc: { quantity: delta },
       },
@@ -241,9 +252,15 @@ export const createStockReceipt = async ({
 };
 
 export const listStockReceipts = async (
-  filter: FilterQuery<StockReceiptDocument> = {}
+  filter: FilterQuery<StockReceiptDocument> = {},
+  organizationId?: Types.ObjectId
 ): Promise<StockReceiptDocument[]> => {
-  return StockReceiptModel.find(filter).sort({ occurredAt: -1, createdAt: -1 });
+  const normalizedFilter: FilterQuery<StockReceiptDocument> = { ...filter };
+  if (organizationId) {
+    normalizedFilter.organizationId = organizationId;
+  }
+
+  return StockReceiptModel.find(normalizedFilter).sort({ occurredAt: -1, createdAt: -1 });
 };
 
 export const updateStockReceipt = async (
@@ -254,7 +271,13 @@ export const updateStockReceipt = async (
     throw new InventoryReceiptError(400, 'Некорректный идентификатор документа');
   }
 
-  const receipt = await StockReceiptModel.findById(id);
+  const organizationId = payload.organizationId;
+
+  if (!organizationId) {
+    throw new InventoryReceiptError(403, 'Organization context is required');
+  }
+
+  const receipt = await StockReceiptModel.findOne({ _id: id, organizationId });
 
   if (!receipt) {
     throw new InventoryReceiptError(404, 'Документ не найден');
@@ -266,7 +289,9 @@ export const updateStockReceipt = async (
 
   await ensureNotLockedByInventory(receipt.warehouseId, receipt.occurredAt);
 
-  const updatedItems = payload.items ? await normalizeReceiptItems(payload.items) : receipt.items;
+  const updatedItems = payload.items
+    ? await normalizeReceiptItems(payload.items, receipt.organizationId)
+    : receipt.items;
   const supplierObjectId =
     typeof payload.supplierId === 'string' && Types.ObjectId.isValid(payload.supplierId)
       ? new Types.ObjectId(payload.supplierId)
@@ -277,7 +302,7 @@ export const updateStockReceipt = async (
   }
 
   if (supplierObjectId) {
-    const supplierExists = await SupplierModel.exists({ _id: supplierObjectId });
+    const supplierExists = await SupplierModel.exists({ _id: supplierObjectId, organizationId: receipt.organizationId });
     if (!supplierExists) {
       throw new InventoryReceiptError(404, 'Поставщик не найден');
     }
@@ -290,11 +315,23 @@ export const updateStockReceipt = async (
   const sign = receipt.type === 'writeOff' ? -1 : 1;
 
   for (const entry of receipt.items) {
-    await adjustInventoryQuantity(receipt.warehouseId, entry.itemType, entry.itemId, -sign * entry.quantity);
+    await adjustInventoryQuantity(
+      receipt.warehouseId,
+      entry.itemType,
+      entry.itemId,
+      -sign * entry.quantity,
+      receipt.organizationId
+    );
   }
 
   for (const entry of updatedItems) {
-    await adjustInventoryQuantity(receipt.warehouseId, entry.itemType, entry.itemId, sign * entry.quantity);
+    await adjustInventoryQuantity(
+      receipt.warehouseId,
+      entry.itemType,
+      entry.itemId,
+      sign * entry.quantity,
+      receipt.organizationId
+    );
     await recalculateAverageCostForItem(entry.itemType, entry.itemId);
   }
 
@@ -307,12 +344,12 @@ export const updateStockReceipt = async (
   return receipt;
 };
 
-export const deleteStockReceipt = async (id: string): Promise<void> => {
+export const deleteStockReceipt = async (id: string, organizationId: Types.ObjectId): Promise<void> => {
   if (!Types.ObjectId.isValid(id)) {
     throw new InventoryReceiptError(400, 'Некорректный идентификатор документа');
   }
 
-  const receipt = await StockReceiptModel.findById(id);
+  const receipt = await StockReceiptModel.findOne({ _id: id, organizationId });
 
   if (!receipt) {
     return;
@@ -327,7 +364,13 @@ export const deleteStockReceipt = async (id: string): Promise<void> => {
   const sign = receipt.type === 'writeOff' ? -1 : 1;
 
   for (const entry of receipt.items) {
-    await adjustInventoryQuantity(receipt.warehouseId, entry.itemType, entry.itemId, -sign * entry.quantity);
+    await adjustInventoryQuantity(
+      receipt.warehouseId,
+      entry.itemType,
+      entry.itemId,
+      -sign * entry.quantity,
+      receipt.organizationId
+    );
     await recalculateAverageCostForItem(entry.itemType, entry.itemId);
   }
 
@@ -339,6 +382,7 @@ export interface InventoryAuditInput {
   items?: unknown;
   performedAt?: unknown;
   performedBy: string;
+  organizationId: Types.ObjectId;
 }
 
 type InventoryAuditItemInput = {
@@ -352,14 +396,19 @@ export const performInventoryAudit = async ({
   items,
   performedAt,
   performedBy,
+  organizationId,
 }: InventoryAuditInput): Promise<InventoryAuditDocument> => {
+  if (!organizationId) {
+    throw new InventoryReceiptError(403, 'Organization context is required');
+  }
+
   if (typeof warehouseId !== 'string' || !Types.ObjectId.isValid(warehouseId)) {
     throw new InventoryReceiptError(400, 'warehouseId обязателен');
   }
 
   const warehouseObjectId = new Types.ObjectId(warehouseId);
 
-  const warehouseExists = await WarehouseModel.exists({ _id: warehouseObjectId });
+  const warehouseExists = await WarehouseModel.exists({ _id: warehouseObjectId, organizationId });
   if (!warehouseExists) {
     throw new InventoryReceiptError(404, 'Склад не найден');
   }
@@ -374,7 +423,10 @@ export const performInventoryAudit = async ({
 
   const normalized: InventoryAuditDocument['items'] = [];
 
-  const existingItems = await InventoryItemModel.find({ warehouseId: warehouseObjectId }).lean();
+  const existingItems = await InventoryItemModel.find({
+    warehouseId: warehouseObjectId,
+    organizationId,
+  }).lean();
   const existingMap = new Map(
     existingItems.map((item) => [`${item.itemType}:${item.itemId.toString()}`, item])
   );
@@ -403,12 +455,12 @@ export const performInventoryAudit = async ({
     const itemId = new Types.ObjectId(raw.itemId);
 
     if (raw.itemType === 'ingredient') {
-      const exists = await IngredientModel.exists({ _id: itemId });
+      const exists = await IngredientModel.exists({ _id: itemId, organizationId });
       if (!exists) {
         throw new InventoryReceiptError(404, 'Ингредиент не найден');
       }
     } else {
-      const exists = await ProductModel.exists({ _id: itemId });
+      const exists = await ProductModel.exists({ _id: itemId, organizationId });
       if (!exists) {
         throw new InventoryReceiptError(404, 'Товар не найден');
       }
@@ -429,7 +481,7 @@ export const performInventoryAudit = async ({
       unitCostSnapshot,
     });
 
-    await adjustInventoryQuantity(warehouseObjectId, raw.itemType, itemId, difference);
+    await adjustInventoryQuantity(warehouseObjectId, raw.itemType, itemId, difference, organizationId);
 
     if (unitCostSnapshot !== undefined) {
       const valueDelta = difference * unitCostSnapshot;
@@ -448,6 +500,7 @@ export const performInventoryAudit = async ({
     items: normalized,
     totalLossValue,
     totalGainValue,
+    organizationId,
   });
 
   await WarehouseModel.findByIdAndUpdate(warehouseObjectId, { lastInventoryAt: snapshotDate });
@@ -464,9 +517,15 @@ export const performInventoryAudit = async ({
 };
 
 export const fetchInventoryItemsWithReferences = async (
-  filter: FilterQuery<InventoryItemDocument>
+  filter: FilterQuery<InventoryItemDocument>,
+  organizationId: Types.ObjectId
 ): Promise<InventoryItemWithRefs[]> => {
-  const items = (await InventoryItemModel.find(filter).lean()) as unknown as LeanInventoryItem[];
+  const normalizedFilter: FilterQuery<InventoryItemDocument> = {
+    ...filter,
+    organizationId,
+  };
+
+  const items = (await InventoryItemModel.find(normalizedFilter).lean()) as unknown as LeanInventoryItem[];
 
   if (items.length === 0) {
     return [];
@@ -486,12 +545,12 @@ export const fetchInventoryItemsWithReferences = async (
   }
 
   const [warehouses, ingredients, products] = await Promise.all([
-    WarehouseModel.find({ _id: { $in: Array.from(warehouseIds) } }).lean(),
+    WarehouseModel.find({ _id: { $in: Array.from(warehouseIds) }, organizationId }).lean(),
     ingredientIds.size
-      ? IngredientModel.find({ _id: { $in: Array.from(ingredientIds) } }).lean()
+      ? IngredientModel.find({ _id: { $in: Array.from(ingredientIds) }, organizationId }).lean()
       : Promise.resolve([]),
     productIds.size
-      ? ProductModel.find({ _id: { $in: Array.from(productIds) } }).lean()
+      ? ProductModel.find({ _id: { $in: Array.from(productIds) }, organizationId }).lean()
       : Promise.resolve([]),
   ]);
 
@@ -507,14 +566,14 @@ export const fetchInventoryItemsWithReferences = async (
   }));
 };
 
-export const getInventorySummary = async (): Promise<{
+export const getInventorySummary = async (organizationId: Types.ObjectId): Promise<{
   productsTracked: number;
   ingredientsTracked: number;
   stockValue: number;
 }> => {
   const [totalProducts, totalIngredients, totalStockValue] = await Promise.all([
-    InventoryItemModel.countDocuments({ itemType: 'product' }),
-    InventoryItemModel.countDocuments({ itemType: 'ingredient' }),
+    InventoryItemModel.countDocuments({ itemType: 'product', organizationId }),
+    InventoryItemModel.countDocuments({ itemType: 'ingredient', organizationId }),
     InventoryItemModel.aggregate<{ _id: unknown; total: number }>([
       {
         $addFields: {
@@ -523,6 +582,7 @@ export const getInventorySummary = async (): Promise<{
           },
         },
       },
+      { $match: { organizationId } },
       {
         $group: {
           _id: null,

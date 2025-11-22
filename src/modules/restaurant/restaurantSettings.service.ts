@@ -1,3 +1,5 @@
+import { Types } from 'mongoose';
+
 import { RestaurantSettingsModel, type IRestaurantSettings } from './restaurantSettings.model';
 
 export type RestaurantBranding = {
@@ -55,22 +57,27 @@ const normalizeBranding = (branding: Partial<RestaurantBranding> | IRestaurantSe
   loyaltyRate: clampLoyaltyRate(branding && typeof branding === 'object' ? (branding as any).loyaltyRate : undefined),
 });
 
-export const getRestaurantBranding = async (): Promise<RestaurantBranding> => {
-  const existing = await RestaurantSettingsModel.findOne({ singletonKey: 'singleton' });
+export const getRestaurantBranding = async (
+  organizationId: Types.ObjectId
+): Promise<RestaurantBranding> => {
+  const existing = await RestaurantSettingsModel.findOne({ organizationId });
   if (existing) {
     return normalizeBranding(existing);
   }
 
-  const created = await RestaurantSettingsModel.create(DEFAULT_BRANDING);
+  const created = await RestaurantSettingsModel.create({ ...DEFAULT_BRANDING, organizationId });
   return normalizeBranding(created);
 };
 
-export const updateRestaurantBranding = async (payload: Partial<RestaurantBranding>): Promise<RestaurantBranding> => {
-  const existing = await RestaurantSettingsModel.findOne({ singletonKey: 'singleton' });
-  const brandingDoc = existing ?? new RestaurantSettingsModel({ ...DEFAULT_BRANDING, singletonKey: 'singleton' });
+export const updateRestaurantBranding = async (
+  organizationId: Types.ObjectId,
+  payload: Partial<RestaurantBranding>
+): Promise<RestaurantBranding> => {
+  const existing = await RestaurantSettingsModel.findOne({ organizationId });
+  const brandingDoc = existing ?? new RestaurantSettingsModel({ ...DEFAULT_BRANDING, organizationId });
 
-  if (!brandingDoc.singletonKey) {
-    brandingDoc.singletonKey = 'singleton';
+  if (!brandingDoc.organizationId) {
+    brandingDoc.organizationId = organizationId;
   }
 
   if (typeof payload.name === 'string') {
@@ -102,10 +109,12 @@ export const updateRestaurantBranding = async (payload: Partial<RestaurantBrandi
   return normalizeBranding(saved);
 };
 
-export const resetRestaurantBranding = async (): Promise<RestaurantBranding> => {
+export const resetRestaurantBranding = async (
+  organizationId: Types.ObjectId
+): Promise<RestaurantBranding> => {
   const resetDocument = await RestaurantSettingsModel.findOneAndUpdate(
-    { singletonKey: 'singleton' },
-    { $set: DEFAULT_BRANDING, $setOnInsert: DEFAULT_BRANDING },
+    { organizationId },
+    { $set: { ...DEFAULT_BRANDING, organizationId }, $setOnInsert: { ...DEFAULT_BRANDING, organizationId } },
     { new: true, upsert: true, setDefaultsOnInsert: true }
   );
 
@@ -114,7 +123,7 @@ export const resetRestaurantBranding = async (): Promise<RestaurantBranding> => 
 
 export const restaurantBrandingDefaults = DEFAULT_BRANDING;
 
-export const getLoyaltyAccrualRate = async (): Promise<number> => {
-  const branding = await getRestaurantBranding();
+export const getLoyaltyAccrualRate = async (organizationId: Types.ObjectId): Promise<number> => {
+  const branding = await getRestaurantBranding(organizationId);
   return clampLoyaltyRate(branding.loyaltyRate);
 };

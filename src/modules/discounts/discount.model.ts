@@ -10,6 +10,7 @@ export interface DiscountTimeWindow {
 }
 
 export interface Discount {
+  organizationId: Types.ObjectId;
   name: string;
   description?: string;
   type: DiscountType;
@@ -30,6 +31,12 @@ export type DiscountDocument = Document & Discount;
 
 const discountSchema = new Schema<DiscountDocument>(
   {
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
     name: {
       type: String,
       required: true,
@@ -96,5 +103,6 @@ const discountSchema = new Schema<DiscountDocument>(
 
 discountSchema.index({ isActive: 1, autoApply: 1 });
 discountSchema.index({ scope: 1, categoryId: 1, productId: 1 });
+discountSchema.index({ organizationId: 1, name: 1 });
 
 export const DiscountModel = model<DiscountDocument>('Discount', discountSchema);
