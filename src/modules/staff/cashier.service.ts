@@ -1,5 +1,6 @@
 import { FilterQuery, Types } from 'mongoose';
 
+import { OrganizationModel } from '../../models/Organization';
 import { IUser, UserModel } from '../../models/User';
 import { hashPassword } from '../../services/authService';
 
@@ -8,6 +9,8 @@ export interface CashierSummary {
   name: string;
   email: string;
   role: IUser['role'];
+  organizationId?: string;
+  organizationName?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -72,6 +75,7 @@ type LeanCashier = {
   name: string;
   email: string;
   role: IUser['role'];
+  organizationId?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -84,11 +88,30 @@ export const listCashiers = async (
 
   const cashiers = (await UserModel.find(query).sort({ name: 1 }).lean().exec()) as unknown as LeanCashier[];
 
+  const organizationIds = Array.from(
+    new Set(
+      cashiers
+        .map((cashier) => cashier.organizationId)
+        .filter((id): id is Types.ObjectId => Boolean(id))
+        .map((id) => id.toString())
+    )
+  );
+
+  const organizations = organizationIds.length
+    ? await OrganizationModel.find({ _id: { $in: organizationIds } })
+        .select('name')
+        .lean()
+        .exec()
+    : [];
+  const organizationNames = new Map(organizations.map((org) => [org._id.toString(), org.name]));
+
   return cashiers.map((cashier) => ({
     id: cashier._id.toString(),
     name: cashier.name,
     email: cashier.email,
     role: cashier.role,
+    organizationId: cashier.organizationId?.toString(),
+    organizationName: cashier.organizationId ? organizationNames.get(cashier.organizationId.toString()) : undefined,
     createdAt: cashier.createdAt,
     updatedAt: cashier.updatedAt,
   }));

@@ -203,7 +203,7 @@ const deductInventoryForOrder = async (order: OrderDocument): Promise<void> => {
   }
 
   const productIds = order.items.map((item) => item.productId);
-  const products = await ProductModel.find({ _id: { $in: productIds } })
+  const products = await ProductModel.find({ _id: { $in: productIds }, organizationId })
     .select('ingredients')
     .lean();
 
@@ -233,7 +233,8 @@ const deductInventoryForOrder = async (order: OrderDocument): Promise<void> => {
           warehouseId,
           'ingredient',
           new Types.ObjectId(ingredientEntry.ingredientId),
-          -consumeQty
+          -consumeQty,
+          organizationId
         );
       }
     } else {
@@ -241,7 +242,7 @@ const deductInventoryForOrder = async (order: OrderDocument): Promise<void> => {
         continue;
       }
 
-      await adjustInventoryQuantity(warehouseId, 'product', item.productId, -item.qty);
+      await adjustInventoryQuantity(warehouseId, 'product', item.productId, -item.qty, organizationId);
     }
   }
 };

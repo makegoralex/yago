@@ -11,7 +11,7 @@ export interface ProductIngredient {
 export interface Category {
   name: string;
   sortOrder?: number;
-  organizationId?: Types.ObjectId;
+  organizationId: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,7 +28,7 @@ const categorySchema = new Schema<CategoryDocument>(
     organizationId: {
       type: Schema.Types.ObjectId,
       ref: 'Organization',
-      required: false,
+      required: true,
       index: true,
     },
     sortOrder: {
@@ -46,7 +46,7 @@ export const CategoryModel = model<CategoryDocument>('Category', categorySchema)
 export interface Product {
   name: string;
   categoryId: Types.ObjectId;
-  organizationId?: Types.ObjectId;
+  organizationId: Types.ObjectId;
   description?: string;
   price: number;
   basePrice?: number;
@@ -73,7 +73,7 @@ const productSchema = new Schema<ProductDocument>(
     organizationId: {
       type: Schema.Types.ObjectId,
       ref: 'Organization',
-      required: false,
+      required: true,
       index: true,
     },
     categoryId: {

@@ -8,6 +8,7 @@ export interface StockReceiptItem {
 }
 
 export interface StockReceipt {
+  organizationId: Types.ObjectId;
   type: 'receipt' | 'writeOff' | 'inventory';
   occurredAt: Date;
   warehouseId: Types.ObjectId;
@@ -43,8 +44,11 @@ const stockReceiptSchema = new Schema<StockReceiptDocument>(
     supplierId: { type: Schema.Types.ObjectId, ref: 'Supplier', required: false },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     items: { type: [stockReceiptItemSchema], required: true },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
   },
   { timestamps: true }
 );
+
+stockReceiptSchema.index({ organizationId: 1, occurredAt: -1 });
 
 export const StockReceiptModel = model<StockReceiptDocument>('StockReceipt', stockReceiptSchema);
