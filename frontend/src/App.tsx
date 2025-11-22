@@ -5,16 +5,21 @@ import POSPage from './pages/POS';
 import AdminPage from './pages/Admin';
 import SettingsPage from './pages/Settings';
 import LandingPage from './pages/Landing';
+import SuperAdminPage from './pages/SuperAdmin';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import { type AuthUser, type UserRole, useAuthStore } from './store/auth';
 import MobileNav from './components/ui/MobileNav';
 import { useRestaurantStore } from './store/restaurant';
 
-const ADMIN_ROLES: UserRole[] = ['admin', 'owner', 'superAdmin'];
+const ADMIN_ROLES: UserRole[] = ['admin', 'owner'];
 
 const getLandingRoute = (user: AuthUser | null): string => {
   if (!user) {
     return '/';
+  }
+
+  if (user.role === 'superAdmin') {
+    return '/super-admin';
   }
 
   return ADMIN_ROLES.includes(user.role) ? '/admin' : '/pos';
@@ -36,12 +41,15 @@ const App: React.FC = () => {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route element={<ProtectedRoute />}>
+        <Route element={<ProtectedRoute allowed={['admin', 'manager', 'cashier', 'barista', 'owner']} />}>
           <Route path="/pos" element={<POSPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
-        <Route element={<ProtectedRoute allowed={['admin', 'owner', 'superAdmin']} />}>
+        <Route element={<ProtectedRoute allowed={['admin', 'owner']} />}>
           <Route path="/admin" element={<AdminPage />} />
+        </Route>
+        <Route element={<ProtectedRoute allowed={['superAdmin']} />}>
+          <Route path="/super-admin" element={<SuperAdminPage />} />
         </Route>
         <Route path="/" element={user ? <Navigate to={getLandingRoute(user)} replace /> : <LandingPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
