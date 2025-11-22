@@ -124,6 +124,19 @@ const LandingPage: React.FC = () => {
         </div>
       </header>
 
+      <div className="mx-auto flex max-w-6xl flex-col gap-3 rounded-2xl border border-secondary/20 bg-secondary/10 px-6 py-4 shadow-soft">
+        <div className="text-base font-semibold text-slate-900">Регистрация открыта</div>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+          <span>Создайте организацию и сразу войдите в кабинет владельца — без менеджеров и интеграторов.</span>
+          <Link
+            to="#signup"
+            className="rounded-xl bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-secondary/90"
+          >
+            Зарегистрироваться
+          </Link>
+        </div>
+      </div>
+
       <main className="mx-auto grid max-w-6xl items-start gap-10 px-6 pb-16 lg:grid-cols-[1.2fr_1fr]">
         <section className="space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">

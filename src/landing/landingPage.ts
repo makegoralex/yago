@@ -67,6 +67,24 @@ export const renderLandingPage = (): string => `
           gap: 12px;
         }
 
+        .cta-banner {
+          background: linear-gradient(120deg, rgba(90, 208, 255, 0.22), rgba(124, 124, 255, 0.22));
+          border: 1px solid rgba(90, 208, 255, 0.4);
+          box-shadow: 0 16px 44px rgba(0, 0, 0, 0.35);
+          border-radius: 16px;
+          padding: 12px 16px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin: 0 24px 12px;
+        }
+
+        .cta-banner strong {
+          font-size: 16px;
+        }
+
         .cta-button {
           padding: 12px 18px;
           border-radius: 12px;
@@ -275,6 +293,13 @@ export const renderLandingPage = (): string => `
           <a class="cta-button cta-secondary" href="mailto:hello@yagopos.com">Запросить демо</a>
         </div>
       </header>
+      <div class="cta-banner">
+        <div>
+          <strong>Регистрация открыта</strong>
+          <div style="color: var(--muted); font-size: 14px; margin-top: 4px;">Создайте организацию и получите доступ владельца.</div>
+        </div>
+        <a class="cta-button" href="#signup">Зарегистрироваться</a>
+      </div>
       <main>
         <section class="hero">
           <h1>Ваш бизнес под контролем: POS, склад, лояльность и аналитика в одном окне</h1>
