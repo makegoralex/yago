@@ -7,7 +7,7 @@ const MobileNav: React.FC = () => {
   const isTablet = useMediaQuery('(min-width: 1024px)');
   const user = useAuthStore((state) => state.user);
 
-  if (isTablet || !user) {
+  if (isTablet || !user || user.role === 'superAdmin') {
     return null;
   }
 
