@@ -12,6 +12,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowed }) => {
     return <Navigate to="/login" replace />;
   }
   if (allowed && !allowed.includes(user.role)) {
+    if (user.role === 'superAdmin') {
+      return <Navigate to="/super-admin" replace />;
+    }
+
     return <Navigate to="/pos" replace />;
   }
   return <Outlet />;
