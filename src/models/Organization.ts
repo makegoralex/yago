@@ -7,6 +7,7 @@ export interface OrganizationSettings {
 }
 
 export interface OrganizationDocument extends Document {
+  _id: Types.ObjectId;
   name: string;
   ownerUserId?: Types.ObjectId;
   subscriptionPlan?: string;
