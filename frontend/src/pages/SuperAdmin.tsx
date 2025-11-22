@@ -13,11 +13,29 @@ type OrganizationSummary = {
   owner: { name: string; email: string; role: string } | null;
 };
 
+type UserSummary = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  createdAt: string;
+  organization: { id: string; name: string } | null;
+};
+
 const subscriptionStatuses = [
   { value: 'trial', label: 'Trial' },
   { value: 'active', label: 'Active' },
   { value: 'paused', label: 'Paused' },
   { value: 'expired', label: 'Expired' },
+];
+
+const userRoles = [
+  { value: 'superAdmin', label: 'Суперадмин' },
+  { value: 'owner', label: 'Владелец' },
+  { value: 'admin', label: 'Админ' },
+  { value: 'manager', label: 'Менеджер' },
+  { value: 'cashier', label: 'Кассир' },
+  { value: 'barista', label: 'Бариста' },
 ];
 
 const quickActions = [
@@ -45,6 +63,9 @@ const SuperAdminPage: React.FC = () => {
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [loadingOrganizations, setLoadingOrganizations] = useState(false);
   const [organizationsError, setOrganizationsError] = useState('');
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersError, setUsersError] = useState('');
   const [createForm, setCreateForm] = useState({
     name: '',
     ownerName: '',
@@ -60,6 +81,11 @@ const SuperAdminPage: React.FC = () => {
   const [updateLoading, setUpdateLoading] = useState(false);
   const [updateError, setUpdateError] = useState('');
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
+  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'cashier', organizationId: '' });
+  const [userUpdateLoading, setUserUpdateLoading] = useState(false);
+  const [userUpdateError, setUserUpdateError] = useState('');
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
 
   const greeting = useMemo(() => {
     const name = user?.name?.trim();
@@ -100,9 +126,25 @@ const SuperAdminPage: React.FC = () => {
     }
   }, []);
 
+  const fetchUsers = useCallback(async () => {
+    setLoadingUsers(true);
+    setUsersError('');
+
+    try {
+      const response = await api.get('/api/organizations/users');
+      const payload = response.data?.data ?? [];
+      setUsers(payload);
+    } catch (error) {
+      setUsersError(extractErrorMessage(error, 'Не удалось загрузить пользователей'));
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, []);
+
   useEffect(() => {
     void fetchOrganizations();
-  }, [fetchOrganizations]);
+    void fetchUsers();
+  }, [fetchOrganizations, fetchUsers]);
 
   const handleCreateOrganization = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -177,6 +219,57 @@ const SuperAdminPage: React.FC = () => {
       setOrganizationsError(extractErrorMessage(error, 'Не удалось удалить организацию'));
     } finally {
       setDeleteLoadingId(null);
+    }
+  };
+
+  const handleOpenUserEdit = (user: UserSummary) => {
+    setEditingUser(user);
+    setUserForm({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      organizationId: user.organization?.id ?? '',
+    });
+    setUserUpdateError('');
+  };
+
+  const handleUpdateUser = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!editingUser) return;
+
+    setUserUpdateLoading(true);
+    setUserUpdateError('');
+
+    try {
+      await api.patch(`/api/organizations/users/${editingUser.id}`, {
+        name: userForm.name,
+        email: userForm.email,
+        role: userForm.role,
+        organizationId: userForm.organizationId,
+      });
+
+      await fetchUsers();
+      setEditingUser(null);
+    } catch (error) {
+      setUserUpdateError(extractErrorMessage(error, 'Не удалось обновить пользователя'));
+    } finally {
+      setUserUpdateLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    const confirmed = window.confirm('Удалить пользователя? Действие необратимо.');
+    if (!confirmed) return;
+
+    setDeleteUserId(userId);
+    try {
+      await api.delete(`/api/organizations/users/${userId}`);
+      await fetchUsers();
+    } catch (error) {
+      setUsersError(extractErrorMessage(error, 'Не удалось удалить пользователя'));
+    } finally {
+      setDeleteUserId(null);
     }
   };
 
@@ -496,6 +589,103 @@ const SuperAdminPage: React.FC = () => {
         </div>
       </section>
 
+      <section id="users" className="mt-10 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Все пользователи</h2>
+            <p className="text-sm text-slate-600">Отслеживайте, кто к какой организации привязан, и управляйте доступами.</p>
+          </div>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">Всего: {users.length}</span>
+            <button
+              type="button"
+              onClick={() => void fetchUsers()}
+              disabled={loadingUsers}
+              className="rounded-xl bg-primary px-4 py-2 font-semibold text-white shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/70"
+            >
+              {loadingUsers ? 'Обновляем…' : 'Обновить'}
+            </button>
+          </div>
+        </div>
+
+        {usersError && (
+          <div className="mb-4 rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">{usersError}</div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead>
+              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="py-3 pr-4">Пользователь</th>
+                <th className="px-4 py-3">Роль</th>
+                <th className="px-4 py-3">Организация</th>
+                <th className="px-4 py-3 text-right">Создан</th>
+                <th className="px-4 py-3 text-right">Действия</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loadingUsers ? (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-slate-500">
+                    Загружаем пользователей…
+                  </td>
+                </tr>
+              ) : users.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-slate-500">
+                    Пока нет пользователей. Создайте организацию или добавьте сотрудников.
+                  </td>
+                </tr>
+              ) : (
+                users.map((user) => (
+                  <tr key={user.id} className="align-top">
+                    <td className="py-4 pr-4">
+                      <div className="font-semibold text-slate-900">{user.name}</div>
+                      <div className="text-xs text-slate-500">{user.email}</div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 ring-1 ring-slate-200">
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      {user.organization ? (
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-slate-900">{user.organization.name}</div>
+                          <div className="text-xs text-slate-500">ID: {user.organization.id}</div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-500">Не привязан</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-right text-xs font-medium text-slate-600">{formatDate(user.createdAt)}</td>
+                    <td className="px-4 py-4 text-right text-xs font-medium text-slate-600">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenUserEdit(user)}
+                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary/40 hover:text-primary"
+                        >
+                          Изменить
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteUser(user.id)}
+                          disabled={deleteUserId === user.id}
+                          className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                          {deleteUserId === user.id ? 'Удаляем…' : 'Удалить'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       {editingOrganization && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl ring-1 ring-slate-200">
@@ -568,6 +758,97 @@ const SuperAdminPage: React.FC = () => {
                   className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/70"
                 >
                   {updateLoading ? 'Сохраняем…' : 'Сохранить'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editingUser && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl ring-1 ring-slate-200">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-semibold text-slate-900">Редактировать пользователя</h3>
+                <p className="text-sm text-slate-600">Обновите контактные данные, роль и организацию.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="text-slate-500 transition hover:text-slate-900"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form className="space-y-4" onSubmit={handleUpdateUser}>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Имя</span>
+                <input
+                  type="text"
+                  required
+                  value={userForm.name}
+                  onChange={(event) => setUserForm((form) => ({ ...form, name: event.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                />
+              </label>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Email</span>
+                  <input
+                    type="email"
+                    required
+                    value={userForm.email}
+                    onChange={(event) => setUserForm((form) => ({ ...form, email: event.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Роль</span>
+                  <select
+                    value={userForm.role}
+                    onChange={(event) => setUserForm((form) => ({ ...form, role: event.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                  >
+                    {userRoles.map((role) => (
+                      <option key={role.value} value={role.value}>
+                        {role.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">ID организации</span>
+                <input
+                  type="text"
+                  value={userForm.organizationId}
+                  onChange={(event) => setUserForm((form) => ({ ...form, organizationId: event.target.value }))}
+                  placeholder="Оставьте пустым, чтобы отвязать"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                />
+              </label>
+
+              {userUpdateError && <div className="text-sm text-rose-600">{userUpdateError}</div>}
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={userUpdateLoading}
+                  className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/70"
+                >
+                  {userUpdateLoading ? 'Сохраняем…' : 'Сохранить'}
                 </button>
               </div>
             </form>

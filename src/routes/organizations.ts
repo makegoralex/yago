@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 
 import { OrganizationModel } from '../models/Organization';
 import { SubscriptionPlanModel } from '../models/SubscriptionPlan';
-import { UserModel } from '../models/User';
+import { UserModel, type UserRole } from '../models/User';
 import { CategoryModel } from '../modules/catalog/catalog.model';
 import { RestaurantSettingsModel } from '../modules/restaurant/restaurantSettings.model';
 import { generateTokens, hashPassword } from '../services/authService';
@@ -12,6 +12,7 @@ import { authMiddleware, requireRole } from '../middleware/auth';
 export const organizationsRouter = Router();
 
 const DEFAULT_CATEGORIES = ['Горячие напитки', 'Холодные напитки', 'Десерты'];
+const ALLOWED_ROLES: UserRole[] = ['admin', 'manager', 'cashier', 'barista', 'owner', 'superAdmin'];
 
 organizationsRouter.get('/', authMiddleware, requireRole('superAdmin'), async (_req: Request, res: Response) => {
   try {
@@ -271,6 +272,172 @@ organizationsRouter.delete(
       res.json({ data: { id: organizationId }, error: null });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to delete organization';
+      res.status(500).json({ data: null, error: message });
+    }
+  }
+);
+
+organizationsRouter.get(
+  '/users',
+  authMiddleware,
+  requireRole('superAdmin'),
+  async (_req: Request, res: Response) => {
+    try {
+      const users = await UserModel.find()
+        .select('name email role organizationId createdAt')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      const organizationIds = users
+        .map((user) => user.organizationId)
+        .filter((id): id is mongoose.Types.ObjectId => Boolean(id));
+
+      const organizationsById = await OrganizationModel.find({ _id: { $in: organizationIds } })
+        .select('name')
+        .lean()
+        .then((orgs) =>
+          orgs.reduce<Record<string, { name: string }>>((acc, org) => {
+            acc[String(org._id)] = { name: org.name };
+            return acc;
+          }, {})
+        );
+
+      const payload = users.map((user) => ({
+        id: String(user._id),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt,
+        organization: user.organizationId
+          ? { id: String(user.organizationId), name: organizationsById[String(user.organizationId)]?.name ?? '—' }
+          : null,
+      }));
+
+      res.json({ data: payload, error: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load users';
+      res.status(500).json({ data: null, error: message });
+    }
+  }
+);
+
+organizationsRouter.patch(
+  '/users/:userId',
+  authMiddleware,
+  requireRole('superAdmin'),
+  async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        res.status(400).json({ data: null, error: 'Invalid user id' });
+        return;
+      }
+
+      const { name, email, role, organizationId } = req.body ?? {};
+      const updates: Record<string, unknown> = {};
+
+      if (typeof name === 'string' && name.trim()) {
+        updates.name = name.trim();
+      }
+
+      if (typeof email === 'string' && email.trim()) {
+        updates.email = email.trim().toLowerCase();
+      }
+
+      if (typeof role === 'string' && ALLOWED_ROLES.includes(role as UserRole)) {
+        updates.role = role;
+      }
+
+      if (organizationId === null || organizationId === '') {
+        updates.organizationId = undefined;
+      } else if (typeof organizationId === 'string') {
+        if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+          res.status(400).json({ data: null, error: 'Invalid organization id' });
+          return;
+        }
+
+        const organization = await OrganizationModel.findById(organizationId);
+        if (!organization) {
+          res.status(404).json({ data: null, error: 'Organization not found' });
+          return;
+        }
+
+        updates.organizationId = organization._id;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        res.status(400).json({ data: null, error: 'No valid fields to update' });
+        return;
+      }
+
+      const user = await UserModel.findById(userId);
+
+      if (!user) {
+        res.status(404).json({ data: null, error: 'User not found' });
+        return;
+      }
+
+      Object.assign(user, updates);
+      await user.save();
+
+      const organization =
+        user.organizationId && mongoose.Types.ObjectId.isValid(user.organizationId)
+          ? await OrganizationModel.findById(user.organizationId).select('name').lean()
+          : null;
+
+      res.json({
+        data: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          createdAt: user.createdAt,
+          organization: organization ? { id: String(organization._id), name: organization.name } : null,
+        },
+        error: null,
+      });
+    } catch (error) {
+      const isDuplicateKey = typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 11000;
+      const message = error instanceof Error ? error.message : 'Unable to update user';
+      const status = isDuplicateKey
+        ? 409
+        : message.toLowerCase().includes('invalid')
+          ? 400
+          : message.toLowerCase().includes('not found')
+            ? 404
+            : 500;
+
+      res.status(status).json({ data: null, error: isDuplicateKey ? 'User with this email already exists' : message });
+    }
+  }
+);
+
+organizationsRouter.delete(
+  '/users/:userId',
+  authMiddleware,
+  requireRole('superAdmin'),
+  async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        res.status(400).json({ data: null, error: 'Invalid user id' });
+        return;
+      }
+
+      const deleted = await UserModel.findByIdAndDelete(userId);
+
+      if (!deleted) {
+        res.status(404).json({ data: null, error: 'User not found' });
+        return;
+      }
+
+      await OrganizationModel.updateMany({ ownerUserId: userId }, { $unset: { ownerUserId: '' } });
+
+      res.json({ data: { id: userId }, error: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete user';
       res.status(500).json({ data: null, error: message });
     }
   }
