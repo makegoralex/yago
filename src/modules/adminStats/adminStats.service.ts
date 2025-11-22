@@ -1,9 +1,10 @@
-import { FilterQuery } from 'mongoose';
+import { FilterQuery, isValidObjectId, Types } from 'mongoose';
 
 import { OrderModel } from '../orders/order.model';
 import { ShiftDocument, ShiftModel, ShiftTotals } from '../shifts/shift.model';
 
 export interface SalesAndShiftFilter {
+  organizationId: string;
   from?: Date;
   to?: Date;
 }
@@ -56,8 +57,15 @@ const buildDateRangeFilter = (
 export const fetchSalesAndShiftStats = async (
   filters: SalesAndShiftFilter
 ): Promise<SalesAndShiftStats> => {
+  if (!filters.organizationId || !isValidObjectId(filters.organizationId)) {
+    throw new Error('Organization context is required');
+  }
+
+  const organizationObjectId = new Types.ObjectId(filters.organizationId);
+
   const orderMatch: Record<string, unknown> = {
     status: { $in: ['paid', 'completed'] },
+    organizationId: organizationObjectId,
   };
 
   if (filters.from || filters.to) {
@@ -91,7 +99,10 @@ export const fetchSalesAndShiftStats = async (
         },
       },
     ]).then((result) => result[0]),
-    ShiftModel.find({ ...buildDateRangeFilter('openedAt', filters.from, filters.to) })
+    ShiftModel.find({
+      organizationId: organizationObjectId,
+      ...buildDateRangeFilter('openedAt', filters.from, filters.to),
+    })
       .sort({ openedAt: -1 })
       .lean(),
   ]);

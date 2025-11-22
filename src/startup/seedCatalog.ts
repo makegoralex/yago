@@ -6,6 +6,7 @@ import { SupplierModel } from '../modules/suppliers/supplier.model';
 import { WarehouseModel } from '../modules/inventory/warehouse.model';
 import { InventoryItemModel, type InventoryItem } from '../modules/inventory/inventoryItem.model';
 import { DiscountModel, type Discount } from '../modules/discounts/discount.model';
+import { OrganizationModel } from '../models/Organization';
 
 const demoCatalog = [
   {
@@ -134,20 +135,29 @@ const demoWarehouses = [
 ];
 
 export const ensureDemoCatalogSeeded = async (): Promise<void> => {
+  const organization = await OrganizationModel.findOne().lean<{ _id: Types.ObjectId }>();
+
+  if (!organization?._id) {
+    console.warn('No organizations found, skipping catalog seed');
+    return;
+  }
+
+  const organizationId = organization._id;
+
   const [categoryCount, productCount, ingredientCount, supplierCount, warehouseCount, discountCount] = await Promise.all([
-    CategoryModel.countDocuments(),
-    ProductModel.countDocuments(),
-    IngredientModel.countDocuments(),
-    SupplierModel.countDocuments(),
-    WarehouseModel.countDocuments(),
-    DiscountModel.countDocuments(),
+    CategoryModel.countDocuments({ organizationId }),
+    ProductModel.countDocuments({ organizationId }),
+    IngredientModel.countDocuments({ organizationId }),
+    SupplierModel.countDocuments({ organizationId }),
+    WarehouseModel.countDocuments({ organizationId }),
+    DiscountModel.countDocuments({ organizationId }),
   ]);
 
   if (supplierCount === 0) {
-    await SupplierModel.insertMany(demoSuppliers);
+    await SupplierModel.insertMany(demoSuppliers.map((supplier) => ({ ...supplier, organizationId })));
   }
 
-  const suppliers = (await SupplierModel.find().lean().exec()) as unknown as Array<{
+  const suppliers = (await SupplierModel.find({ organizationId }).lean().exec()) as unknown as Array<{
     _id: Types.ObjectId;
     name: string;
   }>;
@@ -162,12 +172,13 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
         name: ingredient.name,
         unit: ingredient.unit,
         costPerUnit: ingredient.costPerUnit,
+        organizationId,
         supplierId: ingredient.supplier ? supplierMap.get(ingredient.supplier) : undefined,
       }))
     );
   }
 
-  const ingredients = (await IngredientModel.find().lean().exec()) as unknown as Array<{
+  const ingredients = (await IngredientModel.find({ organizationId }).lean().exec()) as unknown as Array<{
     _id: Types.ObjectId;
     name: string;
   }>;
@@ -178,7 +189,7 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
 
   if (categoryCount === 0 && productCount === 0) {
     const createdCategories = (await CategoryModel.insertMany(
-      demoCatalog.map(({ name, sortOrder }) => ({ name, sortOrder }))
+      demoCatalog.map(({ name, sortOrder }) => ({ name, sortOrder, organizationId }))
     )) as Array<{ _id: Types.ObjectId; name: string }>;
 
     const categoryIdMap = new Map<string, Types.ObjectId>();
@@ -211,14 +222,15 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
           finalPrice = basePrice * (1 - discountValue / 100);
         }
 
-        return {
-          name: product.name,
-          categoryId,
-          basePrice,
-          price: Number(finalPrice.toFixed(2)),
-          discountType,
-          discountValue,
-          ingredients: ingredientsList,
+          return {
+            name: product.name,
+            categoryId,
+            organizationId,
+            basePrice,
+            price: Number(finalPrice.toFixed(2)),
+            discountType,
+            discountValue,
+            ingredients: ingredientsList,
         };
       });
     });
@@ -232,7 +244,7 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
 
   if (warehouseCount === 0) {
     const warehouses = (await WarehouseModel.insertMany(
-      demoWarehouses
+      demoWarehouses.map((warehouse) => ({ ...warehouse, organizationId }))
     )) as Array<{ _id: Types.ObjectId }>;
 
     const firstWarehouse = warehouses[0];
@@ -243,11 +255,14 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
     const milk = ingredientMap.get('Молоко 3.2%');
     const matcha = ingredientMap.get('Матча порошок');
 
-    const inventorySeed: Array<Pick<InventoryItem, 'warehouseId' | 'itemType' | 'itemId' | 'quantity' | 'unitCost'>> = [];
+    const inventorySeed: Array<
+      Pick<InventoryItem, 'warehouseId' | 'itemType' | 'itemId' | 'quantity' | 'unitCost'> & { organizationId: Types.ObjectId }
+    > = [];
 
     if (espressoBeans) {
       inventorySeed.push({
         warehouseId: firstWarehouse._id as Types.ObjectId,
+        organizationId,
         itemType: 'ingredient',
         itemId: espressoBeans,
         quantity: 5000,
@@ -258,6 +273,7 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
     if (milk) {
       inventorySeed.push({
         warehouseId: firstWarehouse._id as Types.ObjectId,
+        organizationId,
         itemType: 'ingredient',
         itemId: milk,
         quantity: 8000,
@@ -268,6 +284,7 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
     if (matcha) {
       inventorySeed.push({
         warehouseId: firstWarehouse._id as Types.ObjectId,
+        organizationId,
         itemType: 'ingredient',
         itemId: matcha,
         quantity: 1200,
@@ -299,6 +316,7 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
         type: 'percentage',
         scope: 'order',
         value: 10,
+        organizationId,
         autoApply: false,
         isActive: true,
       },
@@ -312,6 +330,7 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
         scope: 'category',
         value: 30,
         categoryId: categoryMilkDrinks._id,
+        organizationId,
         autoApply: false,
         isActive: true,
       });
@@ -325,6 +344,7 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
         scope: 'product',
         value: 15,
         productId: productMatcha._id,
+        organizationId,
         autoApply: true,
         autoApplyDays: [1, 3, 5],
         autoApplyStart: '08:00',

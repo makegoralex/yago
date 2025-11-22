@@ -1,4 +1,5 @@
 import { Router, type Request, type RequestHandler, type Response } from 'express';
+import { Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import {
@@ -17,6 +18,16 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
   };
+};
+
+const getOrganizationObjectId = (req: Request): Types.ObjectId | null => {
+  const organizationId = req.organization?.id;
+
+  if (!organizationId || !Types.ObjectId.isValid(organizationId)) {
+    return null;
+  }
+
+  return new Types.ObjectId(organizationId);
 };
 
 const parseBoolean = (value: unknown): boolean | undefined => {
@@ -71,8 +82,15 @@ function extractBrandingUpdatePayload(body: unknown): Partial<RestaurantBranding
 
 router.get(
   '/branding',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const branding = await getRestaurantBranding();
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const branding = await getRestaurantBranding(organizationId);
 
     res.json({ data: { branding }, error: null });
   })
@@ -82,6 +100,13 @@ router.put(
   '/branding',
   requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
     const updatePayload = extractBrandingUpdatePayload(req.body);
 
     if (!updatePayload) {
@@ -90,7 +115,7 @@ router.put(
     }
 
     try {
-      const branding = await updateRestaurantBranding(updatePayload);
+      const branding = await updateRestaurantBranding(organizationId, updatePayload);
       res.json({ data: { branding }, error: null });
     } catch (error) {
       console.error('Failed to update restaurant branding:', error);
@@ -103,9 +128,15 @@ router.patch('/branding', requireRole(['owner', 'superAdmin']), asyncHandler(upd
 
 async function updateRestaurantBrandingHandler(req: Request, res: Response): Promise<void> {
   const { name, logoUrl, enableOrderTags, measurementUnits, loyaltyRate, reset } = req.body ?? {};
+  const organizationId = getOrganizationObjectId(req);
+
+  if (!organizationId) {
+    res.status(403).json({ data: null, error: 'Organization context is required' });
+    return;
+  }
 
   if (reset === true) {
-    const branding = await resetRestaurantBranding();
+    const branding = await resetRestaurantBranding(organizationId);
     res.json({ data: { branding }, error: null });
     return;
   }
@@ -124,7 +155,7 @@ async function updateRestaurantBrandingHandler(req: Request, res: Response): Pro
   }
 
   try {
-    const branding = await updateRestaurantBranding(updatePayload);
+    const branding = await updateRestaurantBranding(organizationId, updatePayload);
     res.json({ data: { branding }, error: null });
   } catch (error) {
     console.error('Failed to update restaurant branding:', error);
@@ -135,8 +166,15 @@ async function updateRestaurantBrandingHandler(req: Request, res: Response): Pro
 router.post(
   '/branding/reset',
   requireRole(['owner', 'superAdmin']),
-  asyncHandler(async (_req: Request, res: Response) => {
-    const branding = await resetRestaurantBranding();
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const branding = await resetRestaurantBranding(organizationId);
     res.json({ data: { branding }, error: null });
   })
 );
