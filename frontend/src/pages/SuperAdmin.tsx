@@ -32,10 +32,7 @@ const subscriptionStatuses = [
 const userRoles = [
   { value: 'superAdmin', label: 'Суперадмин' },
   { value: 'owner', label: 'Владелец' },
-  { value: 'admin', label: 'Админ' },
-  { value: 'manager', label: 'Менеджер' },
   { value: 'cashier', label: 'Кассир' },
-  { value: 'barista', label: 'Бариста' },
 ];
 
 const quickActions = [

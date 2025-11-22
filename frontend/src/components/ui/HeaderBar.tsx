@@ -52,10 +52,10 @@ const HeaderBar: React.FC<HeaderBarProps> = ({ onShowHistory, onShowShift, shift
       <div className="flex items-center gap-2">
         <div className="hidden flex-col text-right leading-tight md:flex">
           <span className="text-sm font-medium text-slate-700">{user?.name}</span>
-          <span className="text-xs text-slate-400">{user?.role === 'admin' ? 'Администратор' : 'Кассир'}</span>
+          <span className="text-xs text-slate-400">{user?.role === 'owner' ? 'Владелец' : 'Кассир'}</span>
         </div>
         <div className="hidden text-right text-sm font-medium text-slate-700 lg:block">{now}</div>
-        {user?.role === 'admin' ? (
+        {user?.role === 'owner' ? (
           <button
             type="button"
             onClick={() => navigate('/admin')}

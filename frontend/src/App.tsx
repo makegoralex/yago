@@ -11,7 +11,7 @@ import { type AuthUser, type UserRole, useAuthStore } from './store/auth';
 import MobileNav from './components/ui/MobileNav';
 import { useRestaurantStore } from './store/restaurant';
 
-const ADMIN_ROLES: UserRole[] = ['admin', 'owner'];
+const OWNER_ROLES: UserRole[] = ['owner'];
 
 const getLandingRoute = (user: AuthUser | null): string => {
   if (!user) {
@@ -22,7 +22,7 @@ const getLandingRoute = (user: AuthUser | null): string => {
     return '/super-admin';
   }
 
-  return ADMIN_ROLES.includes(user.role) ? '/admin' : '/pos';
+  return OWNER_ROLES.includes(user.role) ? '/admin' : '/pos';
 };
 
 const App: React.FC = () => {
@@ -41,11 +41,11 @@ const App: React.FC = () => {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route element={<ProtectedRoute allowed={['admin', 'manager', 'cashier', 'barista', 'owner']} />}>
+        <Route element={<ProtectedRoute allowed={['cashier', 'owner']} />}>
           <Route path="/pos" element={<POSPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
-        <Route element={<ProtectedRoute allowed={['admin', 'owner']} />}>
+        <Route element={<ProtectedRoute allowed={['owner']} />}>
           <Route path="/admin" element={<AdminPage />} />
         </Route>
         <Route element={<ProtectedRoute allowed={['superAdmin']} />}>

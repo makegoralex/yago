@@ -14,7 +14,7 @@ const MobileNav: React.FC = () => {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 flex justify-around border-t border-slate-200 bg-white/95 py-2 backdrop-blur">
       <NavItem to="/pos" label="Продажи" />
-      <NavItem to="/admin" label="Отчеты" disabled={user.role !== 'admin'} />
+      <NavItem to="/admin" label="Отчеты" disabled={user.role !== 'owner'} />
       <NavItem to="/settings" label="Настройки" />
     </nav>
   );

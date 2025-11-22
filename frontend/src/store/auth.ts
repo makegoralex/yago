@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type UserRole = 'admin' | 'manager' | 'cashier' | 'barista' | 'owner' | 'superAdmin';
+export type UserRole = 'cashier' | 'owner' | 'superAdmin';
 
 export type AuthUser = {
   _id: string;
