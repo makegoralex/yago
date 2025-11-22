@@ -68,8 +68,17 @@ const parseDateOnly = (value: unknown): Date | undefined => {
 
 router.get(
   '/cashiers',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const cashiers = await listCashiers();
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+    const isSuperAdmin = req.user?.role === 'superAdmin';
+
+    if (!isSuperAdmin && !organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const filter = organizationId ? { organizationId } : {};
+    const cashiers = await listCashiers(isSuperAdmin ? filter : filter);
 
     res.json({
       data: { cashiers },
@@ -408,6 +417,13 @@ router.get(
 router.get(
   '/stats/sales-and-shifts',
   asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
     const from = parseDateOnly(req.query.from);
     const to = parseDateOnly(req.query.to);
 
@@ -426,7 +442,7 @@ router.get(
       return;
     }
 
-    const stats = await fetchSalesAndShiftStats({ from, to });
+    const stats = await fetchSalesAndShiftStats({ organizationId: organizationId.toString(), from, to });
 
     res.json({ data: stats, error: null });
   })

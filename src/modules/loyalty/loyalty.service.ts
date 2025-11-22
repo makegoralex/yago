@@ -23,7 +23,12 @@ export const earnLoyaltyPoints = async (
     throw new Error('Customer not found');
   }
 
-  const organizationId = customer.organizationId as Types.ObjectId | undefined;
+  const organizationId =
+    customer.organizationId instanceof Types.ObjectId
+      ? customer.organizationId
+      : customer.organizationId
+        ? new Types.ObjectId(customer.organizationId.toString())
+        : undefined;
 
   if (!organizationId) {
     throw new Error('Organization context is required');
