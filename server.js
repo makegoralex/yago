@@ -66,6 +66,31 @@ const renderLandingPage = () => `
             font-weight: 900;
           }
 
+          .cta-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+          }
+
+          .cta-banner {
+            background: linear-gradient(120deg, rgba(90, 208, 255, 0.22), rgba(124, 124, 255, 0.22));
+            border: 1px solid rgba(90, 208, 255, 0.4);
+            box-shadow: 0 16px 44px rgba(0, 0, 0, 0.35);
+            border-radius: 16px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 0 24px 12px;
+          }
+
+          .cta-banner strong {
+            font-size: 16px;
+          }
+
           .cta-button {
             padding: 12px 18px;
             border-radius: 12px;
@@ -76,11 +101,20 @@ const renderLandingPage = () => `
             text-decoration: none;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
             transition: transform 0.2s ease, box-shadow 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
           }
 
           .cta-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 12px 38px rgba(90, 208, 255, 0.25);
+          }
+
+          .cta-secondary {
+            border-color: rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.04);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
           }
 
           main {
@@ -183,6 +217,80 @@ const renderLandingPage = () => `
             color: var(--muted);
             font-size: 13px;
           }
+
+          .signup-card {
+            background: linear-gradient(180deg, rgba(17, 26, 47, 0.92), rgba(17, 26, 47, 0.85));
+            border: 1px solid rgba(90, 208, 255, 0.22);
+            border-radius: 22px;
+            padding: 22px;
+            margin-top: 32px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+          }
+
+          .signup-card h3 {
+            margin: 0 0 10px;
+          }
+
+          .signup-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 12px;
+            margin: 16px 0;
+          }
+
+          .signup-grid label {
+            font-size: 13px;
+            color: var(--muted);
+            display: block;
+            margin-bottom: 6px;
+          }
+
+          .signup-grid input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text);
+            font-size: 15px;
+          }
+
+          .signup-grid input:focus {
+            outline: 2px solid rgba(90, 208, 255, 0.4);
+            border-color: rgba(90, 208, 255, 0.5);
+          }
+
+          .signup-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+          }
+
+          .signup-hint {
+            color: var(--muted);
+            font-size: 13px;
+          }
+
+          .success-banner,
+          .error-banner {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 12px;
+            font-weight: 600;
+          }
+
+          .success-banner {
+            background: rgba(52, 211, 153, 0.12);
+            border: 1px solid rgba(52, 211, 153, 0.4);
+            color: #bbf7d0;
+          }
+
+          .error-banner {
+            background: rgba(248, 113, 113, 0.12);
+            border: 1px solid rgba(248, 113, 113, 0.5);
+            color: #fecdd3;
+          }
         </style>
       </head>
       <body>
@@ -191,8 +299,18 @@ const renderLandingPage = () => `
             <div class="logo-mark">Y</div>
             <div>Yago POS</div>
           </div>
-          <a class="cta-button" href="mailto:hello@yagopos.com">Запросить демо</a>
+          <div class="cta-row">
+            <a class="cta-button" href="#signup">Регистрация</a>
+            <a class="cta-button cta-secondary" href="mailto:hello@yagopos.com">Запросить демо</a>
+          </div>
         </header>
+        <div class="cta-banner">
+          <div>
+            <strong>Регистрация открыта</strong>
+            <div style="color: var(--muted); font-size: 14px; margin-top: 4px;">Создайте организацию и получите доступ владельца.</div>
+          </div>
+          <a class="cta-button" href="#signup">Зарегистрироваться</a>
+        </div>
         <main>
           <section class="hero">
             <h1>Ваш бизнес под контролем: POS, склад, лояльность и аналитика в одном окне</h1>
@@ -214,6 +332,42 @@ const renderLandingPage = () => `
                 <div class="label">REST + документация на /docs</div>
               </div>
             </div>
+          </section>
+
+          <section id="signup" class="signup-card" aria-labelledby="signup-title">
+            <div class="cta-row" style="justify-content: space-between; align-items: baseline; gap: 10px;">
+              <div>
+                <p class="section-title" id="signup-title" style="margin: 0 0 6px;">Самостоятельная регистрация</p>
+                <p style="margin: 0; color: var(--muted);">Создайте организацию, чтобы сразу войти под владельцем.</p>
+              </div>
+              <a class="cta-button" href="#signup">Регистрация</a>
+            </div>
+
+            <form id="signup-form" novalidate>
+              <div class="signup-grid">
+                <div>
+                  <label for="org-name">Название организации</label>
+                  <input id="org-name" name="organization" placeholder="Например, Кофе на районе" required />
+                </div>
+                <div>
+                  <label for="owner-name">Имя владельца</label>
+                  <input id="owner-name" name="ownerName" placeholder="Александр" required />
+                </div>
+                <div>
+                  <label for="owner-email">Email владельца</label>
+                  <input id="owner-email" type="email" name="email" placeholder="owner@coffee.ru" required />
+                </div>
+                <div>
+                  <label for="owner-password">Пароль</label>
+                  <input id="owner-password" type="password" name="password" placeholder="Придумайте пароль" required />
+                </div>
+              </div>
+              <div class="signup-actions">
+                <button class="cta-button" type="submit">Создать организацию</button>
+                <span class="signup-hint">Запрос занимает пару секунд. После создания вы сразу получите доступ владельца.</span>
+              </div>
+              <div id="signup-result"></div>
+            </form>
           </section>
 
           <h2 class="section-title">Что уже внутри</h2>
@@ -262,6 +416,55 @@ const renderLandingPage = () => `
 
           <p class="footer-note">Готовы попробовать? Напишите нам — подключим пилот за один день и перенесём ваши данные.</p>
         </main>
+
+        <script>
+          const form = document.getElementById("signup-form");
+          const result = document.getElementById("signup-result");
+
+          form?.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            result.textContent = "";
+
+            const organization = form.organization?.value?.trim();
+            const ownerName = form.ownerName?.value?.trim();
+            const email = form.email?.value?.trim();
+            const password = form.password?.value;
+
+            if (!organization || !ownerName || !email || !password) {
+              result.innerHTML = '<div class="error-banner">Заполните все поля, чтобы продолжить.</div>';
+              return;
+            }
+
+            form.querySelectorAll("button, input").forEach((element) => {
+              element.disabled = true;
+            });
+            result.innerHTML = "";
+
+            try {
+              const response = await fetch("/api/organizations/create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name: organization,
+                  owner: { name: ownerName, email, password },
+                }),
+              });
+
+              if (!response.ok) {
+                throw new Error("Не удалось отправить запрос");
+              }
+
+              result.innerHTML = '<div class="success-banner">Организация создана! Используйте введённый email и пароль для входа.</div>';
+              form.reset();
+            } catch (_error) {
+              result.innerHTML = '<div class="error-banner">Не получилось зарегистрироваться. Попробуйте ещё раз.</div>';
+            } finally {
+              form.querySelectorAll("button, input").forEach((element) => {
+                element.disabled = false;
+              });
+            }
+          });
+        </script>
       </body>
     </html>
   `;
