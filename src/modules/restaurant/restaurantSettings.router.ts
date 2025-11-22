@@ -80,7 +80,7 @@ router.get(
 
 router.put(
   '/branding',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req: Request, res: Response) => {
     const updatePayload = extractBrandingUpdatePayload(req.body);
 
@@ -99,7 +99,7 @@ router.put(
   })
 );
 
-router.patch('/branding', requireRole('admin'), asyncHandler(updateRestaurantBrandingHandler));
+router.patch('/branding', requireRole(['owner', 'superAdmin']), asyncHandler(updateRestaurantBrandingHandler));
 
 async function updateRestaurantBrandingHandler(req: Request, res: Response): Promise<void> {
   const { name, logoUrl, enableOrderTags, measurementUnits, loyaltyRate, reset } = req.body ?? {};
@@ -134,7 +134,7 @@ async function updateRestaurantBrandingHandler(req: Request, res: Response): Pro
 
 router.post(
   '/branding/reset',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (_req: Request, res: Response) => {
     const branding = await resetRestaurantBranding();
     res.json({ data: { branding }, error: null });
@@ -143,7 +143,7 @@ router.post(
 
 router.get(
   '/branding/defaults',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (_req: Request, res: Response) => {
     res.json({ data: { branding: restaurantBrandingDefaults }, error: null });
   })

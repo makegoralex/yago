@@ -236,7 +236,7 @@ router.get(
 
 router.post(
   '/modifier-groups',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { name, selectionType, required, sortOrder, options } = req.body ?? {};
 
@@ -290,7 +290,7 @@ router.post(
 
 router.put(
   '/modifier-groups/:id',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { name, selectionType, required, sortOrder, options } = req.body ?? {};
@@ -371,7 +371,7 @@ router.put(
 
 router.delete(
   '/modifier-groups/:id',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -397,7 +397,7 @@ router.delete(
 
 router.post(
   '/categories',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { name, sortOrder } = req.body;
 
@@ -417,7 +417,7 @@ router.post(
 
 router.put(
   '/categories/:id',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -461,7 +461,7 @@ router.put(
 
 router.delete(
   '/categories/:id',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -517,7 +517,7 @@ router.get(
 
 router.post(
   '/products',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const {
       name,
@@ -609,7 +609,7 @@ router.post(
 
 router.put(
   '/products/:id',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const {
       name,
@@ -734,7 +734,7 @@ router.put(
 
 router.delete(
   '/products/:id',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -760,7 +760,7 @@ router.delete(
 
 router.get(
   '/ingredients',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const organizationId = req.organization!.id;
 
@@ -772,7 +772,7 @@ router.get(
 
 router.post(
   '/ingredients',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { name, unit, costPerUnit, supplierId, description } = req.body;
 
@@ -812,7 +812,7 @@ router.post(
 
 router.put(
   '/ingredients/:id',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -883,7 +883,7 @@ router.put(
 
 router.delete(
   '/ingredients/:id',
-  requireRole(['admin', 'owner', 'superAdmin']),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 

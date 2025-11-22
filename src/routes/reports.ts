@@ -9,7 +9,7 @@ import {
 } from '../services/reportService';
 
 const router = Router();
-const ADMIN_ROLE = ['admin'];
+const ADMIN_ROLE = ['owner', 'superAdmin'];
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {

@@ -6,7 +6,7 @@ import { OrderModel } from '../orders/order.model';
 import { earnLoyaltyPoints, redeemLoyaltyPoints } from './loyalty.service';
 
 const router = Router();
-const MANAGER_ROLES = ['admin', 'cashier'];
+const MANAGER_ROLES = ['cashier', 'owner', 'superAdmin'];
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (async (req, res, next) => {

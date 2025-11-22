@@ -28,7 +28,7 @@ authRouter.post('/register', async (req: Request, res: Response) => {
   try {
     const { name, email, password, role, organizationId } = req.body ?? {};
 
-    const allowedRoles: UserRole[] = ['admin', 'manager', 'cashier', 'barista'];
+    const allowedRoles: UserRole[] = ['cashier', 'owner'];
     const normalizedRole =
       typeof role === 'string' ? (role.toLowerCase() as UserRole) : undefined;
 

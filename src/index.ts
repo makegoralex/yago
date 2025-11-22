@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 import app from './app';
 import { appConfig, validateConfig } from './config/env';
-import { ensureDefaultAdminExists } from './startup/createAdmin';
+import { ensureDefaultOwnerExists } from './startup/createAdmin';
 import { ensureDemoCatalogSeeded } from './startup/seedCatalog';
 import { migrateUserIndexes } from './startup/migrateUserIndexes';
 
@@ -15,7 +15,7 @@ const startServer = async (): Promise<void> => {
 
     await migrateUserIndexes();
 
-    await ensureDefaultAdminExists();
+    await ensureDefaultOwnerExists();
     await ensureDemoCatalogSeeded();
 
     app.listen(appConfig.port, '0.0.0.0', () => {

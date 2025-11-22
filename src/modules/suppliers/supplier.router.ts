@@ -7,7 +7,7 @@ import { SupplierModel } from './supplier.model';
 const router = Router();
 
 router.use(authMiddleware);
-router.use(requireRole('admin'));
+router.use(requireRole(['owner', 'superAdmin']));
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {

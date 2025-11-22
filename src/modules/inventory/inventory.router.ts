@@ -21,7 +21,7 @@ import { recalculateAverageCostForItem } from './inventoryCost.service';
 const router = Router();
 
 router.use(authMiddleware);
-router.use(requireRole(['admin', 'owner', 'superAdmin']));
+router.use(requireRole(['owner', 'superAdmin']));
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (async (req, res, next) => {
