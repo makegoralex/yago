@@ -34,7 +34,7 @@ import {
 const router = Router();
 
 router.use(authMiddleware);
-router.use(requireRole('admin'));
+router.use(requireRole(['owner', 'superAdmin']));
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {
@@ -96,7 +96,7 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, email, password, role } = req.body ?? {};
-    const normalizedRole = role === 'cashier' || role === 'barista' ? role : undefined;
+    const normalizedRole = role === 'cashier' ? role : undefined;
 
     try {
       const cashier = await updateCashierAccount({
@@ -146,7 +146,7 @@ router.delete('/discounts/:id', withDiscountErrorHandling(handleDeleteDiscount))
 
 router.get(
   '/catalog',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (_req: Request, res: Response) => {
     const [categories, products, ingredients] = await Promise.all([
       CategoryModel.find().sort({ sortOrder: 1, name: 1 }),
@@ -167,7 +167,7 @@ router.get(
 
 router.get(
   '/inventory',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (_req: Request, res: Response) => {
     const [warehouses, items, summary] = await Promise.all([
       WarehouseModel.find().sort({ name: 1 }),
@@ -188,7 +188,7 @@ router.get(
 
 router.post(
   '/inventory/receipts',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.user?.id) {
       res.status(403).json({ data: null, error: 'Не удалось определить пользователя' });
@@ -217,7 +217,7 @@ router.post(
 
 router.get(
   '/inventory/receipts',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req: Request, res: Response) => {
     const { type, warehouseId, supplierId } = req.query;
 
@@ -258,7 +258,7 @@ router.get(
 
 router.put(
   '/inventory/receipts/:id',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
@@ -283,7 +283,7 @@ router.put(
 
 router.delete(
   '/inventory/receipts/:id',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
@@ -303,7 +303,7 @@ router.delete(
 
 router.get(
   '/suppliers',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (_req: Request, res: Response) => {
     const suppliers = await SupplierModel.find().sort({ name: 1 });
 
@@ -313,7 +313,7 @@ router.get(
 
 router.get(
   '/inventory/low-stock',
-  requireRole('admin'),
+  requireRole(['owner', 'superAdmin']),
   asyncHandler(async (_req: Request, res: Response) => {
     const lowStockItems = await InventoryItemModel.find({ quantity: { $lt: 5 } })
       .sort({ quantity: 1 })

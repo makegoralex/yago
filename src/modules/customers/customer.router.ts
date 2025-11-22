@@ -4,7 +4,7 @@ import { authMiddleware, requireRole } from '../../middleware/auth';
 import { CustomerModel } from './customer.model';
 
 const router = Router();
-const MANAGER_ROLES = ['admin', 'cashier', 'owner', 'superAdmin'];
+const MANAGER_ROLES = ['cashier', 'owner', 'superAdmin'];
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (async (req, res, next) => {

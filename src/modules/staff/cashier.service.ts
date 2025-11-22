@@ -34,7 +34,7 @@ export class CashierServiceError extends Error {
 }
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
-const STAFF_ROLES: IUser['role'][] = ['cashier', 'barista'];
+const STAFF_ROLES: IUser['role'][] = ['cashier'];
 
 const ensureValidId = (id: string): Types.ObjectId => {
   if (!Types.ObjectId.isValid(id)) {

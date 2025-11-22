@@ -1,24 +1,24 @@
 import { hashPassword } from '../services/authService';
 import { UserModel } from '../models/User';
 
-const DEFAULT_ADMIN_EMAIL = 'admin@yago.coffee';
-const DEFAULT_ADMIN_PASSWORD = 'admin123';
+const DEFAULT_OWNER_EMAIL = 'owner@yago.coffee';
+const DEFAULT_OWNER_PASSWORD = 'owner123';
 
-export const ensureDefaultAdminExists = async (): Promise<void> => {
-  const existingAdmin = await UserModel.findOne({ email: DEFAULT_ADMIN_EMAIL });
+export const ensureDefaultOwnerExists = async (): Promise<void> => {
+  const existingAdmin = await UserModel.findOne({ email: DEFAULT_OWNER_EMAIL });
 
   if (existingAdmin) {
     return;
   }
 
-  const passwordHash = await hashPassword(DEFAULT_ADMIN_PASSWORD);
+  const passwordHash = await hashPassword(DEFAULT_OWNER_PASSWORD);
 
   await UserModel.create({
-    name: 'Yago Admin',
-    email: DEFAULT_ADMIN_EMAIL,
+    name: 'Yago Owner',
+    email: DEFAULT_OWNER_EMAIL,
     passwordHash,
-    role: 'admin',
+    role: 'owner',
   });
 
-  console.log('Default admin user created: admin@yago.coffee / admin123');
+  console.log('Default owner user created: owner@yago.coffee / owner123');
 };

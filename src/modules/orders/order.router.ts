@@ -20,7 +20,7 @@ import { ShiftDocument, ShiftModel } from '../shifts/shift.model';
 
 const router = Router();
 
-const CASHIER_ROLES = ['admin', 'cashier', 'barista'];
+const CASHIER_ROLES = ['cashier', 'owner', 'superAdmin'];
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'card'];
 const ORDER_STATUSES: OrderStatus[] = ['draft', 'paid', 'completed'];
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['draft', 'paid'];
@@ -925,7 +925,7 @@ router.delete(
       return;
     }
 
-    const isAdmin = ['admin', 'owner', 'superAdmin'].includes(req.user?.role ?? '');
+    const isAdmin = ['owner', 'superAdmin'].includes(req.user?.role ?? '');
     if (!isAdmin && (!req.user?.id || order.cashierId.toString() !== req.user.id)) {
       res.status(403).json({ data: null, error: 'Forbidden' });
       return;
@@ -985,7 +985,7 @@ router.get(
     const { registerId, cashierId: cashierParam } = req.query;
     const organizationId = getOrganizationObjectId(req);
     const normalizedRegisterId = typeof registerId === 'string' && registerId.trim() ? registerId.trim() : undefined;
-    const isAdmin = ['admin', 'owner', 'superAdmin'].includes(req.user?.role ?? '');
+    const isAdmin = ['owner', 'superAdmin'].includes(req.user?.role ?? '');
 
     if (!organizationId) {
       res.status(403).json({ data: null, error: 'Organization context is required' });
@@ -1121,7 +1121,7 @@ router.get(
 
     const { cashierId: cashierParam } = req.query;
 
-    if (['admin', 'owner', 'superAdmin'].includes(req.user?.role ?? '') && typeof cashierParam === 'string') {
+    if (['owner', 'superAdmin'].includes(req.user?.role ?? '') && typeof cashierParam === 'string') {
       if (!isValidObjectId(cashierParam)) {
         res.status(400).json({ data: null, error: 'cashierId must be a valid identifier' });
         return;

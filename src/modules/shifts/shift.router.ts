@@ -6,7 +6,7 @@ import { OrderModel, type OrderDocument, type OrderStatus } from '../orders/orde
 import { ShiftModel, type ShiftDocument, type ShiftTotals } from './shift.model';
 
 const router = Router();
-const SHIFT_ROLES = ['admin', 'cashier', 'barista', 'owner', 'superAdmin'];
+const SHIFT_ROLES = ['cashier', 'owner', 'superAdmin'];
 const FULFILLED_ORDER_STATUSES: OrderStatus[] = ['paid', 'completed'];
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => (req, res, next) => {
@@ -165,7 +165,7 @@ router.post(
     }
 
     const userId = req.user?.id;
-    const isAdmin = ['admin', 'owner', 'superAdmin'].includes(req.user?.role ?? '');
+    const isAdmin = ['owner', 'superAdmin'].includes(req.user?.role ?? '');
     if (!isAdmin && (!userId || shift.cashierId.toString() !== userId)) {
       res.status(403).json({ data: null, error: 'Forbidden' });
       return;
