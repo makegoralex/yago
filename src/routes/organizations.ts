@@ -51,130 +51,171 @@ organizationsRouter.get('/', authMiddleware, requireRole('superAdmin'), async (_
   }
 });
 
+class HttpError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+type CreateOrganizationOptions = {
+  allowCustomPlan?: boolean;
+  allowCustomSettings?: boolean;
+};
+
+const createOrganizationWithOwner = async (
+  body: any,
+  { allowCustomPlan = false, allowCustomSettings = false }: CreateOrganizationOptions
+) => {
+  const { name, owner, subscriptionPlan, settings } = body ?? {};
+
+  if (!name || !owner?.name || !owner?.email || !owner?.password) {
+    throw new HttpError(400, 'name and owner credentials are required');
+  }
+
+  const normalizedPlan =
+    allowCustomPlan && typeof subscriptionPlan === 'string' && subscriptionPlan.trim()
+      ? subscriptionPlan.trim()
+      : undefined;
+
+  const normalizedName = name.trim();
+  const normalizedEmail = owner.email.toLowerCase();
+
+  const existingOrganization = await OrganizationModel.findOne({ name: normalizedName }).lean();
+  if (existingOrganization) {
+    throw new HttpError(409, 'Organization already exists');
+  }
+
+  const existingOwner = await UserModel.findOne({ email: normalizedEmail }).lean();
+  if (existingOwner) {
+    throw new HttpError(409, 'Owner with this email already exists');
+  }
+
+  const createdResources: { organizationId?: mongoose.Types.ObjectId; userId?: mongoose.Types.ObjectId } = {};
+
+  try {
+    const organization = await OrganizationModel.create({
+      name: normalizedName,
+      subscriptionPlan: normalizedPlan,
+      subscriptionStatus: 'trial',
+      settings: allowCustomSettings && settings && typeof settings === 'object' ? settings : {},
+    });
+
+    createdResources.organizationId = organization._id as mongoose.Types.ObjectId;
+
+    const passwordHash = await hashPassword(owner.password);
+    const user = await UserModel.create({
+      name: owner.name,
+      email: normalizedEmail,
+      passwordHash,
+      role: 'owner',
+      organizationId: organization._id,
+    });
+
+    createdResources.userId = user._id as mongoose.Types.ObjectId;
+
+    organization.ownerUserId = user._id as mongoose.Types.ObjectId;
+    await organization.save();
+
+    if (Array.isArray(DEFAULT_CATEGORIES) && DEFAULT_CATEGORIES.length > 0) {
+      const docs = DEFAULT_CATEGORIES.map((categoryName, index) => ({
+        name: categoryName,
+        sortOrder: index + 1,
+        organizationId: organization._id,
+      }));
+      await CategoryModel.insertMany(docs);
+    }
+
+    await RestaurantSettingsModel.findOneAndUpdate(
+      { organizationId: organization._id },
+      {
+        $set: {
+          organizationId: organization._id,
+          singletonKey: String(organization._id),
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    if (normalizedPlan) {
+      await SubscriptionPlanModel.findOneAndUpdate(
+        { name: normalizedPlan },
+        { $setOnInsert: { name: normalizedPlan } },
+        { upsert: true, new: true }
+      );
+    }
+
+    const tokens = generateTokens(user);
+
+    return {
+      organization: {
+        id: String(organization._id),
+        name: organization.name,
+        subscriptionPlan: organization.subscriptionPlan,
+        subscriptionStatus: organization.subscriptionStatus,
+      },
+      owner: {
+        id: String(user._id),
+        name: user.name,
+        email: user.email,
+      },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      dashboardUrl: `/admin?organizationId=${organization._id}`,
+    };
+  } catch (error) {
+    if (createdResources.organizationId) {
+      await OrganizationModel.deleteOne({ _id: createdResources.organizationId });
+    }
+
+    if (createdResources.userId) {
+      await UserModel.deleteOne({ _id: createdResources.userId });
+    }
+
+    if (createdResources.organizationId) {
+      await CategoryModel.deleteMany({ organizationId: createdResources.organizationId });
+      await RestaurantSettingsModel.deleteMany({ organizationId: createdResources.organizationId });
+    }
+
+    throw error;
+  }
+};
+
+const buildCreateErrorResponse = (error: unknown) => {
+  const isDuplicateKey = typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 11000;
+  const message = error instanceof Error ? error.message : 'Unable to create organization';
+  const status =
+    error instanceof HttpError
+      ? error.status
+      : isDuplicateKey || message.toLowerCase().includes('duplicate')
+        ? 409
+        : message.toLowerCase().includes('required')
+          ? 400
+          : 500;
+
+  const displayMessage = isDuplicateKey ? 'Organization or owner already exists' : message;
+  return { status, displayMessage };
+};
+
 organizationsRouter.post('/create', authMiddleware, requireRole('superAdmin'), async (req: Request, res: Response) => {
   try {
-    const { name, owner, subscriptionPlan, settings } = req.body ?? {};
-
-    if (!name || !owner?.name || !owner?.email || !owner?.password) {
-      res.status(400).json({ data: null, error: 'name and owner credentials are required' });
-      return;
-    }
-
-    const normalizedPlan =
-      typeof subscriptionPlan === 'string' && subscriptionPlan.trim() ? subscriptionPlan.trim() : undefined;
-
-    const normalizedName = name.trim();
-    const normalizedEmail = owner.email.toLowerCase();
-
-    const existingOrganization = await OrganizationModel.findOne({ name: normalizedName }).lean();
-    if (existingOrganization) {
-      res.status(409).json({ data: null, error: 'Organization already exists' });
-      return;
-    }
-
-    const existingOwner = await UserModel.findOne({ email: normalizedEmail }).lean();
-    if (existingOwner) {
-      res.status(409).json({ data: null, error: 'Owner with this email already exists' });
-      return;
-    }
-
-    const createdResources: { organizationId?: mongoose.Types.ObjectId; userId?: mongoose.Types.ObjectId } = {};
-
-    try {
-      const organization = await OrganizationModel.create({
-        name: normalizedName,
-        subscriptionPlan: normalizedPlan,
-        subscriptionStatus: 'trial',
-        settings: settings && typeof settings === 'object' ? settings : {},
-      });
-
-      createdResources.organizationId = organization._id as mongoose.Types.ObjectId;
-
-      const passwordHash = await hashPassword(owner.password);
-      const user = await UserModel.create({
-        name: owner.name,
-        email: normalizedEmail,
-        passwordHash,
-        role: 'owner',
-        organizationId: organization._id,
-      });
-
-      createdResources.userId = user._id as mongoose.Types.ObjectId;
-
-      organization.ownerUserId = user._id as mongoose.Types.ObjectId;
-      await organization.save();
-
-      if (Array.isArray(DEFAULT_CATEGORIES) && DEFAULT_CATEGORIES.length > 0) {
-        const docs = DEFAULT_CATEGORIES.map((categoryName, index) => ({
-          name: categoryName,
-          sortOrder: index + 1,
-          organizationId: organization._id,
-        }));
-        await CategoryModel.insertMany(docs);
-      }
-
-      await RestaurantSettingsModel.findOneAndUpdate(
-        { organizationId: organization._id },
-        {
-          $set: {
-            organizationId: organization._id,
-            singletonKey: String(organization._id),
-          },
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
-
-      if (normalizedPlan) {
-        await SubscriptionPlanModel.findOneAndUpdate(
-          { name: normalizedPlan },
-          { $setOnInsert: { name: normalizedPlan } },
-          { upsert: true, new: true }
-        );
-      }
-
-      const tokens = generateTokens(user);
-
-      res.status(201).json({
-        data: {
-          organization: {
-            id: String(organization._id),
-            name: organization.name,
-            subscriptionPlan: organization.subscriptionPlan,
-            subscriptionStatus: organization.subscriptionStatus,
-          },
-          owner: {
-            id: String(user._id),
-            name: user.name,
-            email: user.email,
-          },
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          dashboardUrl: `/admin?organizationId=${organization._id}`,
-        },
-        error: null,
-      });
-    } catch (error) {
-      if (createdResources.organizationId) {
-        await OrganizationModel.deleteOne({ _id: createdResources.organizationId });
-      }
-
-      if (createdResources.userId) {
-        await UserModel.deleteOne({ _id: createdResources.userId });
-      }
-
-      if (createdResources.organizationId) {
-        await CategoryModel.deleteMany({ organizationId: createdResources.organizationId });
-        await RestaurantSettingsModel.deleteMany({ organizationId: createdResources.organizationId });
-      }
-
-      throw error;
-    }
+    const data = await createOrganizationWithOwner(req.body, { allowCustomPlan: true, allowCustomSettings: true });
+    res.status(201).json({ data, error: null });
   } catch (error: unknown) {
-    const isDuplicateKey = typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 11000;
-    const message = error instanceof Error ? error.message : 'Unable to create organization';
-    const status = isDuplicateKey || message.toLowerCase().includes('duplicate') ? 409 : message.toLowerCase().includes('required') ? 400 : 500;
+    const { status, displayMessage } = buildCreateErrorResponse(error);
+    res.status(status).json({ data: null, error: displayMessage });
+  }
+});
 
-    res.status(status).json({ data: null, error: isDuplicateKey ? 'Organization or owner already exists' : message });
+organizationsRouter.post('/public/create', async (req: Request, res: Response) => {
+  try {
+    const data = await createOrganizationWithOwner(req.body, { allowCustomPlan: false, allowCustomSettings: false });
+    res.status(201).json({ data, error: null });
+  } catch (error: unknown) {
+    const { status, displayMessage } = buildCreateErrorResponse(error);
+    res.status(status).json({ data: null, error: displayMessage });
   }
 });
 
