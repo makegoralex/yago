@@ -49,7 +49,7 @@ const LandingPage: React.FC = () => {
     event.preventDefault();
     setSignupLoading(true);
     try {
-      const response = await api.post('/api/organizations/create', {
+      const response = await api.post('/api/organizations/public/create', {
         name: organizationName,
         owner: { name: ownerName, email, password },
       });
@@ -67,8 +67,9 @@ const LandingPage: React.FC = () => {
         type: 'success',
       });
       navigate('/pos');
-    } catch (error) {
-      notify({ title: 'Не удалось зарегистрироваться', description: 'Попробуйте еще раз', type: 'error' });
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error ?? 'Попробуйте еще раз';
+      notify({ title: 'Не удалось зарегистрироваться', description: errorMessage, type: 'error' });
     } finally {
       setSignupLoading(false);
     }
@@ -125,8 +126,8 @@ const LandingPage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white text-slate-900">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white text-slate-900">
+      <header className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6 sm:py-6">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-lg font-bold text-primary">
             YG
@@ -136,8 +137,8 @@ const LandingPage: React.FC = () => {
             <div className="text-xs text-slate-500">Автономная касса и аналитика для кофеен</div>
           </div>
         </div>
-        <div className="flex items-center gap-3 text-sm font-medium text-secondary">
-          <Link to="/login" className="rounded-xl px-4 py-2 hover:bg-secondary/10">
+        <div className="flex flex-1 items-center justify-end gap-3 text-sm font-medium text-secondary sm:flex-none">
+          <Link to="/login" className="rounded-xl px-4 py-2 transition hover:bg-secondary/10">
             Вход
           </Link>
           <Link
@@ -149,29 +150,32 @@ const LandingPage: React.FC = () => {
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-6xl flex-col gap-14 px-6 pb-16">
-        <section className="grid items-center gap-10 rounded-3xl border border-slate-200 bg-white/70 p-8 shadow-soft lg:grid-cols-[1.05fr_1fr]">
-          <div className="space-y-6">
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
+      <main className="mx-auto flex max-w-6xl flex-col gap-12 px-4 pb-16 sm:px-6 lg:gap-14">
+        <section className="grid items-center gap-8 rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-soft backdrop-blur md:p-8 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
+          <div className="space-y-6 lg:space-y-8">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary sm:text-sm">
               Открытая регистрация
               <span className="h-2 w-2 rounded-full bg-primary" />
               <span className="text-primary/80">без менеджеров и оплат</span>
             </div>
-            <h1 className="text-4xl font-bold leading-tight sm:text-5xl">
+            <h1 className="text-3xl font-bold leading-tight sm:text-4xl md:text-5xl">
               Управляйте кофейней в Yago: касса, склад, лояльность и сеть в одном окне
             </h1>
-            <p className="text-lg text-slate-600">
+            <p className="text-base text-slate-600 sm:text-lg">
               Создайте организацию, получите доступ владельца и начните работать через пару минут. Все функции сразу
               доступны, а данные вашей сети изолированы по organizationId.
             </p>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap" id="signup">
               <Link
                 to="#signup"
-                className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark"
+                className="w-full rounded-2xl bg-primary px-5 py-3 text-center text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark sm:w-auto"
               >
                 Зарегистрироваться и начать
               </Link>
-              <Link to="/login" className="rounded-2xl px-5 py-3 text-sm font-semibold text-secondary hover:bg-secondary/10">
+              <Link
+                to="/login"
+                className="w-full rounded-2xl px-5 py-3 text-center text-sm font-semibold text-secondary transition hover:bg-secondary/10 sm:w-auto"
+              >
                 Войти в кабинет
               </Link>
             </div>
@@ -191,14 +195,14 @@ const LandingPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="space-y-4 rounded-3xl border border-secondary/30 bg-secondary/5 p-6 shadow-soft">
-            <div className="flex items-center justify-between rounded-2xl bg-secondary text-white px-4 py-3 text-sm font-semibold">
-              <span>Регистрация открыта</span>
-              <Link to="/login" className="rounded-xl bg-white/15 px-3 py-1 text-white hover:bg-white/25">
+          <div className="space-y-4 rounded-3xl border border-secondary/30 bg-secondary/5 p-4 shadow-soft md:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-secondary px-4 py-3 text-sm font-semibold text-white">
+              <span className="text-center sm:text-left">Регистрация открыта</span>
+              <Link to="/login" className="rounded-xl bg-white/15 px-3 py-1 text-white transition hover:bg-white/25">
                 Уже есть вход
               </Link>
             </div>
-            <div className="rounded-2xl border border-white/70 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-white/70 bg-white p-4 shadow-sm md:p-5">
               <div className="mb-4 space-y-1 text-center">
                 <div className="text-xs font-semibold uppercase tracking-wide text-secondary">Шаг 1</div>
                 <h2 className="text-xl font-bold">Создайте организацию</h2>
@@ -214,7 +218,7 @@ const LandingPage: React.FC = () => {
                     required
                     value={organizationName}
                     onChange={(event) => setOrganizationName(event.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm transition focus:border-secondary focus:bg-white"
                     placeholder="Например, Кофе на районе"
                   />
                 </div>
@@ -228,7 +232,7 @@ const LandingPage: React.FC = () => {
                       required
                       value={ownerName}
                       onChange={(event) => setOwnerName(event.target.value)}
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm transition focus:border-secondary focus:bg-white"
                       placeholder="Александр"
                     />
                   </div>
@@ -242,7 +246,7 @@ const LandingPage: React.FC = () => {
                       required
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm transition focus:border-secondary focus:bg-white"
                       placeholder="owner@coffee.ru"
                     />
                   </div>
@@ -257,14 +261,14 @@ const LandingPage: React.FC = () => {
                     required
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm transition focus:border-secondary focus:bg-white"
                     placeholder="Придумайте надежный пароль"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={signupLoading}
-                  className="flex h-12 w-full items-center justify-center rounded-xl bg-primary text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-70"
+                  className="flex h-12 w-full items-center justify-center rounded-xl bg-primary text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-70 disabled:hover:bg-primary"
                 >
                   {signupLoading ? 'Создаем аккаунт...' : 'Создать организацию и войти'}
                 </button>
@@ -280,7 +284,7 @@ const LandingPage: React.FC = () => {
                     required
                     value={loginEmail}
                     onChange={(event) => setLoginEmail(event.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm focus:border-secondary"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm transition focus:border-secondary"
                     placeholder="Email"
                   />
                   <input
@@ -288,7 +292,7 @@ const LandingPage: React.FC = () => {
                     required
                     value={loginPassword}
                     onChange={(event) => setLoginPassword(event.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm focus:border-secondary"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm transition focus:border-secondary"
                     placeholder="Пароль"
                   />
                 </div>
@@ -296,7 +300,7 @@ const LandingPage: React.FC = () => {
                   type="text"
                   value={loginOrganizationId}
                   onChange={(event) => setLoginOrganizationId(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm focus:border-secondary"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm transition focus:border-secondary"
                   placeholder="ID организации (опционально)"
                 />
                 <div className="flex items-center justify-between text-xs text-slate-600">
@@ -325,10 +329,10 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        <section className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-8 shadow-soft lg:grid-cols-2">
+        <section className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-soft md:p-8 lg:grid-cols-2">
           <div className="space-y-3">
             <p className="text-sm font-semibold uppercase tracking-wide text-secondary">Что внутри</p>
-            <h2 className="text-3xl font-bold">Вся операционная кофейни без подключения сторонних сервисов</h2>
+            <h2 className="text-2xl font-bold sm:text-3xl">Вся операционная кофейни без подключения сторонних сервисов</h2>
             <p className="text-base text-slate-600">
               Вы получаете полный набор инструментов: касса, склад, лояльность, роли и единая аналитика по сети. Настройка
               занимает минуты, а данные хранятся внутри Yago — ничего не нужно подключать дополнительно.
@@ -344,10 +348,10 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        <section className="grid gap-6 rounded-3xl border border-slate-200 bg-gradient-to-br from-secondary/5 via-white to-primary/5 p-8 shadow-soft lg:grid-cols-[1.1fr_0.9fr]">
+        <section className="grid gap-6 rounded-3xl border border-slate-200 bg-gradient-to-br from-secondary/5 via-white to-primary/5 p-5 shadow-soft md:p-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-3">
             <p className="text-sm font-semibold uppercase tracking-wide text-secondary">Как начать</p>
-            <h2 className="text-3xl font-bold">Три шага до работы в кассе</h2>
+            <h2 className="text-2xl font-bold sm:text-3xl">Три шага до работы в кассе</h2>
             <ul className="space-y-3 text-base text-slate-700">
               {steps.map((step) => (
                 <li key={step} className="flex items-start gap-3">
