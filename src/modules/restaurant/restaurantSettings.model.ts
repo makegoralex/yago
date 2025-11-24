@@ -1,4 +1,4 @@
-import { Schema, model, type Document } from 'mongoose';
+import { Schema, Types, model, type Document } from 'mongoose';
 
 export interface IRestaurantSettings extends Document {
   name: string;
@@ -7,7 +7,7 @@ export interface IRestaurantSettings extends Document {
   measurementUnits: string[];
   loyaltyRate: number;
   singletonKey: string;
-  organizationId?: Schema.Types.ObjectId;
+  organizationId: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -17,13 +17,13 @@ const restaurantSettingsSchema = new Schema<IRestaurantSettings>(
     organizationId: {
       type: Schema.Types.ObjectId,
       ref: 'Organization',
-      required: false,
+      required: true,
       index: true,
     },
     singletonKey: {
       type: String,
       required: true,
-      unique: true,
+      unique: false,
       default: 'singleton',
       trim: true,
     },

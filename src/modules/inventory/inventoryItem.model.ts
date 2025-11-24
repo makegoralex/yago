@@ -9,7 +9,7 @@ export interface InventoryItem {
   quantity: number;
   unitCost?: number;
   updatedBy?: Types.ObjectId;
-  organizationId?: Schema.Types.ObjectId;
+  organizationId: Schema.Types.ObjectId;
   updatedAt: Date;
   createdAt: Date;
 }
@@ -26,7 +26,7 @@ const inventoryItemSchema = new Schema<InventoryItemDocument>(
     organizationId: {
       type: Schema.Types.ObjectId,
       ref: 'Organization',
-      required: false,
+      required: true,
       index: true,
     },
     itemType: {
@@ -60,6 +60,6 @@ const inventoryItemSchema = new Schema<InventoryItemDocument>(
   }
 );
 
-inventoryItemSchema.index({ warehouseId: 1, itemType: 1, itemId: 1 }, { unique: true });
+inventoryItemSchema.index({ organizationId: 1, warehouseId: 1, itemType: 1, itemId: 1 }, { unique: true });
 
 export const InventoryItemModel = model<InventoryItemDocument>('InventoryItem', inventoryItemSchema);

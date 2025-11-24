@@ -1,4 +1,5 @@
 import { Router, type Request, type RequestHandler, type Response } from 'express';
+import { Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../middleware/auth';
 import {
@@ -15,6 +16,24 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
   };
+};
+
+const getOrganizationObjectId = (req: Request): Types.ObjectId | null => {
+  const organizationId = req.organization?.id;
+
+  if (organizationId && Types.ObjectId.isValid(organizationId)) {
+    return new Types.ObjectId(organizationId);
+  }
+
+  if (
+    req.user?.role === 'superAdmin' &&
+    typeof req.query.organizationId === 'string' &&
+    Types.ObjectId.isValid(req.query.organizationId)
+  ) {
+    return new Types.ObjectId(req.query.organizationId);
+  }
+
+  return null;
 };
 
 const parseDateOnly = (value: unknown): Date | undefined => {
@@ -48,8 +67,15 @@ router.use(requireRole(ADMIN_ROLE));
 
 router.get(
   '/summary',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const summary = await getSummaryReport();
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const summary = await getSummaryReport(organizationId);
 
     res.json({ data: summary, error: null });
   })
@@ -58,6 +84,13 @@ router.get(
 router.get(
   '/daily',
   asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
     const fromParam = parseDateOnly(req.query.from);
     const toParam = parseDateOnly(req.query.to);
 
@@ -80,7 +113,11 @@ router.get(
       ? new Date(toParam.getTime() + 24 * 60 * 60 * 1000)
       : undefined;
 
-    const daily = await getDailyReport({ from: fromParam ?? undefined, to: exclusiveTo });
+    const daily = await getDailyReport({
+      organizationId,
+      from: fromParam ?? undefined,
+      to: exclusiveTo,
+    });
 
     res.json({ data: daily, error: null });
   })
@@ -89,6 +126,13 @@ router.get(
 router.get(
   '/top-products',
   asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
     const limit = parseLimit(req.query.limit);
 
     if (req.query.limit !== undefined && !limit) {
@@ -96,7 +140,7 @@ router.get(
       return;
     }
 
-    const products = await getTopProducts(limit ?? 5);
+    const products = await getTopProducts(organizationId, limit ?? 5);
 
     res.json({ data: products, error: null });
   })
@@ -105,6 +149,13 @@ router.get(
 router.get(
   '/top-customers',
   asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
     const limit = parseLimit(req.query.limit);
 
     if (req.query.limit !== undefined && !limit) {
@@ -112,7 +163,7 @@ router.get(
       return;
     }
 
-    const customers = await getTopCustomers(limit ?? 5);
+    const customers = await getTopCustomers(organizationId, limit ?? 5);
 
     res.json({ data: customers, error: null });
   })

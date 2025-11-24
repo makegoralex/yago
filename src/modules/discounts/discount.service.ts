@@ -375,7 +375,10 @@ export const calculateOrderTotals = async (
   };
 };
 
-export const getAvailableDiscounts = async (now: Date = new Date()) => {
-  const discounts = (await DiscountModel.find({ isActive: true }).lean().exec()) as unknown as DiscountRecord[];
+export const getAvailableDiscounts = async (
+  organizationId: Types.ObjectId,
+  now: Date = new Date()
+) => {
+  const discounts = (await DiscountModel.find({ organizationId, isActive: true }).lean().exec()) as unknown as DiscountRecord[];
   return discounts.filter((discount) => !discount.autoApply || isWithinTimeWindow(discount, now));
 };

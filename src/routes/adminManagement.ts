@@ -1,4 +1,5 @@
 import { Router, type Request, type RequestHandler, type Response } from 'express';
+import { Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { CategoryModel, ProductModel } from '../modules/catalog/catalog.model';
@@ -42,6 +43,16 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
   };
 };
 
+const getOrganizationObjectId = (req: Request): Types.ObjectId | null => {
+  const organizationId = req.organization?.id;
+
+  if (!organizationId || !Types.ObjectId.isValid(organizationId)) {
+    return null;
+  }
+
+  return new Types.ObjectId(organizationId);
+};
+
 const parseDateOnly = (value: unknown): Date | undefined => {
   if (typeof value !== 'string') {
     return undefined;
@@ -57,8 +68,21 @@ const parseDateOnly = (value: unknown): Date | undefined => {
 
 router.get(
   '/cashiers',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const cashiers = await listCashiers();
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+    const isSuperAdmin = req.user?.role === 'superAdmin';
+    const requestedOrganizationId =
+      isSuperAdmin && typeof req.query.organizationId === 'string' && Types.ObjectId.isValid(req.query.organizationId)
+        ? new Types.ObjectId(req.query.organizationId)
+        : null;
+
+    if (!isSuperAdmin && !organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const filter = organizationId ? { organizationId } : requestedOrganizationId ? { organizationId: requestedOrganizationId } : {};
+    const cashiers = await listCashiers(isSuperAdmin ? filter : filter);
 
     res.json({
       data: { cashiers },
@@ -71,12 +95,26 @@ router.post(
   '/cashiers',
   asyncHandler(async (req: Request, res: Response) => {
     const { name, email, password } = req.body ?? {};
+    const organizationId =
+      getOrganizationObjectId(req) ??
+      (typeof req.body?.organizationId === 'string' && Types.ObjectId.isValid(req.body.organizationId)
+        ? new Types.ObjectId(req.body.organizationId)
+        : null) ??
+      (typeof req.query.organizationId === 'string' && Types.ObjectId.isValid(req.query.organizationId)
+        ? new Types.ObjectId(req.query.organizationId)
+        : null);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     try {
       const cashier = await createCashierAccount({
         name: typeof name === 'string' ? name : '',
         email: typeof email === 'string' ? email : '',
         password: typeof password === 'string' ? password : '',
+        organizationId,
       });
 
       res.status(201).json({ data: { cashier }, error: null });
@@ -97,6 +135,19 @@ router.put(
     const { id } = req.params;
     const { name, email, password, role } = req.body ?? {};
     const normalizedRole = role === 'cashier' ? role : undefined;
+    const organizationId =
+      getOrganizationObjectId(req) ??
+      (typeof req.body?.organizationId === 'string' && Types.ObjectId.isValid(req.body.organizationId)
+        ? new Types.ObjectId(req.body.organizationId)
+        : null) ??
+      (typeof req.query.organizationId === 'string' && Types.ObjectId.isValid(req.query.organizationId)
+        ? new Types.ObjectId(req.query.organizationId)
+        : null);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     try {
       const cashier = await updateCashierAccount({
@@ -105,6 +156,7 @@ router.put(
         email: typeof email === 'string' ? email : undefined,
         password: typeof password === 'string' ? password : undefined,
         role: normalizedRole,
+        organizationId,
       });
 
       res.json({ data: { cashier }, error: null });
@@ -123,9 +175,22 @@ router.delete(
   '/cashiers/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const organizationId =
+      getOrganizationObjectId(req) ??
+      (typeof req.body?.organizationId === 'string' && Types.ObjectId.isValid(req.body.organizationId)
+        ? new Types.ObjectId(req.body.organizationId)
+        : null) ??
+      (typeof req.query.organizationId === 'string' && Types.ObjectId.isValid(req.query.organizationId)
+        ? new Types.ObjectId(req.query.organizationId)
+        : null);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     try {
-      await deleteCashierAccount(id);
+      await deleteCashierAccount(id, organizationId);
       res.json({ data: { deleted: true }, error: null });
     } catch (error) {
       if (error instanceof CashierServiceError) {
@@ -147,11 +212,18 @@ router.delete('/discounts/:id', withDiscountErrorHandling(handleDeleteDiscount))
 router.get(
   '/catalog',
   requireRole(['owner', 'superAdmin']),
-  asyncHandler(async (_req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
     const [categories, products, ingredients] = await Promise.all([
-      CategoryModel.find().sort({ sortOrder: 1, name: 1 }),
-      ProductModel.find().sort({ name: 1 }),
-      IngredientModel.find().sort({ name: 1 }),
+      CategoryModel.find({ organizationId }).sort({ sortOrder: 1, name: 1 }),
+      ProductModel.find({ organizationId }).sort({ name: 1 }),
+      IngredientModel.find({ organizationId }).sort({ name: 1 }),
     ]);
 
     res.json({
@@ -168,11 +240,18 @@ router.get(
 router.get(
   '/inventory',
   requireRole(['owner', 'superAdmin']),
-  asyncHandler(async (_req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
     const [warehouses, items, summary] = await Promise.all([
-      WarehouseModel.find().sort({ name: 1 }),
-      fetchInventoryItemsWithReferences({}),
-      getInventorySummary(),
+      WarehouseModel.find({ organizationId }).sort({ name: 1 }),
+      fetchInventoryItemsWithReferences({}, organizationId),
+      getInventorySummary(organizationId),
     ]);
 
     res.json({
@@ -195,12 +274,20 @@ router.post(
       return;
     }
 
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
     try {
       const receipt = await createStockReceipt({
         warehouseId: req.body?.warehouseId,
         supplierId: req.body?.supplierId,
         items: req.body?.items,
         createdBy: req.user.id,
+        organizationId,
       });
 
       res.status(201).json({ data: receipt, error: null });
@@ -220,8 +307,14 @@ router.get(
   requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req: Request, res: Response) => {
     const { type, warehouseId, supplierId } = req.query;
+    const organizationId = getOrganizationObjectId(req);
 
-    const filter: Record<string, unknown> = {};
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const filter: Record<string, unknown> = { organizationId };
 
     if (type) {
       if (type !== 'receipt' && type !== 'writeOff' && type !== 'inventory') {
@@ -239,6 +332,12 @@ router.get(
       }
 
       filter.warehouseId = warehouseId;
+
+      const warehouseExists = await WarehouseModel.exists({ _id: warehouseId, organizationId });
+      if (!warehouseExists) {
+        res.status(404).json({ data: null, error: 'Склад не найден' });
+        return;
+      }
     }
 
     if (supplierId) {
@@ -248,9 +347,15 @@ router.get(
       }
 
       filter.supplierId = supplierId;
+
+      const supplierExists = await SupplierModel.exists({ _id: supplierId, organizationId });
+      if (!supplierExists) {
+        res.status(404).json({ data: null, error: 'Поставщик не найден' });
+        return;
+      }
     }
 
-    const receipts = await listStockReceipts(filter);
+    const receipts = await listStockReceipts(filter, organizationId);
 
     res.json({ data: receipts, error: null });
   })
@@ -261,12 +366,22 @@ router.put(
   requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     try {
       const receipt = await updateStockReceipt(id, {
         items: req.body?.items,
         supplierId: req.body?.supplierId,
         occurredAt: req.body?.occurredAt,
+        organizationId,
+        createdBy: req.user?.id ?? '',
+        type: undefined,
+        warehouseId: undefined,
       });
 
       res.json({ data: receipt, error: null });
@@ -286,9 +401,15 @@ router.delete(
   requireRole(['owner', 'superAdmin']),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     try {
-      await deleteStockReceipt(id);
+      await deleteStockReceipt(id, organizationId);
       res.json({ data: { id }, error: null });
     } catch (error) {
       if (error instanceof InventoryReceiptError) {
@@ -304,8 +425,15 @@ router.delete(
 router.get(
   '/suppliers',
   requireRole(['owner', 'superAdmin']),
-  asyncHandler(async (_req: Request, res: Response) => {
-    const suppliers = await SupplierModel.find().sort({ name: 1 });
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const suppliers = await SupplierModel.find({ organizationId }).sort({ name: 1 });
 
     res.json({ data: { suppliers }, error: null });
   })
@@ -314,8 +442,15 @@ router.get(
 router.get(
   '/inventory/low-stock',
   requireRole(['owner', 'superAdmin']),
-  asyncHandler(async (_req: Request, res: Response) => {
-    const lowStockItems = await InventoryItemModel.find({ quantity: { $lt: 5 } })
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const lowStockItems = await InventoryItemModel.find({ quantity: { $lt: 5 }, organizationId })
       .sort({ quantity: 1 })
       .limit(20)
       .lean();
@@ -327,6 +462,13 @@ router.get(
 router.get(
   '/stats/sales-and-shifts',
   asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
     const from = parseDateOnly(req.query.from);
     const to = parseDateOnly(req.query.to);
 
@@ -345,7 +487,7 @@ router.get(
       return;
     }
 
-    const stats = await fetchSalesAndShiftStats({ from, to });
+    const stats = await fetchSalesAndShiftStats({ organizationId: organizationId.toString(), from, to });
 
     res.json({ data: stats, error: null });
   })

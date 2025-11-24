@@ -1,5 +1,5 @@
 import { Router, type Request, type RequestHandler, type Response } from 'express';
-import { isValidObjectId } from 'mongoose';
+import { isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { SupplierModel } from './supplier.model';
@@ -17,8 +17,15 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
 
 router.get(
   '/',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const suppliers = await SupplierModel.find().sort({ name: 1 });
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = req.organization?.id;
+
+    if (!organizationId || !isValidObjectId(organizationId)) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const suppliers = await SupplierModel.find({ organizationId }).sort({ name: 1 });
 
     res.json({ data: suppliers, error: null });
   })
@@ -28,6 +35,12 @@ router.post(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
     const { name, contactName, phone, email, address, notes } = req.body;
+    const organizationId = req.organization?.id;
+
+    if (!organizationId || !isValidObjectId(organizationId)) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
 
     if (!name?.trim()) {
       res.status(400).json({ data: null, error: 'Name is required' });
@@ -35,6 +48,7 @@ router.post(
     }
 
     const supplier = new SupplierModel({
+      organizationId: new Types.ObjectId(organizationId),
       name: name.trim(),
       contactName: contactName?.trim(),
       phone: phone?.trim(),
@@ -53,9 +67,15 @@ router.put(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const organizationId = req.organization?.id;
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid supplier id' });
+      return;
+    }
+
+    if (!organizationId || !isValidObjectId(organizationId)) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
       return;
     }
 
@@ -91,7 +111,7 @@ router.put(
       update.notes = notes?.trim() || undefined;
     }
 
-    const supplier = await SupplierModel.findByIdAndUpdate(id, update, {
+    const supplier = await SupplierModel.findOneAndUpdate({ _id: id, organizationId }, update, {
       new: true,
       runValidators: true,
     });
@@ -109,13 +129,19 @@ router.delete(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const organizationId = req.organization?.id;
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid supplier id' });
       return;
     }
 
-    const supplier = await SupplierModel.findById(id);
+    if (!organizationId || !isValidObjectId(organizationId)) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const supplier = await SupplierModel.findOne({ _id: id, organizationId });
 
     if (!supplier) {
       res.status(404).json({ data: null, error: 'Supplier not found' });

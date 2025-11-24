@@ -41,14 +41,16 @@ export interface TopCustomerEntry {
   pointsBalance: number;
 }
 
-export const getSummaryReport = async (): Promise<SummaryReport> => {
+export const getSummaryReport = async (
+  organizationId: Types.ObjectId
+): Promise<SummaryReport> => {
   const [orderStats] = await OrderModel.aggregate<{
     totalOrders: number;
     totalRevenue: number;
     takeawayOrders: number;
     deliveryOrders: number;
   }>([
-    { $match: { status: { $in: REVENUE_STATUSES } } },
+    { $match: { status: { $in: REVENUE_STATUSES }, organizationId } },
     {
       $group: {
         _id: null,
@@ -73,6 +75,7 @@ export const getSummaryReport = async (): Promise<SummaryReport> => {
     totalPointsBalance: number;
     totalSpent: number;
   }>([
+    { $match: { organizationId } },
     {
       $group: {
         _id: null,
@@ -110,6 +113,7 @@ export const getSummaryReport = async (): Promise<SummaryReport> => {
 };
 
 interface DailyReportParams {
+  organizationId: Types.ObjectId;
   from?: Date;
   to?: Date;
 }
@@ -119,6 +123,7 @@ export const getDailyReport = async (
 ): Promise<DailyReportEntry[]> => {
   const matchStage: Record<string, unknown> = {
     status: { $in: REVENUE_STATUSES },
+    organizationId: params.organizationId,
   };
 
   if (params.from || params.to) {
@@ -168,6 +173,7 @@ export const getDailyReport = async (
 };
 
 export const getTopProducts = async (
+  organizationId: Types.ObjectId,
   limit: number
 ): Promise<TopProductEntry[]> => {
   const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
@@ -183,7 +189,7 @@ export const getTopProducts = async (
     totalQuantity: number;
     totalRevenue: number;
   }>([
-    { $match: { status: { $in: REVENUE_STATUSES } } },
+    { $match: { status: { $in: REVENUE_STATUSES }, organizationId } },
     { $unwind: '$items' },
     {
       $group: {
@@ -206,6 +212,7 @@ export const getTopProducts = async (
 };
 
 export const getTopCustomers = async (
+  organizationId: Types.ObjectId,
   limit: number
 ): Promise<TopCustomerEntry[]> => {
   const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
@@ -225,6 +232,7 @@ export const getTopCustomers = async (
     totalSpent: number;
     points: number;
   }>([
+    { $match: { organizationId } },
     {
       $project: {
         name: 1,

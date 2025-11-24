@@ -10,6 +10,7 @@ export interface InventoryAuditItem {
 }
 
 export interface InventoryAudit {
+  organizationId: Types.ObjectId;
   warehouseId: Types.ObjectId;
   performedBy: Types.ObjectId;
   performedAt: Date;
@@ -42,8 +43,11 @@ const inventoryAuditSchema = new Schema<InventoryAuditDocument>(
     items: { type: [inventoryAuditItemSchema], required: true },
     totalLossValue: { type: Number, required: true, default: 0 },
     totalGainValue: { type: Number, required: true, default: 0 },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
   },
   { timestamps: true }
 );
+
+inventoryAuditSchema.index({ organizationId: 1, performedAt: -1 });
 
 export const InventoryAuditModel = model<InventoryAuditDocument>('InventoryAudit', inventoryAuditSchema);
