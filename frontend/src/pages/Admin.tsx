@@ -5,6 +5,10 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  LabelList,
+  Line,
+  LineChart,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -1465,6 +1469,28 @@ const AdminPage: React.FC = () => {
 
   const formatInteger = (value?: number | null) => normalizeNumber(value).toLocaleString('ru-RU');
 
+  const formatCurrencyShort = (value?: number | null) =>
+    normalizeNumber(value).toLocaleString('ru-RU', {
+      maximumFractionDigits: 0,
+    });
+
+  const formatDateTick = (value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? value
+      : date.toLocaleDateString('ru-RU', { month: '2-digit', day: '2-digit' });
+  };
+
+  const revenueExtremes = useMemo(() => {
+    if (!daily.length) return null;
+
+    const max = daily.reduce((acc, entry) => (entry.revenue > acc.revenue ? entry : acc), daily[0]);
+    const min = daily.reduce((acc, entry) => (entry.revenue < acc.revenue ? entry : acc), daily[0]);
+
+    return { max, min };
+  }, [daily]);
+
   const ingredientCostMap = useMemo(
     () =>
       ingredients.reduce<Record<string, number>>((acc, ingredient) => {
@@ -2899,7 +2925,7 @@ const AdminPage: React.FC = () => {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`inline-flex items-center gap-2 rounded-lg border-b-2 px-3 py-2 text-sm font-semibold transition ${
+                className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold transition ${
                   activeTab === item.id
                     ? 'border-slate-900 text-slate-900'
                     : 'border-transparent text-slate-500 hover:border-slate-200 hover:text-slate-900'
@@ -3170,42 +3196,112 @@ const AdminPage: React.FC = () => {
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
               <Card title="Выручка по дням">
                 <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={daily}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="date" stroke="#64748b" />
-                      <YAxis stroke="#64748b" />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: 16,
-                          border: '1px solid #e2e8f0',
-                          backgroundColor: '#ffffff',
-                        }}
-                        cursor={{ fill: 'rgba(16, 185, 129, 0.12)' }}
-                      />
-                      <Bar dataKey="revenue" fill="#10B981" radius={[12, 12, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {daily.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={daily} margin={{ left: 8, right: 8, bottom: 12, top: 12 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="date" stroke="#64748b" tickFormatter={formatDateTick} />
+                        <YAxis
+                          stroke="#64748b"
+                          tickFormatter={(value) => `${formatCurrencyShort(value)} ₽`}
+                          width={70}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            borderRadius: 16,
+                            border: '1px solid #e2e8f0',
+                            backgroundColor: '#ffffff',
+                          }}
+                          formatter={(value: number) => [`${formatCurrency(value)} ₽`, 'Выручка']}
+                          labelFormatter={(label) =>
+                            typeof label === 'string'
+                              ? new Date(label).toLocaleDateString('ru-RU')
+                              : ''
+                          }
+                          cursor={{ stroke: '#10B981', strokeDasharray: '4 4' }}
+                        />
+                        {revenueExtremes ? (
+                          <>
+                            <ReferenceDot
+                              x={revenueExtremes.max.date}
+                              y={revenueExtremes.max.revenue}
+                              r={5}
+                              fill="#10B981"
+                              stroke="#065f46"
+                              strokeWidth={2}
+                              label={{ position: 'top', value: 'Пик', fill: '#065f46', fontSize: 12 }}
+                            />
+                            <ReferenceDot
+                              x={revenueExtremes.min.date}
+                              y={revenueExtremes.min.revenue}
+                              r={5}
+                              fill="#e0f2fe"
+                              stroke="#3b82f6"
+                              strokeWidth={2}
+                              label={{ position: 'bottom', value: 'Минимум', fill: '#1d4ed8', fontSize: 12 }}
+                            />
+                          </>
+                        ) : null}
+                        <Line
+                          type="monotone"
+                          dataKey="revenue"
+                          stroke="#10B981"
+                          strokeWidth={3}
+                          dot={({ cx, cy, value, payload }) => {
+                            const isExtreme =
+                              revenueExtremes?.max.date === payload.date || revenueExtremes?.min.date === payload.date;
+                            return (
+                              <circle
+                                cx={cx}
+                                cy={cy}
+                                r={isExtreme ? 6 : 4}
+                                stroke={isExtreme ? '#065f46' : '#10B981'}
+                                strokeWidth={2}
+                                fill="#ffffff"
+                              />
+                            );
+                          }}
+                          activeDot={{ r: 7, fill: '#10B981', stroke: '#065f46', strokeWidth: 2 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
+                      Нет данных
+                    </div>
+                  )}
                 </div>
               </Card>
               <Card title="Топ продукты">
                 <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart layout="vertical" data={topProducts}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis type="number" stroke="#64748b" />
-                      <YAxis type="category" dataKey="name" stroke="#64748b" width={120} />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: 16,
-                          border: '1px solid #e2e8f0',
-                          backgroundColor: '#ffffff',
-                        }}
-                        cursor={{ fill: 'rgba(59, 130, 246, 0.12)' }}
-                      />
-                      <Bar dataKey="qty" fill="#3B82F6" radius={[0, 12, 12, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {topProducts.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart layout="vertical" data={topProducts} margin={{ left: 20, right: 16, bottom: 12, top: 12 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis type="number" stroke="#64748b" tickFormatter={(value) => `${formatCurrencyShort(value)} шт.`} />
+                        <YAxis type="category" dataKey="name" stroke="#64748b" width={120} />
+                        <Tooltip
+                          contentStyle={{
+                            borderRadius: 16,
+                            border: '1px solid #e2e8f0',
+                            backgroundColor: '#ffffff',
+                          }}
+                          formatter={(value: number, _name, { payload }) => [
+                            `${formatInteger(value)} шт.`,
+                            payload?.name ?? 'Позиция',
+                          ]}
+                          cursor={{ fill: 'rgba(59, 130, 246, 0.08)' }}
+                        />
+                        <Bar dataKey="qty" fill="#3B82F6" radius={[0, 12, 12, 0]} barSize={22}>
+                          <LabelList dataKey="qty" position="right" formatter={(value: number) => `${formatInteger(value)} шт.`} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
+                      Нет данных
+                    </div>
+                  )}
                 </div>
               </Card>
             </div>
