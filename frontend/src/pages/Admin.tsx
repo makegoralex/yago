@@ -5,11 +5,17 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  LabelList,
+  Area,
+  Line,
+  LineChart,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import type { TooltipProps } from 'recharts';
 import api from '../lib/api';
 import { useToast } from '../providers/ToastProvider';
 import type { Category, ModifierGroup, Product } from '../store/catalog';
@@ -665,7 +671,7 @@ const AdminPage: React.FC = () => {
         api.get('/api/reports/top-customers'),
       ]);
       setSummary(summaryRes.data.data);
-      setDaily(dailyRes.data.data);
+      setDaily(normalizeDailyReport(dailyRes.data.data));
       setTopProducts(productsRes.data.data);
       setTopCustomers(customersRes.data.data);
     } catch (error) {
@@ -1464,6 +1470,79 @@ const AdminPage: React.FC = () => {
     });
 
   const formatInteger = (value?: number | null) => normalizeNumber(value).toLocaleString('ru-RU');
+
+  const formatCurrencyShort = (value?: number | null) =>
+    normalizeNumber(value).toLocaleString('ru-RU', {
+      maximumFractionDigits: 0,
+    });
+
+  const formatDateTick = (value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? value
+      : date.toLocaleDateString('ru-RU', { month: '2-digit', day: '2-digit' });
+  };
+
+  const normalizeDailyReport = (
+    data: unknown
+  ): { date: string; revenue: number; orders: number }[] => {
+    if (!Array.isArray(data)) return [];
+
+    return data
+      .map((entry) => {
+        const dateRaw = typeof entry?.date === 'string' ? entry.date : '';
+        const parsed = dateRaw ? new Date(dateRaw) : null;
+        const safeDate = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : dateRaw;
+
+        return {
+          date: safeDate,
+          revenue: normalizeNumber((entry as { revenue?: number }).revenue),
+          orders: normalizeNumber((entry as { orders?: number }).orders),
+        };
+      })
+      .filter((entry) => entry.date)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
+
+  const revenueExtremes = useMemo(() => {
+    if (!daily.length) return null;
+
+    const max = daily.reduce((acc, entry) => (entry.revenue > acc.revenue ? entry : acc), daily[0]);
+    const min = daily.reduce((acc, entry) => (entry.revenue < acc.revenue ? entry : acc), daily[0]);
+
+    return { max, min };
+  }, [daily]);
+
+  const renderRevenueTooltip = useCallback(
+    ({ active, payload, label }: TooltipProps<number, string>) => {
+      if (!active || !payload?.length) {
+        return null;
+      }
+
+      const point = payload[0].payload as { date: string; revenue: number; orders: number };
+      const date = typeof label === 'string' ? new Date(label) : null;
+      const dateLabel =
+        date && !Number.isNaN(date.getTime())
+          ? date.toLocaleDateString('ru-RU', {
+              day: 'numeric',
+              month: 'long',
+              weekday: 'short',
+            })
+          : label;
+
+      return (
+        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-md">
+          <p className="text-xs text-slate-500">{dateLabel}</p>
+          <p className="text-base font-semibold text-slate-900">{formatCurrency(point.revenue)} ₽</p>
+          {point.orders ? (
+            <p className="text-xs text-slate-500">Заказов: {formatInteger(point.orders)}</p>
+          ) : null}
+        </div>
+      );
+    },
+    [formatCurrency, formatInteger]
+  );
 
   const ingredientCostMap = useMemo(
     () =>
@@ -2899,7 +2978,7 @@ const AdminPage: React.FC = () => {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`inline-flex items-center gap-2 rounded-lg border-b-2 px-3 py-2 text-sm font-semibold transition ${
+                className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold transition ${
                   activeTab === item.id
                     ? 'border-slate-900 text-slate-900'
                     : 'border-transparent text-slate-500 hover:border-slate-200 hover:text-slate-900'
@@ -3170,42 +3249,131 @@ const AdminPage: React.FC = () => {
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
               <Card title="Выручка по дням">
                 <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={daily}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="date" stroke="#64748b" />
-                      <YAxis stroke="#64748b" />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: 16,
-                          border: '1px solid #e2e8f0',
-                          backgroundColor: '#ffffff',
-                        }}
-                        cursor={{ fill: 'rgba(16, 185, 129, 0.12)' }}
-                      />
-                      <Bar dataKey="revenue" fill="#10B981" radius={[12, 12, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {daily.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={daily} margin={{ left: 8, right: 8, bottom: 12, top: 12 }}>
+                        <defs>
+                          <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10B981" stopOpacity={0.18} />
+                            <stop offset="95%" stopColor="#10B981" stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="#64748b"
+                          tickFormatter={formatDateTick}
+                          tickMargin={10}
+                          tickLine={false}
+                          axisLine={{ stroke: '#e2e8f0' }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis
+                          stroke="#64748b"
+                          tickFormatter={(value) => `${formatCurrencyShort(value)} ₽`}
+                          width={80}
+                          tickMargin={8}
+                          tickLine={false}
+                          axisLine={{ stroke: '#e2e8f0' }}
+                          domain={[0, 'dataMax']}
+                          allowDecimals={false}
+                        />
+                        <Tooltip cursor={{ stroke: '#10B981', strokeDasharray: '4 4' }} content={renderRevenueTooltip} />
+                        {revenueExtremes ? (
+                          <>
+                            <ReferenceDot
+                              x={revenueExtremes.max.date}
+                              y={revenueExtremes.max.revenue}
+                              r={6}
+                              fill="#065f46"
+                              stroke="#10B981"
+                              strokeWidth={2}
+                              label={{
+                                position: 'top',
+                                value: `Пик · ${formatCurrencyShort(revenueExtremes.max.revenue)} ₽`,
+                                fill: '#065f46',
+                                fontSize: 12,
+                              }}
+                            />
+                            <ReferenceDot
+                              x={revenueExtremes.min.date}
+                              y={revenueExtremes.min.revenue}
+                              r={6}
+                              fill="#e0f2fe"
+                              stroke="#3b82f6"
+                              strokeWidth={2}
+                              label={{
+                                position: 'bottom',
+                                value: `Минимум · ${formatCurrencyShort(revenueExtremes.min.revenue)} ₽`,
+                                fill: '#1d4ed8',
+                                fontSize: 12,
+                              }}
+                            />
+                          </>
+                        ) : null}
+                        <Area type="monotone" dataKey="revenue" stroke="none" fill="url(#revenueFill)" />
+                        <Line
+                          type="monotone"
+                          dataKey="revenue"
+                          stroke="#10B981"
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                          dot={({ cx, cy, payload }) => {
+                            const isExtreme =
+                              revenueExtremes?.max.date === payload.date || revenueExtremes?.min.date === payload.date;
+                            return (
+                              <circle
+                                cx={cx}
+                                cy={cy}
+                                r={isExtreme ? 6 : 4}
+                                stroke={isExtreme ? '#065f46' : '#10B981'}
+                                strokeWidth={isExtreme ? 3 : 2}
+                                fill="#ffffff"
+                              />
+                            );
+                          }}
+                          activeDot={{ r: 8, fill: '#10B981', stroke: '#065f46', strokeWidth: 2 }}
+                          isAnimationActive={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
+                      Нет данных
+                    </div>
+                  )}
                 </div>
               </Card>
               <Card title="Топ продукты">
                 <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart layout="vertical" data={topProducts}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis type="number" stroke="#64748b" />
-                      <YAxis type="category" dataKey="name" stroke="#64748b" width={120} />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: 16,
-                          border: '1px solid #e2e8f0',
-                          backgroundColor: '#ffffff',
-                        }}
-                        cursor={{ fill: 'rgba(59, 130, 246, 0.12)' }}
-                      />
-                      <Bar dataKey="qty" fill="#3B82F6" radius={[0, 12, 12, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {topProducts.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart layout="vertical" data={topProducts} margin={{ left: 20, right: 16, bottom: 12, top: 12 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis type="number" stroke="#64748b" tickFormatter={(value) => `${formatCurrencyShort(value)} шт.`} />
+                        <YAxis type="category" dataKey="name" stroke="#64748b" width={120} />
+                        <Tooltip
+                          contentStyle={{
+                            borderRadius: 16,
+                            border: '1px solid #e2e8f0',
+                            backgroundColor: '#ffffff',
+                          }}
+                          formatter={(value: number, _name, { payload }) => [
+                            `${formatInteger(value)} шт.`,
+                            payload?.name ?? 'Позиция',
+                          ]}
+                          cursor={{ fill: 'rgba(59, 130, 246, 0.08)' }}
+                        />
+                        <Bar dataKey="qty" fill="#3B82F6" radius={[0, 12, 12, 0]} barSize={22}>
+                          <LabelList dataKey="qty" position="right" formatter={(value: number) => `${formatInteger(value)} шт.`} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
+                      Нет данных
+                    </div>
+                  )}
                 </div>
               </Card>
             </div>
