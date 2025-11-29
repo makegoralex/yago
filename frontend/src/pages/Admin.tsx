@@ -3170,42 +3170,54 @@ const AdminPage: React.FC = () => {
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
               <Card title="Выручка по дням">
                 <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={daily}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="date" stroke="#64748b" />
-                      <YAxis stroke="#64748b" />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: 16,
-                          border: '1px solid #e2e8f0',
-                          backgroundColor: '#ffffff',
-                        }}
-                        cursor={{ fill: 'rgba(16, 185, 129, 0.12)' }}
-                      />
-                      <Bar dataKey="revenue" fill="#10B981" radius={[12, 12, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {daily.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={daily}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="date" stroke="#64748b" />
+                        <YAxis stroke="#64748b" />
+                        <Tooltip
+                          contentStyle={{
+                            borderRadius: 16,
+                            border: '1px solid #e2e8f0',
+                            backgroundColor: '#ffffff',
+                          }}
+                          cursor={{ fill: 'rgba(16, 185, 129, 0.12)' }}
+                        />
+                        <Bar dataKey="revenue" fill="#10B981" radius={[12, 12, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
+                      Нет данных
+                    </div>
+                  )}
                 </div>
               </Card>
               <Card title="Топ продукты">
                 <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart layout="vertical" data={topProducts}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis type="number" stroke="#64748b" />
-                      <YAxis type="category" dataKey="name" stroke="#64748b" width={120} />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: 16,
-                          border: '1px solid #e2e8f0',
-                          backgroundColor: '#ffffff',
-                        }}
-                        cursor={{ fill: 'rgba(59, 130, 246, 0.12)' }}
-                      />
-                      <Bar dataKey="qty" fill="#3B82F6" radius={[0, 12, 12, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {topProducts.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart layout="vertical" data={topProducts}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis type="number" stroke="#64748b" />
+                        <YAxis type="category" dataKey="name" stroke="#64748b" width={120} />
+                        <Tooltip
+                          contentStyle={{
+                            borderRadius: 16,
+                            border: '1px solid #e2e8f0',
+                            backgroundColor: '#ffffff',
+                          }}
+                          cursor={{ fill: 'rgba(59, 130, 246, 0.12)' }}
+                        />
+                        <Bar dataKey="qty" fill="#3B82F6" radius={[0, 12, 12, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
+                      Нет данных
+                    </div>
+                  )}
                 </div>
               </Card>
             </div>
