@@ -24,15 +24,19 @@ export interface FiscalizationResult {
   receiptId?: string;
 }
 
-const API_VERSION = 'v4';
+const API_VERSIONS = ['v5', 'v4'] as const;
 
-const getBaseUrl = (mode: AtolMode): string => {
+const getBaseUrl = (mode: AtolMode, version: (typeof API_VERSIONS)[number]): string => {
   const host = mode === 'prod' ? 'https://online.atol.ru/possystem' : 'https://testonline.atol.ru/possystem';
-  return `${host}/${API_VERSION}`;
+  return `${host}/${version}`;
 };
 
-const requestToken = async (mode: AtolMode, credentials: AtolCredentials): Promise<string> => {
-  const baseUrl = getBaseUrl(mode);
+const requestToken = async (
+  mode: AtolMode,
+  version: (typeof API_VERSIONS)[number],
+  credentials: AtolCredentials
+): Promise<string> => {
+  const baseUrl = getBaseUrl(mode, version);
   const response = await fetch(`${baseUrl}/getToken`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -95,32 +99,62 @@ const sendReceiptRequest = async (
   credentials: AtolCredentials,
   payload: unknown
 ): Promise<FiscalizationResult> => {
-  const token = await requestToken(mode, credentials);
-  const baseUrl = getBaseUrl(mode);
-  const response = await fetch(`${baseUrl}/${credentials.groupCode}/sell?tokenid=${encodeURIComponent(token)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  const attempted: string[] = [];
 
-  const body = (await response.json().catch(() => ({}))) as {
-    uuid?: string;
-    status?: string;
-    payload?: { uuid?: string; status?: string };
-    error?: { text?: string };
-  };
+  for (const version of API_VERSIONS) {
+    attempted.push(version);
 
-  if (!response.ok || body.error) {
-    const message = body.error?.text || `ATOL receipt error (${response.status})`;
-    throw new Error(message);
+    try {
+      const token = await requestToken(mode, version, credentials);
+      const baseUrl = getBaseUrl(mode, version);
+      const response = await fetch(`${baseUrl}/${credentials.groupCode}/sell?tokenid=${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const body = (await response.json().catch(() => ({}))) as {
+        uuid?: string;
+        status?: string;
+        payload?: { uuid?: string; status?: string };
+        error?: { text?: string };
+      };
+
+      if (!response.ok || body.error) {
+        const message = body.error?.text || `ATOL receipt error (${response.status})`;
+
+        const protocolError = message.toLowerCase().includes('версию проток') || message.toLowerCase().includes('protocol');
+        if (protocolError) {
+          throw new Error(`PROTOCOL_VERSION_UNSUPPORTED:${message}`);
+        }
+
+        throw new Error(message);
+      }
+
+      const statusText = body.status || body.payload?.status || 'pending';
+      const receiptId = body.uuid || body.payload?.uuid;
+      const normalizedStatus: 'registered' | 'pending' =
+        statusText === 'done' || statusText === 'ready' ? 'registered' : 'pending';
+
+      return { status: normalizedStatus, receiptId };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isProtocolError = message.startsWith('PROTOCOL_VERSION_UNSUPPORTED:');
+
+      if (!isProtocolError && version !== API_VERSIONS[API_VERSIONS.length - 1]) {
+        // Non-protocol errors should not try another version unless more options are available
+        throw error instanceof Error ? error : new Error(message);
+      }
+
+      if (isProtocolError && version !== API_VERSIONS[API_VERSIONS.length - 1]) {
+        continue;
+      }
+
+      throw error instanceof Error ? new Error(message.replace('PROTOCOL_VERSION_UNSUPPORTED:', '').trim()) : error;
+    }
   }
 
-  const statusText = body.status || body.payload?.status || 'pending';
-  const receiptId = body.uuid || body.payload?.uuid;
-  const normalizedStatus: 'registered' | 'pending' =
-    statusText === 'done' || statusText === 'ready' ? 'registered' : 'pending';
-
-  return { status: normalizedStatus, receiptId };
+  throw new Error(`ATOL receipt error (tried versions: ${attempted.join(', ')})`);
 };
 
 export const getFiscalProviderFromSettings = (settings?: OrganizationSettings | null) => settings?.fiscalProvider;

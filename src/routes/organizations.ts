@@ -48,14 +48,21 @@ const validateFiscalProviderSettings = (payload: unknown): FiscalProviderSetting
 
   const enabled = Boolean((payload as { enabled?: unknown }).enabled);
   const mode = (payload as { mode?: unknown }).mode === 'prod' ? 'prod' : 'test';
-  const login = normalizeString((payload as { login?: unknown }).login, 'login');
-  const password = normalizeString((payload as { password?: unknown }).password, 'password');
-  const groupCode = normalizeString((payload as { groupCode?: unknown }).groupCode, 'groupCode');
-  const inn = normalizeString((payload as { inn?: unknown }).inn, 'inn');
-  const paymentAddress = normalizeString(
-    (payload as { paymentAddress?: unknown }).paymentAddress,
-    'paymentAddress'
-  );
+  const login = enabled
+    ? normalizeString((payload as { login?: unknown }).login, 'login')
+    : (payload as { login?: string }).login?.trim() ?? '';
+  const password = enabled
+    ? normalizeString((payload as { password?: unknown }).password, 'password')
+    : (payload as { password?: string }).password?.trim() ?? '';
+  const groupCode = enabled
+    ? normalizeString((payload as { groupCode?: unknown }).groupCode, 'groupCode')
+    : (payload as { groupCode?: string }).groupCode?.trim() ?? '';
+  const inn = enabled
+    ? normalizeString((payload as { inn?: unknown }).inn, 'inn')
+    : (payload as { inn?: string }).inn?.trim() ?? '';
+  const paymentAddress = enabled
+    ? normalizeString((payload as { paymentAddress?: unknown }).paymentAddress, 'paymentAddress')
+    : (payload as { paymentAddress?: string }).paymentAddress?.trim() ?? '';
   const deviceIdRaw = (payload as { deviceId?: unknown }).deviceId;
   const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim() ? deviceIdRaw.trim() : undefined;
 
@@ -278,10 +285,48 @@ organizationsRouter.post('/public/create', async (req: Request, res: Response) =
   }
 });
 
+organizationsRouter.get(
+  '/:organizationId',
+  authMiddleware,
+  requireRole(['owner', 'superAdmin']),
+  async (req: Request, res: Response) => {
+    const { organizationId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+      res.status(400).json({ data: null, error: 'Invalid organization id' });
+      return;
+    }
+
+    if (req.user?.role === 'owner' && req.user.organizationId !== organizationId) {
+      res.status(403).json({ data: null, error: 'Forbidden' });
+      return;
+    }
+
+    const organization = await OrganizationModel.findById(organizationId).lean();
+
+    if (!organization) {
+      res.status(404).json({ data: null, error: 'Organization not found' });
+      return;
+    }
+
+    res.json({
+      data: {
+        id: String(organization._id),
+        name: organization.name,
+        subscriptionPlan: organization.subscriptionPlan ?? null,
+        subscriptionStatus: organization.subscriptionStatus,
+        createdAt: organization.createdAt,
+        settings: organization.settings ?? {},
+      },
+      error: null,
+    });
+  }
+);
+
 organizationsRouter.patch(
   '/:organizationId',
   authMiddleware,
-  requireRole('superAdmin'),
+  requireRole(['owner', 'superAdmin']),
   async (req: Request, res: Response) => {
     try {
       const { organizationId } = req.params;
@@ -291,23 +336,30 @@ organizationsRouter.patch(
         return;
       }
 
+      if (req.user?.role === 'owner' && req.user.organizationId !== organizationId) {
+        res.status(403).json({ data: null, error: 'Forbidden' });
+        return;
+      }
+
       const updates: Record<string, unknown> = {};
       const setOperations: Record<string, unknown> = {};
       const unsetOperations: Record<string, unknown> = {};
 
-      if (typeof req.body?.name === 'string' && req.body.name.trim()) {
-        updates.name = req.body.name.trim();
-      }
+      if (req.user?.role === 'superAdmin') {
+        if (typeof req.body?.name === 'string' && req.body.name.trim()) {
+          updates.name = req.body.name.trim();
+        }
 
-      if (typeof req.body?.subscriptionPlan === 'string') {
-        updates.subscriptionPlan = req.body.subscriptionPlan.trim() || undefined;
-      }
+        if (typeof req.body?.subscriptionPlan === 'string') {
+          updates.subscriptionPlan = req.body.subscriptionPlan.trim() || undefined;
+        }
 
-      if (
-        typeof req.body?.subscriptionStatus === 'string' &&
-        ['active', 'expired', 'trial', 'paused'].includes(req.body.subscriptionStatus)
-      ) {
-        updates.subscriptionStatus = req.body.subscriptionStatus;
+        if (
+          typeof req.body?.subscriptionStatus === 'string' &&
+          ['active', 'expired', 'trial', 'paused'].includes(req.body.subscriptionStatus)
+        ) {
+          updates.subscriptionStatus = req.body.subscriptionStatus;
+        }
       }
 
       if ('fiscalProvider' in (req.body?.settings ?? req.body)) {
@@ -381,12 +433,17 @@ organizationsRouter.patch(
 organizationsRouter.post(
   '/:organizationId/fiscal/test',
   authMiddleware,
-  requireRole('superAdmin'),
+  requireRole(['owner', 'superAdmin']),
   async (req: Request, res: Response) => {
     const { organizationId } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(organizationId)) {
       res.status(400).json({ data: null, error: 'Invalid organization id' });
+      return;
+    }
+
+    if (req.user?.role === 'owner' && req.user.organizationId !== organizationId) {
+      res.status(403).json({ data: null, error: 'Forbidden' });
       return;
     }
 
