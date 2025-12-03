@@ -52,6 +52,9 @@ export interface OrderPayment {
   method: PaymentMethod;
   amount: number;
   change?: number;
+  receiptId?: string;
+  fiscalStatus?: 'pending' | 'registered' | 'failed';
+  fiscalError?: string;
 }
 
 export interface Order {
@@ -72,6 +75,9 @@ export interface Order {
   payment?: OrderPayment;
   orderTag?: OrderTag;
   status: OrderStatus;
+  receiptId?: string;
+  fiscalStatus?: 'pending' | 'registered' | 'failed';
+  fiscalError?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -133,6 +139,9 @@ const paymentSchema = new Schema<OrderPayment>(
     },
     amount: { type: Number, required: true, min: 0 },
     change: { type: Number, required: false, min: 0 },
+    receiptId: { type: String, required: false, trim: true },
+    fiscalStatus: { type: String, enum: ['pending', 'registered', 'failed'], required: false },
+    fiscalError: { type: String, required: false, trim: true },
   },
   { _id: false }
 );
@@ -161,6 +170,9 @@ const orderSchema = new Schema<OrderDocument>(
       required: true,
       default: 'draft',
     },
+    receiptId: { type: String, required: false, trim: true },
+    fiscalStatus: { type: String, enum: ['pending', 'registered', 'failed'], required: false },
+    fiscalError: { type: String, required: false, trim: true },
   },
   { timestamps: true }
 );
