@@ -128,10 +128,24 @@ const sendReceiptRequest = async (
   credentials: AtolCredentials,
   payload: unknown
 ): Promise<FiscalizationResult> => {
-  const attempted: { version: string; action: 'retry' | 'failure' | 'business-error' | 'success'; message?: string }[] = [];
+  const attempted: { version: string; action: 'retry-next' | 'failure' | 'business-error' | 'success'; message?: string }[] = [];
+
+  const formatAttempts = () =>
+    attempted
+      .map((item) => {
+        const actionText =
+          item.action === 'retry-next'
+            ? 'retrying with next version'
+            : item.action === 'business-error'
+            ? 'stopped due to business error'
+            : item.action;
+
+        return `${item.version} ${actionText}${item.message ? ` (${item.message})` : ''}`;
+      })
+      .join('; ');
 
   for (const version of API_VERSIONS) {
-    attempted.push({ version, action: 'retry' });
+    attempted.push({ version, action: 'retry-next' });
     const normalizedGroupCode = normalizeGroupCode(credentials.groupCode, version);
 
     try {
@@ -158,7 +172,7 @@ const sendReceiptRequest = async (
           throw createAtolError(`PROTOCOL_VERSION_UNSUPPORTED:${message}`, { retryable: true });
         }
 
-        const businessError = Boolean(body.error);
+        const businessError = response.ok && Boolean(body.error);
         throw createAtolError(message, { business: businessError, retryable: !businessError });
       }
 
@@ -179,13 +193,12 @@ const sendReceiptRequest = async (
       const errorWithMeta = error as Error & { retryable?: boolean; business?: boolean };
       const isBusinessError = Boolean(errorWithMeta.business);
       const retryableFlag = errorWithMeta.retryable;
-      const shouldRetry =
-        version !== API_VERSIONS[API_VERSIONS.length - 1] &&
-        (!isBusinessError || retryableFlag === true || (retryableFlag === undefined && !isBusinessError) || isProtocolError);
+      const isLastVersion = version === API_VERSIONS[API_VERSIONS.length - 1];
+      const shouldRetry = !isLastVersion && (retryableFlag !== false) && (!isBusinessError || retryableFlag === true || isProtocolError);
 
       attempted[attempted.length - 1] = {
         version,
-        action: shouldRetry ? 'retry' : isBusinessError ? 'business-error' : 'failure',
+        action: shouldRetry ? 'retry-next' : isBusinessError ? 'business-error' : 'failure',
         message: message.replace('PROTOCOL_VERSION_UNSUPPORTED:', '').trim(),
       };
 
@@ -193,19 +206,11 @@ const sendReceiptRequest = async (
         continue;
       }
 
-      const summary = attempted
-        .map((item) => `${item.version} ${item.action}${item.message ? `: ${item.message}` : ''}`)
-        .join('; ');
-
-      throw new Error(`ATOL receipt error (attempts: ${summary})`);
+      throw new Error(`ATOL receipt error (attempts: ${formatAttempts()})`);
     }
   }
 
-  const summary = attempted
-    .map((item) => `${item.version} ${item.action}${item.message ? `: ${item.message}` : ''}`)
-    .join('; ');
-
-  throw new Error(`ATOL receipt error (attempts: ${summary})`);
+  throw new Error(`ATOL receipt error (attempts: ${formatAttempts()})`);
 };
 
 export const getFiscalProviderFromSettings = (settings?: OrganizationSettings | null) => settings?.fiscalProvider;
