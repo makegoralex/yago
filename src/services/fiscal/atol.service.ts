@@ -139,15 +139,18 @@ const sendReceiptRequest = async (
       return { status: normalizedStatus, receiptId };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const isProtocolError = message.startsWith('PROTOCOL_VERSION_UNSUPPORTED:');
+      const normalizedMessage = message.toLowerCase();
+      const isProtocolError =
+        message.startsWith('PROTOCOL_VERSION_UNSUPPORTED:') ||
+        normalizedMessage.includes('версию протокол');
+
+      if (isProtocolError && version !== API_VERSIONS[API_VERSIONS.length - 1]) {
+        continue;
+      }
 
       if (!isProtocolError && version !== API_VERSIONS[API_VERSIONS.length - 1]) {
         // Non-protocol errors should not try another version unless more options are available
         throw error instanceof Error ? error : new Error(message);
-      }
-
-      if (isProtocolError && version !== API_VERSIONS[API_VERSIONS.length - 1]) {
-        continue;
       }
 
       throw error instanceof Error ? new Error(message.replace('PROTOCOL_VERSION_UNSUPPORTED:', '').trim()) : error;

@@ -297,7 +297,7 @@ organizationsRouter.get(
       return;
     }
 
-    if (req.user?.role === 'owner' && req.user.organizationId !== organizationId) {
+    if (req.user?.role === 'owner' && String(req.user.organizationId) !== organizationId) {
       res.status(403).json({ data: null, error: 'Forbidden' });
       return;
     }

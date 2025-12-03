@@ -847,6 +847,8 @@ router.post(
 
     if (fiscalProvider?.enabled && fiscalProvider.provider === 'atol') {
       try {
+        const orderIdString = order._id instanceof Types.ObjectId ? order._id.toString() : String(order._id);
+
         const fiscalResult = await sendAtolReceipt({
           mode: fiscalProvider.mode,
           credentials: {
@@ -860,7 +862,7 @@ router.post(
           items: buildFiscalItems(order.items),
           paymentMethod: method,
           total: order.total,
-          externalId: `order-${order._id.toString()}`,
+          externalId: `order-${orderIdString}`,
         });
 
         receiptId = fiscalResult.receiptId;
