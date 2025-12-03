@@ -172,7 +172,20 @@ const sendReceiptRequest = async (
           throw createAtolError(`PROTOCOL_VERSION_UNSUPPORTED:${message}`, { retryable: true });
         }
 
-        const businessError = response.ok && Boolean(body.error);
+        const errorText = body.error?.text?.toLowerCase() || '';
+        const technicalPatterns = [
+          'касс',
+          'timeout',
+          'соединен',
+          'unavailable',
+          'service',
+          'server',
+          'token',
+          'not found',
+        ];
+        const looksTechnical = !errorText || technicalPatterns.some((needle) => errorText.includes(needle));
+        const businessError = response.ok && Boolean(body.error) && !looksTechnical;
+
         throw createAtolError(message, { business: businessError, retryable: !businessError });
       }
 
