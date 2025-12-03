@@ -26,6 +26,27 @@ export interface FiscalizationResult {
 
 const API_VERSIONS = ['v5', 'v4'] as const;
 
+const normalizeGroupCode = (groupCode: string, version: (typeof API_VERSIONS)[number]): string => {
+  const candidates = groupCode
+    .split('|')
+    .map((candidate) => candidate.trim())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    const match = candidate.match(/^v([45]):(.+)$/i);
+    if (match && `v${match[1]}` === version) {
+      return match[2];
+    }
+  }
+
+  const prefixedMatch = groupCode.match(/^v([45])-(.+)$/i);
+  if (prefixedMatch && `v${prefixedMatch[1]}` !== version) {
+    return `${version}-${prefixedMatch[2]}`;
+  }
+
+  return groupCode;
+};
+
 const getBaseUrl = (mode: AtolMode, version: (typeof API_VERSIONS)[number]): string => {
   const host = mode === 'prod' ? 'https://online.atol.ru/possystem' : 'https://testonline.atol.ru/possystem';
   return `${host}/${version}`;
@@ -103,11 +124,12 @@ const sendReceiptRequest = async (
 
   for (const version of API_VERSIONS) {
     attempted.push(version);
+    const normalizedGroupCode = normalizeGroupCode(credentials.groupCode, version);
 
     try {
       const token = await requestToken(mode, version, credentials);
       const baseUrl = getBaseUrl(mode, version);
-      const response = await fetch(`${baseUrl}/${credentials.groupCode}/sell?tokenid=${encodeURIComponent(token)}`, {
+      const response = await fetch(`${baseUrl}/${normalizedGroupCode}/sell?tokenid=${encodeURIComponent(token)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
