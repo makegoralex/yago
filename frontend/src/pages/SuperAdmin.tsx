@@ -4,6 +4,30 @@ import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuthStore } from '../store/auth';
 
+type FiscalProviderTest = {
+  status: 'registered' | 'pending' | 'failed';
+  testedAt: string;
+  receiptId?: string;
+  message?: string;
+};
+
+type FiscalProviderSettings = {
+  enabled: boolean;
+  provider: 'atol';
+  mode: 'test' | 'prod';
+  login: string;
+  password: string;
+  groupCode: string;
+  inn: string;
+  paymentAddress: string;
+  deviceId?: string;
+  lastTest?: FiscalProviderTest;
+};
+
+type OrganizationSettings = {
+  fiscalProvider?: FiscalProviderSettings;
+};
+
 type OrganizationSummary = {
   id: string;
   name: string;
@@ -11,6 +35,7 @@ type OrganizationSummary = {
   subscriptionStatus: string;
   createdAt: string;
   owner: { name: string; email: string; role: string } | null;
+  settings?: OrganizationSettings;
 };
 
 type UserSummary = {
@@ -77,6 +102,24 @@ const SuperAdminPage: React.FC = () => {
   const [editForm, setEditForm] = useState({ name: '', subscriptionPlan: '', subscriptionStatus: 'trial' });
   const [updateLoading, setUpdateLoading] = useState(false);
   const [updateError, setUpdateError] = useState('');
+  const [fiscalOrganizationId, setFiscalOrganizationId] = useState('');
+  const [fiscalForm, setFiscalForm] = useState({
+    enabled: false,
+    mode: 'test' as 'test' | 'prod',
+    provider: 'atol' as const,
+    login: '',
+    password: '',
+    groupCode: '',
+    inn: '',
+    paymentAddress: '',
+    deviceId: '',
+  });
+  const [lastFiscalTest, setLastFiscalTest] = useState<FiscalProviderTest | null>(null);
+  const [fiscalSaving, setFiscalSaving] = useState(false);
+  const [fiscalMessage, setFiscalMessage] = useState('');
+  const [fiscalError, setFiscalError] = useState('');
+  const [testLoading, setTestLoading] = useState(false);
+  const [testError, setTestError] = useState('');
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
   const [userForm, setUserForm] = useState({ name: '', email: '', role: 'cashier', organizationId: '' });
@@ -89,12 +132,71 @@ const SuperAdminPage: React.FC = () => {
     return name ? `Привет, ${name}!` : 'Привет, суперадмин!';
   }, [user?.name]);
 
+  const selectedFiscalOrganization = useMemo(
+    () => organizations.find((org) => org.id === fiscalOrganizationId) ?? null,
+    [fiscalOrganizationId, organizations]
+  );
+
   const extractErrorMessage = (error: unknown, fallback: string) => {
     if (isAxiosError(error)) {
       return error.response?.data?.error ?? error.message;
     }
 
     return error instanceof Error ? error.message : fallback;
+  };
+
+  const handleFiscalFieldChange = (field: keyof typeof fiscalForm, value: string | boolean) => {
+    setFiscalForm((form) => ({ ...form, [field]: value }));
+  };
+
+  const handleSaveFiscalSettings = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!fiscalOrganizationId) return;
+
+    setFiscalSaving(true);
+    setFiscalMessage('');
+    setFiscalError('');
+
+    const fiscalPayload = fiscalForm.enabled
+      ? { ...fiscalForm, deviceId: fiscalForm.deviceId || undefined }
+      : null;
+
+    try {
+      await api.patch(`/api/organizations/${fiscalOrganizationId}`, {
+        settings: {
+          fiscalProvider: fiscalPayload,
+        },
+      });
+
+      setFiscalMessage('Настройки кассы сохранены.');
+      await fetchOrganizations();
+    } catch (error) {
+      setFiscalError(extractErrorMessage(error, 'Не удалось сохранить настройки кассы'));
+    } finally {
+      setFiscalSaving(false);
+    }
+  };
+
+  const handleTestFiscalReceipt = async () => {
+    if (!fiscalOrganizationId) return;
+
+    setTestLoading(true);
+    setTestError('');
+
+    try {
+      const response = await api.post(`/api/organizations/${fiscalOrganizationId}/fiscal/test`);
+      const payload = response.data?.data as FiscalProviderTest | undefined;
+
+      if (payload) {
+        setLastFiscalTest(payload);
+        setFiscalMessage('Пробный чек отправлен.');
+      }
+    } catch (error) {
+      setTestError(extractErrorMessage(error, 'Не удалось отправить пробный чек'));
+    } finally {
+      setTestLoading(false);
+    }
   };
 
   const handleOpenOrganization = (event: React.FormEvent<HTMLFormElement>) => {
@@ -142,6 +244,33 @@ const SuperAdminPage: React.FC = () => {
     void fetchOrganizations();
     void fetchUsers();
   }, [fetchOrganizations, fetchUsers]);
+
+  useEffect(() => {
+    if (!fiscalOrganizationId && organizations.length > 0) {
+      setFiscalOrganizationId(organizations[0].id);
+    }
+  }, [fiscalOrganizationId, organizations]);
+
+  useEffect(() => {
+    if (!selectedFiscalOrganization) {
+      return;
+    }
+
+    const provider = selectedFiscalOrganization.settings?.fiscalProvider;
+
+    setFiscalForm({
+      enabled: provider?.enabled ?? false,
+      mode: provider?.mode ?? 'test',
+      provider: 'atol',
+      login: provider?.login ?? '',
+      password: provider?.password ?? '',
+      groupCode: provider?.groupCode ?? '',
+      inn: provider?.inn ?? '',
+      paymentAddress: provider?.paymentAddress ?? '',
+      deviceId: provider?.deviceId ?? '',
+    });
+    setLastFiscalTest(provider?.lastTest ?? null);
+  }, [selectedFiscalOrganization]);
 
   const handleCreateOrganization = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -364,6 +493,154 @@ const SuperAdminPage: React.FC = () => {
             </li>
           </ul>
         </div>
+      </section>
+
+      <section className="mb-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Онлайн-касса АТОЛ</h2>
+            <p className="text-sm text-slate-600">Управляйте реквизитами фискализации и отправляйте тестовый чек.</p>
+          </div>
+          <div className="flex flex-col gap-2 sm:w-80">
+            <label className="text-sm font-semibold text-slate-700">Организация</label>
+            <select
+              value={fiscalOrganizationId}
+              onChange={(event) => setFiscalOrganizationId(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+            >
+              {organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSaveFiscalSettings}>
+          <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">
+            <input
+              type="checkbox"
+              checked={fiscalForm.enabled}
+              onChange={(event) => handleFiscalFieldChange('enabled', event.target.checked)}
+              className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary/30"
+            />
+            <span>Фискализация включена</span>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Режим</span>
+            <select
+              value={fiscalForm.mode}
+              onChange={(event) => handleFiscalFieldChange('mode', event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="test">Тестовый</option>
+              <option value="prod">Продакшн</option>
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Логин</span>
+            <input
+              type="text"
+              required={fiscalForm.enabled}
+              value={fiscalForm.login}
+              onChange={(event) => handleFiscalFieldChange('login', event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Пароль</span>
+            <input
+              type="text"
+              required={fiscalForm.enabled}
+              value={fiscalForm.password}
+              onChange={(event) => handleFiscalFieldChange('password', event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Код группы</span>
+            <input
+              type="text"
+              required={fiscalForm.enabled}
+              value={fiscalForm.groupCode}
+              onChange={(event) => handleFiscalFieldChange('groupCode', event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">ИНН</span>
+            <input
+              type="text"
+              required={fiscalForm.enabled}
+              value={fiscalForm.inn}
+              onChange={(event) => handleFiscalFieldChange('inn', event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Адрес расчётов</span>
+            <input
+              type="text"
+              required={fiscalForm.enabled}
+              value={fiscalForm.paymentAddress}
+              onChange={(event) => handleFiscalFieldChange('paymentAddress', event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">ID устройства</span>
+            <input
+              type="text"
+              value={fiscalForm.deviceId}
+              onChange={(event) => handleFiscalFieldChange('deviceId', event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+              placeholder="Опционально"
+            />
+          </label>
+
+          <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1 text-sm text-slate-600">
+              {fiscalError && <div className="text-rose-600">{fiscalError}</div>}
+              {testError && <div className="text-rose-600">{testError}</div>}
+              {fiscalMessage && <div className="text-emerald-700">{fiscalMessage}</div>}
+              {lastFiscalTest && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                  <div className="font-semibold text-slate-900">Последний тест</div>
+                  <div>Статус: {lastFiscalTest.status}</div>
+                  <div>Время: {formatDate(lastFiscalTest.testedAt)}</div>
+                  {lastFiscalTest.receiptId && <div>Чек: {lastFiscalTest.receiptId}</div>}
+                  {lastFiscalTest.message && <div className="text-rose-600">{lastFiscalTest.message}</div>}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={() => void handleTestFiscalReceipt()}
+                disabled={testLoading || !fiscalForm.enabled}
+                className="rounded-xl border border-primary/40 px-4 py-3 text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {testLoading ? 'Отправляем…' : 'Пробный чек'}
+              </button>
+              <button
+                type="submit"
+                disabled={fiscalSaving}
+                className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/70"
+              >
+                {fiscalSaving ? 'Сохраняем…' : 'Сохранить настройки'}
+              </button>
+            </div>
+          </div>
+        </form>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
