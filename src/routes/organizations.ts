@@ -19,6 +19,9 @@ export const organizationsRouter = Router();
 const DEFAULT_CATEGORIES = ['Горячие напитки', 'Холодные напитки', 'Десерты'];
 const ALLOWED_ROLES: UserRole[] = ['cashier', 'owner', 'superAdmin'];
 
+const isOwnerRequestingOtherOrganization = (req: Request, organizationId: string) =>
+  req.user?.role === 'owner' && String(req.user.organizationId) !== organizationId;
+
 const normalizeString = (value: unknown, fieldName: string): string => {
   if (typeof value !== 'string') {
     throw new HttpError(400, `${fieldName} is required`);
@@ -297,7 +300,7 @@ organizationsRouter.get(
       return;
     }
 
-    if (req.user?.role === 'owner' && String(req.user.organizationId) !== organizationId) {
+    if (isOwnerRequestingOtherOrganization(req, organizationId)) {
       res.status(403).json({ data: null, error: 'Forbidden' });
       return;
     }
@@ -336,7 +339,7 @@ organizationsRouter.patch(
         return;
       }
 
-      if (req.user?.role === 'owner' && req.user.organizationId !== organizationId) {
+      if (isOwnerRequestingOtherOrganization(req, organizationId)) {
         res.status(403).json({ data: null, error: 'Forbidden' });
         return;
       }
@@ -442,7 +445,7 @@ organizationsRouter.post(
       return;
     }
 
-    if (req.user?.role === 'owner' && req.user.organizationId !== organizationId) {
+    if (isOwnerRequestingOtherOrganization(req, organizationId)) {
       res.status(403).json({ data: null, error: 'Forbidden' });
       return;
     }
