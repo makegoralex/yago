@@ -40,6 +40,39 @@ router.use(authMiddleware);
 router.use(requireRole(['owner', 'superAdmin']));
 router.use(enforceActiveSubscription);
 
+const isReadOnlyMethod = (method: string): boolean => ['GET', 'HEAD', 'OPTIONS'].includes(method);
+
+router.use(async (req, res, next) => {
+  if (req.user?.role === 'superAdmin' || isReadOnlyMethod(req.method)) {
+    next();
+    return;
+  }
+
+  const organizationId = getOrganizationObjectId(req);
+
+  if (!organizationId) {
+    res.status(403).json({ data: null, error: 'Organization context is required' });
+    return;
+  }
+
+  const organization = await OrganizationModel.findById(organizationId).select('subscriptionStatus').lean();
+
+  if (!organization) {
+    res.status(404).json({ data: null, error: 'Organization not found' });
+    return;
+  }
+
+  if (['expired', 'paused'].includes(organization.subscriptionStatus)) {
+    res.status(402).json({
+      data: null,
+      error: 'Подписка неактивна. Продлите её, чтобы продолжить редактирование данных.',
+    });
+    return;
+  }
+
+  next();
+});
+
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
