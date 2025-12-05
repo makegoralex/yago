@@ -11,7 +11,8 @@ const DocsPage: React.FC = () => {
             <p className="text-sm font-semibold uppercase tracking-wide text-secondary">Инструкции</p>
             <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl">Гайды по запуску Yago POS</h1>
             <p className="mt-2 text-base text-slate-600">
-              Сохраняйте ссылки в планшете или отправляйте сотрудникам. Страницы готовы для загрузки из CMS или markdown.
+              Раздел /docs оставили под Swagger API. Все инструкции переехали на /help: сохраняйте ссылки в планшете или отправляйте
+              сотрудникам. Страницы готовы для загрузки из CMS или markdown.
             </p>
           </div>
           <Link to="/" className="rounded-xl px-4 py-2 text-sm font-semibold text-secondary hover:bg-secondary/10">
@@ -35,7 +36,7 @@ const DocsPage: React.FC = () => {
 
         <div className="mt-8 rounded-2xl bg-secondary/5 p-5 text-sm text-slate-700">
           <div className="font-semibold text-slate-900">Нет нужного гайда?</div>
-          <p className="mt-1">Добавьте страницу в CMS или пришлите markdown — мы подключим её в раздел /docs.</p>
+          <p className="mt-1">Добавьте страницу в CMS или пришлите markdown — мы подключим её в раздел /help.</p>
         </div>
       </div>
     </div>

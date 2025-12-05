@@ -3,6 +3,16 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuthStore } from '../store/auth';
+import {
+  blogPosts as initialBlogPosts,
+  instructionLinks as initialInstructionLinks,
+  newsItems as initialNewsItems,
+  screenshotGallery as initialScreenshots,
+  type BlogPost,
+  type InstructionLink,
+  type NewsItem,
+  type ScreenshotItem,
+} from '../constants/content';
 
 type FiscalProviderTest = {
   status: 'registered' | 'pending' | 'failed';
@@ -126,6 +136,14 @@ const SuperAdminPage: React.FC = () => {
   const [userUpdateLoading, setUserUpdateLoading] = useState(false);
   const [userUpdateError, setUserUpdateError] = useState('');
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [newsDrafts, setNewsDrafts] = useState<NewsItem[]>(initialNewsItems);
+  const [newsForm, setNewsForm] = useState({ title: '', date: '', description: '', content: '' });
+  const [instructionDrafts, setInstructionDrafts] = useState<InstructionLink[]>(initialInstructionLinks);
+  const [instructionForm, setInstructionForm] = useState({ title: '', href: '' });
+  const [blogDrafts, setBlogDrafts] = useState<BlogPost[]>(initialBlogPosts);
+  const [blogForm, setBlogForm] = useState({ title: '', date: '', excerpt: '', content: '' });
+  const [screenshotDrafts, setScreenshotDrafts] = useState<ScreenshotItem[]>(initialScreenshots);
+  const [screenshotForm, setScreenshotForm] = useState({ title: '', description: '' });
 
   const greeting = useMemo(() => {
     const name = user?.name?.trim();
@@ -136,6 +154,20 @@ const SuperAdminPage: React.FC = () => {
     () => organizations.find((org) => org.id === fiscalOrganizationId) ?? null,
     [fiscalOrganizationId, organizations]
   );
+
+  const slugify = (value: string) =>
+    value
+      .toLowerCase()
+      .trim()
+      .replace(/[^\p{L}\p{N}]+/gu, '-')
+      .replace(/^-+|-+$/g, '')
+      .replace(/-{2,}/g, '-') || `entry-${Date.now()}`;
+
+  const contentFromText = (text: string) =>
+    text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
 
   const extractErrorMessage = (error: unknown, fallback: string) => {
     if (isAxiosError(error)) {
@@ -208,6 +240,60 @@ const SuperAdminPage: React.FC = () => {
     }
 
     navigate(`/admin?organizationId=${encodeURIComponent(normalizedId)}`);
+  };
+
+  const handleAddNews = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const content = contentFromText(newsForm.content);
+    const date = newsForm.date || new Intl.DateTimeFormat('ru-RU').format(new Date());
+    setNewsDrafts((items) => [
+      {
+        slug: slugify(newsForm.title || date),
+        date,
+        title: newsForm.title || 'Без названия',
+        description: newsForm.description || 'Описание обновления появится позже.',
+        content: content.length ? content : ['Описание обновления появится позже.'],
+      },
+      ...items,
+    ]);
+    setNewsForm({ title: '', date: '', description: '', content: '' });
+  };
+
+  const handleAddInstruction = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!instructionForm.title.trim() || !instructionForm.href.trim()) return;
+    setInstructionDrafts((items) => [
+      { title: instructionForm.title.trim(), href: instructionForm.href.trim() },
+      ...items,
+    ]);
+    setInstructionForm({ title: '', href: '' });
+  };
+
+  const handleAddBlogPost = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const content = contentFromText(blogForm.content);
+    const date = blogForm.date || new Intl.DateTimeFormat('ru-RU').format(new Date());
+    setBlogDrafts((posts) => [
+      {
+        slug: slugify(blogForm.title || date),
+        title: blogForm.title || 'Черновик поста',
+        date,
+        excerpt: blogForm.excerpt || 'Добавьте превью статьи.',
+        content: content.length ? content : ['Содержимое статьи появится позже.'],
+      },
+      ...posts,
+    ]);
+    setBlogForm({ title: '', date: '', excerpt: '', content: '' });
+  };
+
+  const handleAddScreenshot = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!screenshotForm.title.trim() || !screenshotForm.description.trim()) return;
+    setScreenshotDrafts((items) => [
+      { title: screenshotForm.title.trim(), description: screenshotForm.description.trim() },
+      ...items,
+    ]);
+    setScreenshotForm({ title: '', description: '' });
   };
 
   const fetchOrganizations = useCallback(async () => {
@@ -1130,6 +1216,248 @@ const SuperAdminPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <section
+        id="content-management"
+        className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70 lg:mt-8"
+      >
+        <div className="flex flex-col gap-2">
+          <h2 className="text-xl font-semibold text-slate-900">Контент: новости, блог, инструкции и скриншоты</h2>
+          <p className="text-sm text-slate-600">
+            /docs занят Swagger API, поэтому весь управляемый контент вынесен в суперадминку: обновления, инструкции, блог и
+            галерея скриншотов лендинга. Добавляйте записи — данные можно выгрузить в CMS или передать редакторам.
+          </p>
+        </div>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Новости / changelog</p>
+                <h3 className="text-lg font-semibold text-slate-900">Что нового</h3>
+              </div>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-secondary shadow-inner">CMS-ready</span>
+            </div>
+            <form className="grid gap-3" onSubmit={handleAddNews}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm text-slate-700">
+                  Название
+                  <input
+                    type="text"
+                    value={newsForm.title}
+                    onChange={(event) => setNewsForm((form) => ({ ...form, title: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    placeholder="Добавлен блог"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  Дата
+                  <input
+                    type="text"
+                    value={newsForm.date}
+                    onChange={(event) => setNewsForm((form) => ({ ...form, date: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    placeholder="05.12.2025"
+                  />
+                </label>
+              </div>
+              <label className="text-sm text-slate-700">
+                Превью
+                <input
+                  type="text"
+                  value={newsForm.description}
+                  onChange={(event) => setNewsForm((form) => ({ ...form, description: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                  placeholder="Описание на лендинге"
+                />
+              </label>
+              <label className="text-sm text-slate-700">
+                Полный текст (каждый абзац с новой строки)
+                <textarea
+                  value={newsForm.content}
+                  onChange={(event) => setNewsForm((form) => ({ ...form, content: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                  rows={3}
+                  placeholder="Расскажите, что обновили"
+                />
+              </label>
+              <button
+                type="submit"
+                className="inline-flex w-full items-center justify-center rounded-xl bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary/90"
+              >
+                Сохранить запись в драфты
+              </button>
+            </form>
+            <div className="space-y-2 text-sm text-slate-700">
+              {newsDrafts.slice(0, 4).map((item) => (
+                <div key={item.slug} className="rounded-lg bg-white px-3 py-2 shadow-inner shadow-slate-100">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-secondary">{item.date}</div>
+                  <div className="font-semibold text-slate-900">{item.title}</div>
+                  <div className="text-slate-600">{item.description}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Инструкции /help</p>
+                  <h4 className="text-base font-semibold text-slate-900">Ссылки для планшетов</h4>
+                </div>
+                <span className="text-xs font-semibold text-slate-500">{instructionDrafts.length} шт.</span>
+              </div>
+              <form className="grid gap-3 sm:grid-cols-[1.3fr_1fr]" onSubmit={handleAddInstruction}>
+                <input
+                  type="text"
+                  required
+                  value={instructionForm.title}
+                  onChange={(event) => setInstructionForm((form) => ({ ...form, title: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                  placeholder="Как подключить кассу"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={instructionForm.href}
+                    onChange={(event) => setInstructionForm((form) => ({ ...form, href: event.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                    placeholder="/help#fiscal"
+                  />
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+                  >
+                    Добавить
+                  </button>
+                </div>
+              </form>
+              <div className="space-y-2 text-sm text-slate-700">
+                {instructionDrafts.slice(0, 4).map((item) => (
+                  <div key={`${item.title}-${item.href}`} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                    <div>
+                      <div className="font-semibold text-slate-900">{item.title}</div>
+                      <div className="text-xs text-slate-500">{item.href}</div>
+                    </div>
+                    <span className="text-xs font-semibold text-secondary">/help</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Блог</p>
+                <h3 className="text-lg font-semibold text-slate-900">Статьи для владельцев</h3>
+              </div>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-secondary shadow-inner">/blog</span>
+            </div>
+            <form className="grid gap-3" onSubmit={handleAddBlogPost}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm text-slate-700">
+                  Заголовок
+                  <input
+                    type="text"
+                    value={blogForm.title}
+                    onChange={(event) => setBlogForm((form) => ({ ...form, title: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    placeholder="Новый пост"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  Дата
+                  <input
+                    type="text"
+                    value={blogForm.date}
+                    onChange={(event) => setBlogForm((form) => ({ ...form, date: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    placeholder="07.12.2025"
+                  />
+                </label>
+              </div>
+              <label className="text-sm text-slate-700">
+                Превью
+                <input
+                  type="text"
+                  value={blogForm.excerpt}
+                  onChange={(event) => setBlogForm((form) => ({ ...form, excerpt: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                  placeholder="Короткое описание"
+                />
+              </label>
+              <label className="text-sm text-slate-700">
+                Текст статьи (абзацы через новую строку)
+                <textarea
+                  value={blogForm.content}
+                  onChange={(event) => setBlogForm((form) => ({ ...form, content: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                  rows={3}
+                  placeholder="Контент для /blog/:slug"
+                />
+              </label>
+              <button
+                type="submit"
+                className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+              >
+                Сохранить пост
+              </button>
+            </form>
+            <div className="space-y-2 text-sm text-slate-700">
+              {blogDrafts.slice(0, 4).map((post) => (
+                <div key={post.slug} className="rounded-lg bg-white px-3 py-2 shadow-inner shadow-slate-100">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-secondary">{post.date}</div>
+                  <div className="font-semibold text-slate-900">{post.title}</div>
+                  <div className="text-slate-600">{post.excerpt}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Скриншоты лендинга</p>
+                  <h4 className="text-base font-semibold text-slate-900">Галерея / демо</h4>
+                </div>
+                <span className="text-xs font-semibold text-slate-500">{screenshotDrafts.length} шт.</span>
+              </div>
+              <form className="grid gap-3 sm:grid-cols-[1.1fr_1.2fr_auto]" onSubmit={handleAddScreenshot}>
+                <input
+                  type="text"
+                  required
+                  value={screenshotForm.title}
+                  onChange={(event) => setScreenshotForm((form) => ({ ...form, title: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                  placeholder="Касса"
+                />
+                <input
+                  type="text"
+                  required
+                  value={screenshotForm.description}
+                  onChange={(event) => setScreenshotForm((form) => ({ ...form, description: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                  placeholder="Описание для подписи"
+                />
+                <button
+                  type="submit"
+                  className="mt-2 h-[38px] shrink-0 rounded-lg border border-secondary/40 px-3 text-xs font-semibold text-secondary transition hover:bg-secondary/10 sm:mt-0"
+                >
+                  Добавить
+                </button>
+              </form>
+              <div className="space-y-2 text-sm text-slate-700">
+                {screenshotDrafts.slice(0, 4).map((item) => (
+                  <div key={`${item.title}-${item.description}`} className="rounded-md bg-slate-50 px-3 py-2">
+                    <div className="font-semibold text-slate-900">{item.title}</div>
+                    <div className="text-xs text-slate-500">{item.description}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section
         id="billing-tips"

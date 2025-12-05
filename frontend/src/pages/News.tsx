@@ -19,14 +19,21 @@ const NewsPage: React.FC = () => {
 
         <div className="mt-8 space-y-4">
           {newsItems.map((item) => (
-            <div key={item.date} className="flex flex-col gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-              <div>
+            <article
+              key={item.slug}
+              className="flex flex-col gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="space-y-1">
                 <div className="text-xs font-semibold uppercase tracking-wide text-secondary">{item.date}</div>
                 <div className="text-lg font-bold text-slate-900">{item.title}</div>
                 <p className="text-sm text-slate-600">{item.description}</p>
+                <Link to={`/news/${item.slug}`} className="inline-flex items-center gap-1 text-sm font-semibold text-secondary">
+                  Читать полностью
+                  <span>→</span>
+                </Link>
               </div>
               <span className="text-2xl">🆕</span>
-            </div>
+            </article>
           ))}
         </div>
       </div>

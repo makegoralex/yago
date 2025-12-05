@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuthStore, type AuthUser } from '../store/auth';
 import { useToast } from '../providers/ToastProvider';
-import { blogPosts, instructionLinks, newsItems } from '../constants/content';
+import { blogPosts, instructionLinks, newsItems, screenshotGallery } from '../constants/content';
 
 const advantages = [
   { icon: '🧾', title: 'Фискальные чеки', description: 'Прямая интеграция с АТОЛ' },
@@ -30,13 +30,6 @@ const onboardingSteps = [
     description: 'Поддержка АТОЛ, X/Z-отчёты, смены и чеки сразу в кассе.',
     screenshotTitle: 'Продажи и чеки',
   },
-];
-
-const galleryShots = [
-  { title: 'Касса', description: 'Быстрые кнопки, модификаторы и скидки.' },
-  { title: 'Меню', description: 'Категории, теги и фото позиций.' },
-  { title: 'Склад', description: 'Остатки, списания и инвентаризация.' },
-  { title: 'Аналитика', description: 'Выручка, средний чек и маржа по точкам.' },
 ];
 
 const LandingPage: React.FC = () => {
@@ -348,7 +341,7 @@ const LandingPage: React.FC = () => {
             <p className="text-base text-slate-600">Касса, меню, склад и аналитика — выберите нужный экран или откройте видео «Как пробить чек в Yago».</p>
           </div>
           <div className="grid gap-3 lg:col-span-2 lg:grid-cols-2">
-            {galleryShots.map((shot) => (
+            {screenshotGallery.map((shot) => (
               <div key={shot.title} className="rounded-2xl border border-slate-100 bg-gradient-to-br from-slate-50 via-white to-primary/5 p-5 shadow-sm">
                 <div className="text-lg font-semibold text-slate-900">{shot.title}</div>
                 <p className="mt-1 text-sm text-slate-600">{shot.description}</p>
@@ -526,11 +519,18 @@ const LandingPage: React.FC = () => {
           </div>
           <div className="space-y-3">
             {newsItems.map((item) => (
-              <div key={item.date} className="flex flex-col gap-1 rounded-2xl border border-slate-100 bg-slate-50 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                <div>
+              <div
+                key={item.date}
+                className="flex flex-col gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="space-y-1">
                   <div className="text-xs font-semibold uppercase tracking-wide text-secondary">{item.date}</div>
                   <div className="text-base font-semibold text-slate-900">{item.title}</div>
                   <p className="text-sm text-slate-600">{item.description}</p>
+                  <Link to={`/news/${item.slug}`} className="inline-flex items-center gap-1 text-sm font-semibold text-secondary">
+                    Читать полностью
+                    <span>→</span>
+                  </Link>
                 </div>
                 <span className="text-lg">🆕</span>
               </div>
@@ -541,10 +541,10 @@ const LandingPage: React.FC = () => {
         <section id="instructions" className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-soft md:p-8 lg:grid-cols-[1fr_1.1fr]">
           <div className="space-y-3">
             <p className="text-sm font-semibold uppercase tracking-wide text-secondary">Инструкции</p>
-            <h2 className="text-2xl font-bold sm:text-3xl">Готовые гайды внутри /docs</h2>
-            <p className="text-base text-slate-600">Открывайте статьи в CMS или markdown-файлах. Добавили кнопку, ведущую в раздел инструкции.</p>
+            <h2 className="text-2xl font-bold sm:text-3xl">Готовые гайды внутри /help</h2>
+            <p className="text-base text-slate-600">/docs оставили под Swagger API. Все инструкции вынесли в /help — открывайте статьи в CMS или markdown-файлах.</p>
             <Link
-              to="/docs"
+              to="/help"
               className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark"
             >
               Перейти к инструкциям
@@ -601,7 +601,7 @@ const LandingPage: React.FC = () => {
             <a href="mailto:support@yagopos.ru" className="text-secondary">support@yagopos.ru</a>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs font-semibold">
-            <Link to="/docs" className="rounded-lg px-2 py-1 hover:bg-white/10">
+            <Link to="/help" className="rounded-lg px-2 py-1 hover:bg-white/10">
               Инструкции
             </Link>
             <Link to="/blog" className="rounded-lg px-2 py-1 hover:bg-white/10">

@@ -10,6 +10,8 @@ import BlogPage from './pages/Blog';
 import BlogPostPage from './pages/BlogPost';
 import DocsPage from './pages/Docs';
 import NewsPage from './pages/News';
+import NewsPostPage from './pages/NewsPost';
+import SwaggerNotice from './pages/SwaggerNotice';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import { type AuthUser, type UserRole, useAuthStore } from './store/auth';
 import MobileNav from './components/ui/MobileNav';
@@ -47,9 +49,10 @@ const App: React.FC = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/blog" element={<BlogPage />} />
         <Route path="/blog/:slug" element={<BlogPostPage />} />
-        <Route path="/docs" element={<DocsPage />} />
+        <Route path="/docs" element={<SwaggerNotice />} />
         <Route path="/help" element={<DocsPage />} />
         <Route path="/news" element={<NewsPage />} />
+        <Route path="/news/:slug" element={<NewsPostPage />} />
         <Route element={<ProtectedRoute allowed={['cashier', 'owner']} />}>
           <Route path="/pos" element={<POSPage />} />
           <Route path="/settings" element={<SettingsPage />} />
