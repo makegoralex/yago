@@ -27,6 +27,17 @@ type FiscalProviderSettings = {
   lastTest?: FiscalProviderTest;
 };
 
+type BillingInfo = {
+  plan: 'trial' | 'paid' | string;
+  status: string;
+  trialEndsAt?: string | null;
+  daysLeftInTrial?: number;
+  nextPaymentDueAt?: string | null;
+  daysUntilNextPayment?: number;
+  monthlyPrice: number;
+  isPaymentDue: boolean;
+};
+
 const SettingsPage: React.FC = () => {
   const user = useAuthStore((state) => state.user);
   const clearSession = useAuthStore((state) => state.clearSession);
@@ -54,6 +65,10 @@ const SettingsPage: React.FC = () => {
   const [fiscalMessage, setFiscalMessage] = useState('');
   const [fiscalError, setFiscalError] = useState('');
   const [testLoading, setTestLoading] = useState(false);
+  const [billingInfo, setBillingInfo] = useState<BillingInfo | null>(null);
+  const [billingMessage, setBillingMessage] = useState('');
+  const [billingError, setBillingError] = useState('');
+  const [billingLoading, setBillingLoading] = useState(false);
   const hasUnits = useMemo(() => unitsDraft.length > 0, [unitsDraft]);
 
   const extractErrorMessage = (error: unknown, fallback: string) => {
@@ -75,6 +90,7 @@ const SettingsPage: React.FC = () => {
       try {
         const response = await api.get(`/api/organizations/${organizationId}`);
         const provider = (response.data?.data?.settings?.fiscalProvider ?? null) as FiscalProviderSettings | null;
+        setBillingInfo((response.data?.data?.billing ?? null) as BillingInfo | null);
 
         setFiscalForm({
           enabled: provider?.enabled ?? false,
@@ -190,10 +206,34 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleSimulatePayment = async () => {
+    if (!organizationId) return;
+
+    setBillingLoading(true);
+    setBillingMessage('');
+    setBillingError('');
+
+    try {
+      const response = await api.post(`/api/organizations/${organizationId}/billing/simulate-payment`);
+      setBillingInfo((response.data?.data?.billing ?? null) as BillingInfo | null);
+      setBillingMessage('Подписка продлена на месяц (симуляция).');
+    } catch (error) {
+      setBillingError(extractErrorMessage(error, 'Не удалось обновить оплату'));
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
   const formatDate = (isoDate: string) => {
     const date = new Date(isoDate);
     if (Number.isNaN(date.getTime())) return '—';
     return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+  };
+
+  const formatCountdown = (days?: number) => {
+    if (typeof days !== 'number') return '—';
+    if (days <= 0) return 'Сегодня';
+    return `${days} дн.`;
   };
 
   return (
@@ -210,6 +250,55 @@ const SettingsPage: React.FC = () => {
           <p>Роль: {user?.role}</p>
         </div>
       </section>
+      {organizationId && (
+        <section className="rounded-3xl bg-white p-6 shadow-soft">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Подписка</h2>
+              <p className="text-sm text-slate-500">Дни до оплаты или конца пробного периода.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleSimulatePayment()}
+              disabled={billingLoading}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-secondary/40 hover:text-secondary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {billingLoading ? 'Обновляем…' : 'Продлить (MVP)'}
+            </button>
+          </div>
+
+          {billingError && <div className="mb-3 rounded-lg border border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-700">{billingError}</div>}
+          {billingMessage && <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">{billingMessage}</div>}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">План</p>
+              <p className="mt-2 text-xl font-bold text-slate-900">{billingInfo?.plan === 'paid' ? 'Платный' : 'Trial'}</p>
+              <p className="text-sm text-slate-600">Статус: {billingInfo?.status ?? '—'}</p>
+            </div>
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Сроки</p>
+              {billingInfo?.plan === 'trial' ? (
+                <>
+                  <p className="mt-2 text-lg font-semibold text-indigo-900">
+                    Осталось: {formatCountdown(billingInfo?.daysLeftInTrial)}
+                  </p>
+                  <p className="text-sm text-indigo-800">
+                    До: {billingInfo?.trialEndsAt ? formatDate(billingInfo.trialEndsAt) : '—'}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2 text-lg font-semibold text-indigo-900">
+                    Следующий платёж: {billingInfo?.nextPaymentDueAt ? formatDate(billingInfo.nextPaymentDueAt) : '—'}
+                  </p>
+                  <p className="text-sm text-indigo-800">Осталось: {formatCountdown(billingInfo?.daysUntilNextPayment)}</p>
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
       {organizationId && (
         <section className="rounded-3xl bg-white p-6 shadow-soft">
           <div className="mb-4 flex flex-col gap-1">

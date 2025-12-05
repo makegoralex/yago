@@ -38,6 +38,19 @@ type OrganizationSettings = {
   fiscalProvider?: FiscalProviderSettings;
 };
 
+type BillingInfo = {
+  plan: 'trial' | 'paid' | string;
+  status: string;
+  trialEndsAt?: string | null;
+  trialStartedAt?: string;
+  daysLeftInTrial?: number;
+  daysUsedInTrial?: number;
+  nextPaymentDueAt?: string | null;
+  daysUntilNextPayment?: number;
+  monthlyPrice: number;
+  isPaymentDue: boolean;
+};
+
 type OrganizationSummary = {
   id: string;
   name: string;
@@ -46,6 +59,18 @@ type OrganizationSummary = {
   createdAt: string;
   owner: { name: string; email: string; role: string } | null;
   settings?: OrganizationSettings;
+  billing?: BillingInfo;
+};
+
+type BillingSummary = {
+  totalOrganizations: number;
+  activeTrials: number;
+  expiredTrials: number;
+  activePaid: number;
+  pausedPaid: number;
+  overduePayments: number;
+  projectedMrr: number;
+  expectedNext30DaysRevenue: number;
 };
 
 type UserSummary = {
@@ -95,6 +120,8 @@ const SuperAdminPage: React.FC = () => {
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [loadingOrganizations, setLoadingOrganizations] = useState(false);
   const [organizationsError, setOrganizationsError] = useState('');
+  const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
+  const [billingSummaryError, setBillingSummaryError] = useState('');
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState('');
@@ -311,6 +338,17 @@ const SuperAdminPage: React.FC = () => {
     }
   }, []);
 
+  const fetchBillingSummary = useCallback(async () => {
+    setBillingSummaryError('');
+
+    try {
+      const response = await api.get('/api/organizations/billing/summary');
+      setBillingSummary(response.data?.data ?? null);
+    } catch (error) {
+      setBillingSummaryError(extractErrorMessage(error, 'Не удалось загрузить статистику по подпискам'));
+    }
+  }, []);
+
   const fetchUsers = useCallback(async () => {
     setLoadingUsers(true);
     setUsersError('');
@@ -329,7 +367,8 @@ const SuperAdminPage: React.FC = () => {
   useEffect(() => {
     void fetchOrganizations();
     void fetchUsers();
-  }, [fetchOrganizations, fetchUsers]);
+    void fetchBillingSummary();
+  }, [fetchBillingSummary, fetchOrganizations, fetchUsers]);
 
   useEffect(() => {
     if (!fiscalOrganizationId && organizations.length > 0) {
@@ -490,6 +529,15 @@ const SuperAdminPage: React.FC = () => {
     const date = new Date(isoDate);
     if (Number.isNaN(date.getTime())) return '—';
     return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+  };
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value);
+
+  const formatCountdown = (days?: number) => {
+    if (typeof days !== 'number') return '—';
+    if (days <= 0) return 'Сегодня';
+    return `${days} дн.`;
   };
 
   const renderStatusBadge = (status: string) => {
@@ -747,6 +795,60 @@ const SuperAdminPage: React.FC = () => {
         ))}
       </section>
 
+      <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Биллинг по организациям</h2>
+            <p className="text-sm text-slate-600">
+              Следите за триалами и платными планами, чтобы продления не проходили незамеченными.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void fetchBillingSummary()}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-primary/40 hover:text-primary"
+          >
+            Обновить
+          </button>
+        </div>
+
+        {billingSummaryError && (
+          <div className="mb-4 rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {billingSummaryError}
+          </div>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Всего организаций</p>
+            <p className="mt-2 text-3xl font-bold text-slate-900">{billingSummary?.totalOrganizations ?? '—'}</p>
+          </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Триал</p>
+            <p className="mt-2 text-2xl font-bold text-amber-900">
+              {billingSummary ? `${billingSummary.activeTrials} активных` : '—'}
+            </p>
+            <p className="text-sm text-amber-800">{billingSummary ? `${billingSummary.expiredTrials} завершено` : '—'}</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Платные</p>
+            <p className="mt-2 text-2xl font-bold text-emerald-900">
+              {billingSummary ? `${billingSummary.activePaid} активных` : '—'}
+            </p>
+            <p className="text-sm text-emerald-800">{billingSummary ? `${billingSummary.pausedPaid} на паузе` : '—'}</p>
+          </div>
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Выручка</p>
+            <p className="mt-2 text-2xl font-bold text-indigo-900">
+              {billingSummary ? formatCurrency(billingSummary.projectedMrr) : '—'} / мес
+            </p>
+            <p className="text-sm text-indigo-800">
+              {billingSummary ? `Ожидаем ${formatCurrency(billingSummary.expectedNext30DaysRevenue)} в 30 дней` : '—'}
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section
         id="create-organization"
         className="mt-8 grid gap-4 lg:grid-cols-[3fr,2fr] xl:grid-cols-[2fr,1fr]"
@@ -877,6 +979,7 @@ const SuperAdminPage: React.FC = () => {
                 <th className="px-4 py-3">Владелец</th>
                 <th className="px-4 py-3">Тариф</th>
                 <th className="px-4 py-3">Статус</th>
+                <th className="px-4 py-3">Оплата</th>
                 <th className="px-4 py-3 text-right">Создана</th>
                 <th className="px-4 py-3 text-right">Действия</th>
               </tr>
@@ -884,13 +987,13 @@ const SuperAdminPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {loadingOrganizations ? (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-slate-500">
+                  <td colSpan={7} className="py-6 text-center text-slate-500">
                     Загружаем организации…
                   </td>
                 </tr>
               ) : organizations.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-slate-500">
+                  <td colSpan={7} className="py-6 text-center text-slate-500">
                     Пока нет организаций. Создайте первую прямо сейчас.
                   </td>
                 </tr>
@@ -920,6 +1023,23 @@ const SuperAdminPage: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 py-4">{renderStatusBadge(organization.subscriptionStatus)}</td>
+                    <td className="px-4 py-4 text-sm text-slate-700">
+                      <div className="font-semibold text-slate-900">
+                        {organization.billing?.plan === 'paid' ? 'Оплачено' : 'Триал'}
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        {organization.billing?.plan === 'trial'
+                          ? organization.billing?.trialEndsAt
+                            ? `До конца: ${formatCountdown(organization.billing?.daysLeftInTrial)}`
+                            : 'Триал завершён'
+                          : organization.billing?.nextPaymentDueAt
+                            ? `След. платёж: ${formatDate(organization.billing?.nextPaymentDueAt)}`
+                            : 'Счет запланирован'}
+                      </div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        {organization.billing ? `${formatCurrency(organization.billing.monthlyPrice)} / мес` : '—'}
+                      </div>
+                    </td>
                     <td className="px-4 py-4 text-right text-xs font-medium text-slate-600">
                       {formatDate(organization.createdAt)}
                     </td>
