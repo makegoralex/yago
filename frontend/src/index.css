@@ -1,21 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: light;
+
+  --color-bg: #F9FAFB;
+  --color-bg-card: #FFFFFF;
+  --color-border: #E5E7EB;
+  --color-text: #111827;
+  --color-accent: #22C55E;
+  --color-accent-hover: #16A34A;
+  --color-danger: #EF4444;
+  --color-info: #3B82F6;
+
+  --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --radius-base: 8px;
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 body {
-  @apply font-sans bg-slate-50 text-slate-900;
+  font-family: var(--font-family);
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
-  @apply text-secondary hover:text-secondary/80 transition-colors;
+  @apply transition-colors;
+  color: var(--color-info);
+}
+
+a:hover {
+  color: #1d4ed8;
 }
 
 button {
-  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary/60;
+  @apply focus:outline-none focus-visible:ring-2;
+  font-family: var(--font-family);
+  border-radius: var(--radius-base);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+button:active {
+  transform: translateY(1px);
 }
 
 .custom-scrollbar {
@@ -40,4 +72,22 @@ button {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #cbd5e1 0%, #94a3b8 100%);
+}
+
+input,
+select,
+textarea {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-family: var(--font-family);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-info) 15%, transparent);
 }

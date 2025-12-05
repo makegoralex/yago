@@ -1,17 +1,18 @@
 import React, { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { BarChart3, Coffee, Gift, Receipt, Users, Wallet2 } from 'lucide-react';
 import api from '../lib/api';
 import { useAuthStore, type AuthUser } from '../store/auth';
 import { useToast } from '../providers/ToastProvider';
 import { blogPosts, instructionLinks, newsItems, screenshotGallery } from '../constants/content';
 
 const advantages = [
-  { icon: '🧾', title: 'Фискальные чеки', description: 'Прямая интеграция с АТОЛ' },
-  { icon: '☕', title: 'Меню', description: 'Позиции, группы и модификаторы' },
-  { icon: '👥', title: 'Сотрудники', description: 'Доступы и роли' },
-  { icon: '💰', title: 'Учёт смен', description: 'Оплата, возвраты, смены' },
-  { icon: '🎁', title: 'Лояльность', description: 'Скидки, баллы без CRM' },
-  { icon: '📊', title: 'Отчёты', description: 'Выручка, средний чек, прибыль' },
+  { icon: Receipt, title: 'Фискальные чеки', description: 'Прямая интеграция с АТОЛ' },
+  { icon: Coffee, title: 'Меню', description: 'Позиции, группы и модификаторы' },
+  { icon: Users, title: 'Сотрудники', description: 'Доступы и роли' },
+  { icon: Wallet2, title: 'Учёт смен', description: 'Оплата, возвраты, смены' },
+  { icon: Gift, title: 'Лояльность', description: 'Скидки, баллы без CRM' },
+  { icon: BarChart3, title: 'Отчёты', description: 'Выручка, средний чек, прибыль' },
 ];
 
 const onboardingSteps = [
@@ -138,7 +139,7 @@ const LandingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white text-slate-900">
+    <div className="min-h-screen bg-background text-text">
       <header className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6 sm:py-6">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-lg font-bold text-primary">
@@ -165,7 +166,7 @@ const LandingPage: React.FC = () => {
           <button
             type="button"
             onClick={() => authSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
-            className="rounded-xl bg-secondary px-4 py-2 text-white shadow-soft transition hover:bg-secondary/90"
+            className="rounded-lg bg-secondary px-4 py-2 text-white shadow-soft transition hover:bg-secondary/90"
           >
             Создать организацию
           </button>
@@ -173,7 +174,7 @@ const LandingPage: React.FC = () => {
       </header>
 
       <main className="mx-auto flex max-w-6xl flex-col gap-12 px-4 pb-16 sm:px-6 lg:gap-16">
-        <section className="grid items-center gap-8 rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-soft backdrop-blur md:p-8 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
+        <section className="grid items-center gap-8 rounded-2xl border border-border bg-card p-5 shadow-soft md:p-8 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
           <div className="space-y-6 lg:space-y-8">
             <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary sm:text-sm">
               Касса и учёт для кофейни
@@ -191,39 +192,39 @@ const LandingPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleDemoClick}
-                className="w-full rounded-2xl bg-primary px-5 py-3 text-center text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark sm:w-auto"
+                className="w-full rounded-lg bg-primary px-5 py-3 text-center text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark sm:w-auto"
               >
                 Попробовать демо
               </button>
               <button
                 type="button"
                 onClick={() => authSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                className="w-full rounded-2xl px-5 py-3 text-center text-sm font-semibold text-secondary transition hover:bg-secondary/10 sm:w-auto"
+                className="w-full rounded-lg border border-border px-5 py-3 text-center text-sm font-semibold text-secondary transition hover:border-secondary/60 hover:bg-secondary/10 sm:w-auto"
               >
                 Создать организацию
               </button>
             </div>
             <div className="text-sm text-slate-500">Работает на любом планшете. Печатает чеки через АТОЛ.</div>
             <div className="grid gap-4 sm:grid-cols-3">
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="rounded-xl border border-border bg-white p-4 text-sm text-slate-700 shadow-soft">
                 <div className="text-2xl font-bold text-primary">2 мин</div>
                 <div>от регистрации до первого чека</div>
               </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="rounded-xl border border-border bg-white p-4 text-sm text-slate-700 shadow-soft">
                 <div className="text-2xl font-bold text-primary">X/Z отчёты</div>
                 <div>смены и контроль кассы</div>
               </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="rounded-xl border border-border bg-white p-4 text-sm text-slate-700 shadow-soft">
                 <div className="text-2xl font-bold text-primary">Лояльность</div>
                 <div>скидки и баллы без CRM</div>
               </div>
             </div>
           </div>
 
-          <div className="space-y-4 rounded-3xl border border-secondary/30 bg-secondary/5 p-4 shadow-soft md:p-6">
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-soft md:p-6">
+            <div className="rounded-xl bg-white p-4 shadow-soft">
               <div className="text-sm font-semibold uppercase tracking-wide text-secondary">Скриншот терминала</div>
-              <div className="mt-3 rounded-2xl border border-dashed border-secondary/40 bg-gradient-to-br from-secondary/5 via-white to-primary/10 p-5 text-slate-800">
+              <div className="mt-3 rounded-xl border border-dashed border-border bg-background p-5 text-slate-800">
                 <div className="flex items-center justify-between text-xs font-semibold text-secondary">
                   <span>Yago POS · Терминал</span>
                   <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] text-green-700">Онлайн</span>
@@ -260,10 +261,10 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        <section id="advantages" className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-soft md:p-8 lg:grid-cols-2">
+        <section id="advantages" className="grid gap-4 rounded-2xl border border-border bg-card p-5 shadow-soft md:p-8 lg:grid-cols-2">
           <div className="space-y-3">
             <p className="text-sm font-semibold uppercase tracking-wide text-secondary">Преимущества</p>
-            <h2 className="text-2xl font-bold sm:text-3xl">Меню, смены и чеки в одном окне</h2>
+            <h2 className="text-2xl font-semibold sm:text-3xl">Меню, смены и чеки в одном окне</h2>
             <p className="text-base text-slate-600">
               Запускайте кассу, лояльность и склад без интеграторов. Все хранится внутри Yago POS — роли, отчёты и права
               доступа уже настроены.
@@ -271,10 +272,10 @@ const LandingPage: React.FC = () => {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {advantages.map((feature) => (
-              <div key={feature.title} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 shadow-sm">
-                <div className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                  <span>{feature.icon}</span>
-                  {feature.title}
+              <div key={feature.title} className="rounded-xl border border-border bg-white p-4 shadow-soft">
+                <div className="flex items-center gap-2 text-base font-semibold text-text">
+                  {React.createElement(feature.icon, { size: 20, className: 'text-primary' })}
+                  <span>{feature.title}</span>
                 </div>
                 <p className="mt-1 text-sm text-slate-600">{feature.description}</p>
               </div>
@@ -282,7 +283,7 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        <section className="grid gap-6 rounded-3xl border border-slate-200 bg-gradient-to-br from-secondary/5 via-white to-primary/5 p-5 shadow-soft md:p-8 lg:grid-cols-[1.1fr_0.9fr]">
+        <section className="grid gap-6 rounded-2xl border border-border bg-card p-5 shadow-soft md:p-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-3">
             <p className="text-sm font-semibold uppercase tracking-wide text-secondary">Как начать</p>
             <h2 className="text-2xl font-bold sm:text-3xl">Три шага до работы в кассе</h2>
@@ -300,7 +301,7 @@ const LandingPage: React.FC = () => {
               ))}
             </ul>
           </div>
-          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="space-y-4 rounded-xl border border-border bg-white p-6 shadow-soft">
             <div className="flex items-center justify-between">
               <div className="text-lg font-semibold">Шаг {activeStep + 1} из {onboardingSteps.length}</div>
               <div className="flex gap-2 text-sm font-semibold text-secondary">
@@ -320,11 +321,11 @@ const LandingPage: React.FC = () => {
                 </button>
               </div>
             </div>
-            <div className="rounded-xl bg-slate-50 p-5 text-sm text-slate-700">
+            <div className="rounded-lg bg-background p-5 text-sm text-slate-700">
               <div className="text-xs font-semibold uppercase tracking-wide text-secondary">{onboardingSteps[activeStep].title}</div>
               <div className="mt-2 text-lg font-bold text-slate-900">{onboardingSteps[activeStep].screenshotTitle}</div>
               <p className="mt-1 text-slate-600">{onboardingSteps[activeStep].description}</p>
-              <div className="mt-4 rounded-xl border border-dashed border-secondary/30 bg-white/80 p-4 text-center text-sm font-semibold text-secondary">
+              <div className="mt-4 rounded-lg border border-dashed border-secondary/30 bg-white p-4 text-center text-sm font-semibold text-secondary">
                 Карусель со скриншотами шага · уже реализована
               </div>
             </div>

@@ -9,17 +9,17 @@ const NewsPostPage: React.FC = () => {
   if (!item) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 text-center shadow-soft sm:p-10">
-          <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Запись не найдена</h1>
+        <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-soft sm:p-10">
+          <h1 className="text-2xl font-semibold text-text sm:text-3xl">Запись не найдена</h1>
           <p className="mt-3 text-slate-600">Проверьте ссылку или вернитесь к списку новостей.</p>
           <div className="mt-5 flex justify-center gap-3">
             <Link
               to="/news"
-              className="rounded-xl bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary/90"
+              className="rounded-lg bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-secondary/90"
             >
               К новостям
             </Link>
-            <Link to="/" className="rounded-xl px-4 py-2 text-sm font-semibold text-secondary hover:bg-secondary/10">
+            <Link to="/" className="rounded-lg px-4 py-2 text-sm font-semibold text-secondary hover:bg-secondary/10">
               На главную
             </Link>
           </div>
@@ -30,15 +30,15 @@ const NewsPostPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-      <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft sm:p-10">
+      <article className="rounded-2xl border border-border bg-card p-6 shadow-soft sm:p-10">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-secondary">{item.date}</p>
-            <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl">{item.title}</h1>
+            <h1 className="text-3xl font-semibold text-text sm:text-4xl">{item.title}</h1>
           </div>
           <Link
             to="/news"
-            className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold text-secondary transition hover:bg-secondary/10"
+            className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-secondary transition hover:bg-secondary/10"
           >
             ← Все обновления
           </Link>
