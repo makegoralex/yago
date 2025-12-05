@@ -1,12 +1,15 @@
 import { Router, type RequestHandler } from 'express';
 import { isValidObjectId, Types } from 'mongoose';
+import { z } from 'zod';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { validateRequest } from '../../middleware/validation';
 import { CategoryModel, ProductModel, type ProductIngredient } from './catalog.model';
 import { IngredientModel } from './ingredient.model';
 import { ModifierGroupModel, type ModifierOption } from './modifierGroup.model';
 import { recalculateProductCost, recalculateProductsForIngredient } from './productCost.service';
 import { canConvertUnit } from './unitConversion';
+import { catalogSchemas } from '../../validation/catalogSchemas';
 
 const router = Router();
 
@@ -237,39 +240,17 @@ router.get(
 router.post(
   '/modifier-groups',
   requireRole(['owner', 'superAdmin']),
+  validateRequest(catalogSchemas.modifierGroup),
   asyncHandler(async (req, res) => {
-    const { name, selectionType, required, sortOrder, options } = req.body ?? {};
+    const { name, selectionType, required, sortOrder, options } = req.body as z.infer<
+      typeof catalogSchemas.modifierGroup.body
+    >;
 
-    if (!name?.trim()) {
-      res.status(400).json({ data: null, error: 'Name is required' });
-      return;
-    }
-
-    if (selectionType !== 'single' && selectionType !== 'multiple') {
-      res.status(400).json({ data: null, error: 'selectionType must be single or multiple' });
-      return;
-    }
-
-    if (required !== undefined && typeof required !== 'boolean') {
-      res.status(400).json({ data: null, error: 'required must be a boolean' });
-      return;
-    }
-
-    if (options !== undefined && !Array.isArray(options)) {
-      res.status(400).json({ data: null, error: 'options must be an array' });
-      return;
-    }
-
-      const normalizedOptions: ModifierOption[] = (options ?? []).map((option: any) => ({
-        name: String(option?.name ?? '').trim(),
-        priceChange: Number(option?.priceChange ?? 0),
-        costChange: Number(option?.costChange ?? 0),
-      }));
-
-      if (normalizedOptions.some((option: ModifierOption) => !option.name)) {
-        res.status(400).json({ data: null, error: 'Each option must have a name' });
-        return;
-      }
+    const normalizedOptions: ModifierOption[] = (options ?? []).map((option) => ({
+      name: option.name,
+      priceChange: option.priceChange,
+      costChange: option.costChange,
+    }));
 
     const organizationId = req.organization!.id;
 
@@ -398,13 +379,9 @@ router.delete(
 router.post(
   '/categories',
   requireRole(['owner', 'superAdmin']),
+  validateRequest(catalogSchemas.categoryCreate),
   asyncHandler(async (req, res) => {
-    const { name, sortOrder } = req.body;
-
-    if (!name?.trim()) {
-      res.status(400).json({ data: null, error: 'Name is required' });
-      return;
-    }
+    const { name, sortOrder } = req.body as z.infer<typeof catalogSchemas.categoryCreate.body>;
 
     const organizationId = req.organization!.id;
 
@@ -418,20 +395,10 @@ router.post(
 router.put(
   '/categories/:id',
   requireRole(['owner', 'superAdmin']),
+  validateRequest(catalogSchemas.categoryUpdate),
   asyncHandler(async (req, res) => {
-    const { id } = req.params;
-
-    if (!isValidObjectId(id)) {
-      res.status(400).json({ data: null, error: 'Invalid category id' });
-      return;
-    }
-
-    const { name, sortOrder } = req.body;
-
-    if (name !== undefined && !name?.trim()) {
-      res.status(400).json({ data: null, error: 'Name cannot be empty' });
-      return;
-    }
+    const { id } = req.params as z.infer<typeof catalogSchemas.categoryUpdate.params>;
+    const { name, sortOrder } = req.body as z.infer<typeof catalogSchemas.categoryUpdate.body>;
 
     const update: Record<string, unknown> = {};
 
@@ -518,6 +485,7 @@ router.get(
 router.post(
   '/products',
   requireRole(['owner', 'superAdmin']),
+  validateRequest(catalogSchemas.productCreate),
   asyncHandler(async (req, res) => {
     const {
       name,
@@ -531,22 +499,7 @@ router.post(
       description,
       imageUrl,
       ingredients,
-    } = req.body;
-
-    if (!name?.trim()) {
-      res.status(400).json({ data: null, error: 'Name is required' });
-      return;
-    }
-
-    if (!categoryId || !isValidObjectId(categoryId)) {
-      res.status(400).json({ data: null, error: 'Valid categoryId is required' });
-      return;
-    }
-
-    if (isActive !== undefined && typeof isActive !== 'boolean') {
-      res.status(400).json({ data: null, error: 'isActive must be a boolean' });
-      return;
-    }
+    } = req.body as z.infer<typeof catalogSchemas.productCreate.body>;
 
     const organizationId = req.organization!.id;
 

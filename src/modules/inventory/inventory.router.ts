@@ -1,7 +1,9 @@
 import { Router, type Request, type RequestHandler } from 'express';
 import { isValidObjectId, Types } from 'mongoose';
+import { z } from 'zod';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { validateRequest } from '../../middleware/validation';
 import { ProductModel } from '../catalog/catalog.model';
 import { IngredientModel } from '../catalog/ingredient.model';
 import { InventoryItemModel } from './inventoryItem.model';
@@ -18,6 +20,7 @@ import {
   updateStockReceipt,
 } from './inventory.service';
 import { recalculateAverageCostForItem } from './inventoryCost.service';
+import { inventorySchemas } from '../../validation/inventorySchemas';
 
 const router = Router();
 
@@ -61,8 +64,11 @@ router.get(
 
 router.post(
   '/warehouses',
+  validateRequest(inventorySchemas.warehouseCreate),
   asyncHandler(async (req, res) => {
-    const { name, location, description } = req.body;
+    const { name, location, description } = req.body as z.infer<
+      typeof inventorySchemas.warehouseCreate.body
+    >;
     const organizationId = getOrganizationObjectId(req);
 
     if (!organizationId) {
@@ -70,13 +76,8 @@ router.post(
       return;
     }
 
-    if (!name?.trim()) {
-      res.status(400).json({ data: null, error: 'Name is required' });
-      return;
-    }
-
     const warehouse = new WarehouseModel({
-      name: name.trim(),
+      name,
       location: location?.trim(),
       description: description?.trim(),
       organizationId,
@@ -90,30 +91,24 @@ router.post(
 
 router.put(
   '/warehouses/:id',
+  validateRequest(inventorySchemas.warehouseUpdate),
   asyncHandler(async (req, res) => {
-    const { id } = req.params;
+    const { id } = req.params as z.infer<typeof inventorySchemas.warehouseUpdate.params>;
     const organizationId = getOrganizationObjectId(req);
-
-    if (!isValidObjectId(id)) {
-      res.status(400).json({ data: null, error: 'Invalid warehouse id' });
-      return;
-    }
 
     if (!organizationId) {
       res.status(403).json({ data: null, error: 'Organization context is required' });
       return;
     }
 
-    const { name, location, description } = req.body;
+    const { name, location, description } = req.body as z.infer<
+      typeof inventorySchemas.warehouseUpdate.body
+    >;
 
     const update: Record<string, unknown> = {};
 
     if (name !== undefined) {
-      if (!name?.trim()) {
-        res.status(400).json({ data: null, error: 'Name cannot be empty' });
-        return;
-      }
-      update.name = name.trim();
+      update.name = name;
     }
 
     if (location !== undefined) {
@@ -169,8 +164,11 @@ router.delete(
 
 router.get(
   '/items',
+  validateRequest(inventorySchemas.itemsQuery),
   asyncHandler(async (req, res) => {
-    const { warehouseId, itemType } = req.query;
+    const { warehouseId, itemType } = req.query as z.infer<
+      typeof inventorySchemas.itemsQuery.query
+    >;
     const organizationId = getOrganizationObjectId(req);
 
     if (!organizationId) {
@@ -181,11 +179,6 @@ router.get(
     const filter: Record<string, unknown> = { organizationId };
 
     if (warehouseId) {
-      if (typeof warehouseId !== 'string' || !isValidObjectId(warehouseId)) {
-        res.status(400).json({ data: null, error: 'Invalid warehouseId' });
-        return;
-      }
-
       filter.warehouseId = warehouseId;
 
       const warehouseExists = await WarehouseModel.exists({ _id: warehouseId, organizationId });
@@ -196,11 +189,6 @@ router.get(
     }
 
     if (itemType) {
-      if (itemType !== 'ingredient' && itemType !== 'product') {
-        res.status(400).json({ data: null, error: 'Invalid itemType' });
-        return;
-      }
-
       filter.itemType = itemType;
     }
 
@@ -212,8 +200,11 @@ router.get(
 
 router.post(
   '/items',
+  validateRequest(inventorySchemas.itemUpsert),
   asyncHandler(async (req, res) => {
-    const { warehouseId, itemType, itemId, quantity, unitCost } = req.body;
+    const { warehouseId, itemType, itemId, quantity, unitCost } = req.body as z.infer<
+      typeof inventorySchemas.itemUpsert.body
+    >;
     const organizationId = getOrganizationObjectId(req);
 
     if (!organizationId) {
@@ -221,27 +212,7 @@ router.post(
       return;
     }
 
-    if (!warehouseId || !isValidObjectId(warehouseId)) {
-      res.status(400).json({ data: null, error: 'Valid warehouseId is required' });
-      return;
-    }
-
-    if (itemType !== 'ingredient' && itemType !== 'product') {
-      res.status(400).json({ data: null, error: 'itemType must be ingredient or product' });
-      return;
-    }
-
-    if (!itemId || !isValidObjectId(itemId)) {
-      res.status(400).json({ data: null, error: 'Valid itemId is required' });
-      return;
-    }
-
     const numericQuantity = Number(quantity ?? 0);
-
-    if (Number.isNaN(numericQuantity) || numericQuantity < 0) {
-      res.status(400).json({ data: null, error: 'Quantity must be a positive number' });
-      return;
-    }
 
     if (itemType === 'ingredient') {
       const exists = await IngredientModel.exists({ _id: itemId, organizationId });
