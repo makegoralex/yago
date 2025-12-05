@@ -2,6 +2,7 @@ import { Router, type Request, type RequestHandler, type Response } from 'expres
 import { Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { enforceActiveSubscription } from '../../middleware/subscription';
 import {
   getRestaurantBranding,
   resetRestaurantBranding,
@@ -13,6 +14,7 @@ import {
 const router = Router();
 
 router.use(authMiddleware);
+router.use(enforceActiveSubscription);
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {

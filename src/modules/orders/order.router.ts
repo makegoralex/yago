@@ -2,6 +2,7 @@ import { Router, type Request, type RequestHandler } from 'express';
 import { FilterQuery, isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { enforceActiveSubscription } from '../../middleware/subscription';
 import { validateRequest } from '../../middleware/validation';
 import { OrganizationModel } from '../../models/Organization';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
@@ -260,6 +261,7 @@ const deductInventoryForOrder = async (order: OrderDocument): Promise<void> => {
 };
 
 router.use(authMiddleware);
+router.use(enforceActiveSubscription);
 
 type ItemModifierPayload = {
   groupId: string;

@@ -2,6 +2,7 @@ import { Router, type Request, type RequestHandler } from 'express';
 import { FilterQuery, isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { enforceActiveSubscription } from '../../middleware/subscription';
 import { OrderModel, type OrderDocument, type OrderStatus } from '../orders/order.model';
 import { ShiftModel, type ShiftDocument, type ShiftTotals } from './shift.model';
 
@@ -72,6 +73,7 @@ const calculateShiftTotals = async (
 };
 
 router.use(authMiddleware);
+router.use(enforceActiveSubscription);
 
 const openShiftHandler: RequestHandler = asyncHandler(async (req, res) => {
     const { locationId, registerId, openingBalance, openingNote } = req.body ?? {};

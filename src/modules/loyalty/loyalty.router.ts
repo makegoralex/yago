@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from 'express';
 import { isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { enforceActiveSubscription } from '../../middleware/subscription';
 import { OrderModel } from '../orders/order.model';
 import { earnLoyaltyPoints, redeemLoyaltyPoints } from './loyalty.service';
 
@@ -20,6 +21,7 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
 
 router.use(authMiddleware);
 router.use(requireRole(MANAGER_ROLES));
+router.use(enforceActiveSubscription);
 
 router.post(
   '/earn',
