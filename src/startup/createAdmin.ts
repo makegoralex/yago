@@ -20,6 +20,8 @@ export const ensureDefaultOwnerExists = async (): Promise<void> => {
         (await OrganizationModel.create({
           name: DEFAULT_ORGANIZATION_NAME,
           ownerUserId: existingAdmin._id,
+          subscriptionPlan: 'trial',
+          subscriptionStatus: 'trial',
         }));
 
       if (!organization.ownerUserId) {
@@ -40,7 +42,11 @@ export const ensureDefaultOwnerExists = async (): Promise<void> => {
 
   const organization =
     (await OrganizationModel.findOne({ name: DEFAULT_ORGANIZATION_NAME })) ??
-    (await OrganizationModel.create({ name: DEFAULT_ORGANIZATION_NAME }));
+    (await OrganizationModel.create({
+      name: DEFAULT_ORGANIZATION_NAME,
+      subscriptionPlan: 'trial',
+      subscriptionStatus: 'trial',
+    }));
 
   const owner = await UserModel.create({
     name: 'Yago Owner',
