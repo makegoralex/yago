@@ -6,6 +6,7 @@ import {
   type SubscriptionPlan,
   type FiscalProviderSettings,
   type OrganizationSettings,
+  type OrganizationDocument,
 } from '../models/Organization';
 import { SubscriptionPlanModel } from '../models/SubscriptionPlan';
 import { UserModel, type UserRole } from '../models/User';
@@ -30,6 +31,34 @@ const ALLOWED_ROLES: UserRole[] = ['cashier', 'owner', 'superAdmin'];
 const ONE_DAY_MS = 1000 * 60 * 60 * 24;
 
 const addDays = (date: Date, days: number) => new Date(date.getTime() + days * ONE_DAY_MS);
+
+const isSubscriptionReadOnly = (status: string | null | undefined) => ['expired', 'paused'].includes(status ?? '');
+
+const ensureOrganizationIsEditable = async (
+  req: Request,
+  res: Response,
+  organizationId: string
+): Promise<OrganizationDocument | null> => {
+  const organization = await OrganizationModel.findById(organizationId).select('subscriptionStatus');
+
+  if (!organization) {
+    res.status(404).json({ data: null, error: 'Organization not found' });
+    return null;
+  }
+
+  if (req.user?.role === 'superAdmin') {
+    return organization;
+  }
+
+  if (isSubscriptionReadOnly(organization.subscriptionStatus)) {
+    res
+      .status(402)
+      .json({ data: null, error: 'Подписка неактивна. Продлите её, чтобы продолжить редактирование данных.' });
+    return null;
+  }
+
+  return organization;
+};
 
 const normalizePlanName = (rawPlan: unknown, allowCustomPlan: boolean): SubscriptionPlan => {
   if (!allowCustomPlan) {
@@ -632,14 +661,44 @@ organizationsRouter.patch(
         return;
       }
 
-      if (isOwnerRequestingOtherOrganization(req, organizationId)) {
-        res.status(403).json({ data: null, error: 'Forbidden' });
-        return;
-      }
+    if (isOwnerRequestingOtherOrganization(req, organizationId)) {
+      res.status(403).json({ data: null, error: 'Forbidden' });
+      return;
+    }
 
-      const updates: Record<string, unknown> = {};
-      const setOperations: Record<string, unknown> = {};
-      const unsetOperations: Record<string, unknown> = {};
+    const editableOrganization = await ensureOrganizationIsEditable(req, res, organizationId);
+    if (!editableOrganization) {
+      return;
+    }
+
+    const updates: Record<string, unknown> = {};
+    const setOperations: Record<string, unknown> = {};
+    const unsetOperations: Record<string, unknown> = {};
+
+      const parseDateField = (value: unknown, field: 'trialEndsAt' | 'nextPaymentDueAt') => {
+        if (value === undefined) {
+          return true;
+        }
+
+        if (value === null || value === '') {
+          unsetOperations[field] = '';
+          return true;
+        }
+
+        if (value instanceof Date || typeof value === 'string' || typeof value === 'number') {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) {
+            res.status(400).json({ data: null, error: `${field} must be a valid date` });
+            return false;
+          }
+
+          setOperations[field] = date;
+          return true;
+        }
+
+        res.status(400).json({ data: null, error: `${field} must be a date string` });
+        return false;
+      };
 
       const parseDateField = (value: unknown, field: 'trialEndsAt' | 'nextPaymentDueAt') => {
         if (value === undefined) {
@@ -840,6 +899,11 @@ organizationsRouter.post(
 
     if (isOwnerRequestingOtherOrganization(req, organizationId)) {
       res.status(403).json({ data: null, error: 'Forbidden' });
+      return;
+    }
+
+    const editableOrganization = await ensureOrganizationIsEditable(req, res, organizationId);
+    if (!editableOrganization) {
       return;
     }
 

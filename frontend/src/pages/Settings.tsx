@@ -70,6 +70,10 @@ const SettingsPage: React.FC = () => {
   const [billingError, setBillingError] = useState('');
   const [billingLoading, setBillingLoading] = useState(false);
   const hasUnits = useMemo(() => unitsDraft.length > 0, [unitsDraft]);
+  const billingLocked = useMemo(
+    () => ['expired', 'paused'].includes(billingInfo?.status?.toLowerCase() ?? ''),
+    [billingInfo]
+  );
 
   const extractErrorMessage = (error: unknown, fallback: string) => {
     if (isAxiosError(error)) {
@@ -119,11 +123,13 @@ const SettingsPage: React.FC = () => {
   };
 
   const handleToggleOrderTags = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (billingLocked) return;
     updateRestaurantSettings({ enableOrderTags: event.target.checked });
   };
 
   const handleAddUnit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (billingLocked) return;
     const normalized = newUnit.trim();
     if (!normalized) {
       return;
@@ -139,10 +145,15 @@ const SettingsPage: React.FC = () => {
   };
 
   const handleRemoveUnit = (unit: string) => {
+    if (billingLocked) return;
     setUnitsDraft((prev) => prev.filter((item) => item !== unit));
   };
 
   const handleSaveUnits = async () => {
+    if (billingLocked) {
+      notify({ title: 'Продлите подписку, чтобы редактировать настройки', type: 'error' });
+      return;
+    }
     try {
       await updateRestaurantSettings({ measurementUnits: unitsDraft });
       notify({ title: 'Единицы измерения сохранены', type: 'success' });
@@ -159,6 +170,10 @@ const SettingsPage: React.FC = () => {
   const handleSaveFiscalSettings = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!organizationId) return;
+    if (billingLocked) {
+      notify({ title: 'Продлите подписку, чтобы редактировать настройки', type: 'error' });
+      return;
+    }
 
     setFiscalSaving(true);
     setFiscalMessage('');
@@ -186,6 +201,10 @@ const SettingsPage: React.FC = () => {
 
   const handleTestFiscalReceipt = async () => {
     if (!organizationId) return;
+    if (billingLocked) {
+      notify({ title: 'Продлите подписку, чтобы отправить тестовый чек', type: 'error' });
+      return;
+    }
 
     setTestLoading(true);
     setFiscalMessage('');
@@ -269,6 +288,11 @@ const SettingsPage: React.FC = () => {
 
           {billingError && <div className="mb-3 rounded-lg border border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-700">{billingError}</div>}
           {billingMessage && <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">{billingMessage}</div>}
+          {billingLocked && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Подписка просрочена: данные доступны только для чтения до продления.
+            </div>
+          )}
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -312,7 +336,8 @@ const SettingsPage: React.FC = () => {
                 type="checkbox"
                 checked={fiscalForm.enabled}
                 onChange={(event) => handleFiscalFieldChange('enabled', event.target.checked)}
-                className="h-5 w-5 rounded border-slate-300 text-secondary focus:ring-secondary/40"
+                disabled={billingLocked || fiscalSaving}
+                className="h-5 w-5 rounded border-slate-300 text-secondary focus:ring-secondary/40 disabled:cursor-not-allowed disabled:opacity-60"
               />
               <span>Фискализация включена</span>
             </label>
@@ -322,7 +347,8 @@ const SettingsPage: React.FC = () => {
               <select
                 value={fiscalForm.mode}
                 onChange={(event) => handleFiscalFieldChange('mode', event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:ring-2 focus:ring-secondary/20"
+                disabled={billingLocked || fiscalSaving}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:ring-2 focus:ring-secondary/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
               >
                 <option value="test">Тестовый</option>
                 <option value="prod">Продакшн</option>
@@ -336,7 +362,8 @@ const SettingsPage: React.FC = () => {
                 required={fiscalForm.enabled}
                 value={fiscalForm.login}
                 onChange={(event) => handleFiscalFieldChange('login', event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20"
+                disabled={billingLocked}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
               />
             </label>
 
@@ -347,7 +374,8 @@ const SettingsPage: React.FC = () => {
                 required={fiscalForm.enabled}
                 value={fiscalForm.password}
                 onChange={(event) => handleFiscalFieldChange('password', event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20"
+                disabled={billingLocked}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
               />
             </label>
 
@@ -358,7 +386,8 @@ const SettingsPage: React.FC = () => {
                 required={fiscalForm.enabled}
                 value={fiscalForm.groupCode}
                 onChange={(event) => handleFiscalFieldChange('groupCode', event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20"
+                disabled={billingLocked}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
               />
             </label>
 
@@ -369,7 +398,8 @@ const SettingsPage: React.FC = () => {
                 required={fiscalForm.enabled}
                 value={fiscalForm.inn}
                 onChange={(event) => handleFiscalFieldChange('inn', event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20"
+                disabled={billingLocked}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
               />
             </label>
 
@@ -380,7 +410,8 @@ const SettingsPage: React.FC = () => {
                 required={fiscalForm.enabled}
                 value={fiscalForm.paymentAddress}
                 onChange={(event) => handleFiscalFieldChange('paymentAddress', event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20"
+                disabled={billingLocked}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
               />
             </label>
 
@@ -390,7 +421,8 @@ const SettingsPage: React.FC = () => {
                 type="text"
                 value={fiscalForm.deviceId}
                 onChange={(event) => handleFiscalFieldChange('deviceId', event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20"
+                disabled={billingLocked}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-secondary/50 focus:bg-white focus:ring-2 focus:ring-secondary/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                 placeholder="Опционально"
               />
             </label>
@@ -414,14 +446,14 @@ const SettingsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => void handleTestFiscalReceipt()}
-                  disabled={testLoading || !fiscalForm.enabled}
+                  disabled={testLoading || !fiscalForm.enabled || billingLocked}
                   className="rounded-xl border border-secondary/40 px-4 py-3 text-sm font-semibold text-secondary transition hover:bg-secondary/10 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {testLoading ? 'Отправляем…' : 'Пробный чек'}
                 </button>
                 <button
                   type="submit"
-                  disabled={fiscalSaving}
+                  disabled={fiscalSaving || billingLocked}
                   className="rounded-xl bg-secondary px-6 py-3 text-sm font-semibold text-white shadow-secondary/20 transition hover:bg-secondary/90 disabled:cursor-not-allowed disabled:bg-secondary/70"
                 >
                   {fiscalSaving ? 'Сохраняем…' : 'Сохранить настройки'}
@@ -444,7 +476,8 @@ const SettingsPage: React.FC = () => {
               type="checkbox"
               checked={enableOrderTags}
               onChange={handleToggleOrderTags}
-              className="h-5 w-5 rounded border-slate-300 text-secondary focus:ring-secondary"
+              disabled={billingLocked}
+              className="h-5 w-5 rounded border-slate-300 text-secondary focus:ring-secondary disabled:cursor-not-allowed disabled:opacity-60"
             />
           </label>
         </div>
@@ -459,7 +492,8 @@ const SettingsPage: React.FC = () => {
             <button
               type="button"
               onClick={handleSaveUnits}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+              disabled={billingLocked}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
               Сохранить список
             </button>
@@ -470,12 +504,14 @@ const SettingsPage: React.FC = () => {
               type="text"
               value={newUnit}
               onChange={(event) => setNewUnit(event.target.value)}
+              disabled={billingLocked}
               placeholder="Например, грамм, мл, шт"
-              className="flex-1 rounded-2xl border border-slate-200 px-4 py-2"
+              className="flex-1 rounded-2xl border border-slate-200 px-4 py-2 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
             />
             <button
               type="submit"
-              className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+              disabled={billingLocked}
+              className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-emerald-300"
             >
               Добавить
             </button>
@@ -492,7 +528,8 @@ const SettingsPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleRemoveUnit(unit)}
-                    className="text-xs text-slate-500 transition hover:text-red-500"
+                    disabled={billingLocked}
+                    className="text-xs text-slate-500 transition hover:text-red-500 disabled:cursor-not-allowed disabled:text-slate-300"
                   >
                     Удалить
                   </button>
