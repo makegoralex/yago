@@ -1,5 +1,6 @@
 import { Document, Schema, model, Types } from 'mongoose';
 
+export type SubscriptionPlan = 'trial' | 'paid';
 export type SubscriptionStatus = 'active' | 'expired' | 'trial' | 'paused';
 
 export type FiscalProviderMode = 'test' | 'prod';
@@ -31,7 +32,9 @@ export interface OrganizationDocument extends Document {
   _id: Types.ObjectId;
   name: string;
   ownerUserId?: Types.ObjectId;
-  subscriptionPlan?: string;
+  subscriptionPlan: SubscriptionPlan;
+  trialEndsAt?: Date;
+  nextPaymentDueAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   settings?: OrganizationSettings;
@@ -80,9 +83,13 @@ const organizationSchema = new Schema<OrganizationDocument>(
     },
     subscriptionPlan: {
       type: String,
-      required: false,
+      enum: ['trial', 'paid'],
+      required: true,
       trim: true,
+      default: 'trial',
     },
+    trialEndsAt: { type: Date, required: false },
+    nextPaymentDueAt: { type: Date, required: false },
     settings: {
       type: settingsSchema,
       required: false,
