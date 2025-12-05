@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { isValidObjectId, Types } from 'mongoose';
 
 import { requireRole, authMiddleware } from '../../middleware/auth';
+import { enforceActiveSubscription } from '../../middleware/subscription';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
 import { DiscountModel, type Discount } from './discount.model';
 import { getAvailableDiscounts } from './discount.service';
@@ -516,6 +517,7 @@ export const handleDeleteDiscount = async (
 };
 
 router.use(authMiddleware);
+router.use(enforceActiveSubscription);
 
 router.get('/available', requireRole(CASHIER_ROLES), withErrorHandling(handleGetAvailableDiscounts));
 router.get('/', requireRole(ADMIN_ROLES), withErrorHandling(handleListDiscounts));
@@ -527,6 +529,7 @@ router.delete('/:id', requireRole(ADMIN_ROLES), withErrorHandling(handleDeleteDi
 export const createPosDiscountRouter = (): Router => {
   const posRouter = Router();
   posRouter.use(authMiddleware);
+  posRouter.use(enforceActiveSubscription);
   posRouter.get('/available', requireRole(CASHIER_ROLES), withErrorHandling(handleGetAvailableDiscounts));
   return posRouter;
 };
@@ -540,6 +543,7 @@ export const createAdminDiscountRouter = (options: AdminDiscountRouterOptions = 
   if (!options.skipAuth) {
     adminRouter.use(authMiddleware);
     adminRouter.use(requireRole(ADMIN_ROLES));
+    adminRouter.use(enforceActiveSubscription);
   }
   adminRouter.get('/', withErrorHandling(handleListDiscounts));
   adminRouter.post('/', withErrorHandling(handleCreateDiscount));

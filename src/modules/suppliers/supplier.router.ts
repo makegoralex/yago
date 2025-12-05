@@ -2,12 +2,14 @@ import { Router, type Request, type RequestHandler, type Response } from 'expres
 import { isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { enforceActiveSubscription } from '../../middleware/subscription';
 import { SupplierModel } from './supplier.model';
 
 const router = Router();
 
 router.use(authMiddleware);
 router.use(requireRole(['owner', 'superAdmin']));
+router.use(enforceActiveSubscription);
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {

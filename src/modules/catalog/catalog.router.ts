@@ -3,6 +3,7 @@ import { isValidObjectId, Types } from 'mongoose';
 import { z } from 'zod';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { enforceActiveSubscription } from '../../middleware/subscription';
 import { validateRequest } from '../../middleware/validation';
 import { CategoryModel, ProductModel, type ProductIngredient } from './catalog.model';
 import { IngredientModel } from './ingredient.model';
@@ -27,6 +28,7 @@ const requireOrganization: RequestHandler = (req, res, next) => {
 };
 
 router.use(requireOrganization);
+router.use(enforceActiveSubscription);
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (async (req, res, next) => {

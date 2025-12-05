@@ -3,6 +3,7 @@ import { isValidObjectId, Types } from 'mongoose';
 import { z } from 'zod';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { enforceActiveSubscription } from '../../middleware/subscription';
 import { validateRequest } from '../../middleware/validation';
 import { ProductModel } from '../catalog/catalog.model';
 import { IngredientModel } from '../catalog/ingredient.model';
@@ -26,6 +27,7 @@ const router = Router();
 
 router.use(authMiddleware);
 router.use(requireRole(['owner', 'superAdmin']));
+router.use(enforceActiveSubscription);
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (async (req, res, next) => {

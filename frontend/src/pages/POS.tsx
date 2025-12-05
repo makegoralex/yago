@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import HeaderBar from '../components/ui/HeaderBar';
 import CategorySidebar from '../components/ui/CategorySidebar';
@@ -21,10 +22,19 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useToast } from '../providers/ToastProvider';
 import { useShiftStore, type ShiftSummary } from '../store/shift';
 import { useRestaurantStore } from '../store/restaurant';
+import { useBillingInfo } from '../hooks/useBillingInfo';
 
 const POSPage: React.FC = () => {
+  const navigate = useNavigate();
   const isDesktop = useMediaQuery('(min-width: 1280px)');
   const isTablet = useMediaQuery('(min-width: 1024px)');
+  const {
+    billing,
+    billingLocked,
+    refreshBilling,
+    loading: billingLoading,
+    error: billingError,
+  } = useBillingInfo();
   const categories = useCatalogStore((state) => state.categories);
   const products = useCatalogStore((state) => state.products);
   const activeCategoryId = useCatalogStore((state) => state.activeCategoryId);
@@ -72,6 +82,19 @@ const POSPage: React.FC = () => {
   const isClosingShift = useShiftStore((state) => state.closing);
 
   const { notify } = useToast();
+  const formatBillingDate = (value?: string | null) =>
+    value ? new Date(value).toLocaleDateString('ru-RU') : '—';
+  const requireActiveSubscription = useCallback(() => {
+    if (!billingLocked) return true;
+
+    notify({
+      title: 'Подписка неактивна',
+      description: 'Продлите подписку в настройках, чтобы продолжить оформлять заказы.',
+      type: 'error',
+    });
+
+    return false;
+  }, [billingLocked, notify]);
   const [isOrderDrawerOpen, setOrderDrawerOpen] = useState(false);
   const [isPaymentOpen, setPaymentOpen] = useState(false);
   const [isLoyaltyOpen, setLoyaltyOpen] = useState(false);
@@ -157,6 +180,10 @@ const POSPage: React.FC = () => {
   const shouldShowProductSearch = isTablet || activeSection === 'products';
 
   const handleStartOrder = async () => {
+    if (!requireActiveSubscription()) {
+      return;
+    }
+
     if (!currentShift) {
       notify({
         title: 'Смена закрыта',
@@ -189,6 +216,10 @@ const POSPage: React.FC = () => {
   };
 
   const handlePayConfirm = async (payload: { method: PaymentMethod; amountTendered: number; change?: number }) => {
+    if (!requireActiveSubscription()) {
+      return;
+    }
+
     setPaying(true);
     try {
       await payOrder(payload);
@@ -209,6 +240,10 @@ const POSPage: React.FC = () => {
   };
 
   const handleCompleteCurrentOrder = async () => {
+    if (!requireActiveSubscription()) {
+      return;
+    }
+
     if (!orderId) {
       return;
     }
@@ -230,6 +265,10 @@ const POSPage: React.FC = () => {
   };
 
   const handleAttachCustomer = async (customerToAttach: CustomerSummary | null) => {
+    if (!requireActiveSubscription()) {
+      return;
+    }
+
     try {
       await attachCustomer(customerToAttach);
     } catch (error) {
@@ -240,6 +279,10 @@ const POSPage: React.FC = () => {
   };
 
   const handleRemoveCustomer = async () => {
+    if (!requireActiveSubscription()) {
+      return;
+    }
+
     try {
       await clearDiscount();
       await attachCustomer(null);
@@ -251,6 +294,10 @@ const POSPage: React.FC = () => {
   };
 
   const handleOrderTagChange = async (nextTag: OrderTag | null) => {
+    if (!requireActiveSubscription()) {
+      return;
+    }
+
     try {
       await setOrderTag(nextTag);
     } catch (error) {
@@ -260,6 +307,10 @@ const POSPage: React.FC = () => {
   };
 
   const handleRedeemConfirm = async (pointsValue: number) => {
+    if (!requireActiveSubscription()) {
+      return;
+    }
+
     setRedeeming(true);
     try {
       if (!customer) {
@@ -279,6 +330,10 @@ const POSPage: React.FC = () => {
   };
 
   const handleOpenShift = async () => {
+    if (!requireActiveSubscription()) {
+      return;
+    }
+
     try {
       await openShift();
       notify({ title: 'Смена открыта', type: 'success' });
@@ -291,6 +346,10 @@ const POSPage: React.FC = () => {
   };
 
   const handleCloseShift = async () => {
+    if (!requireActiveSubscription()) {
+      return;
+    }
+
     if (!currentShift) {
       return;
     }
@@ -323,6 +382,10 @@ const POSPage: React.FC = () => {
   };
 
   const handleAddProduct = (product: typeof products[number]) => {
+    if (!requireActiveSubscription()) {
+      return;
+    }
+
     if (product.modifierGroups?.length) {
       setModifierProduct(product);
       if (!isTablet) {
@@ -340,6 +403,10 @@ const POSPage: React.FC = () => {
   };
 
   const handleModifierConfirm = (modifiers: SelectedModifier[]) => {
+    if (!requireActiveSubscription()) {
+      return;
+    }
+
     if (!modifierProduct) return;
 
     void addProduct(modifierProduct, modifiers).catch(() => {
@@ -365,6 +432,49 @@ const POSPage: React.FC = () => {
         onShowShift={() => setShiftPanelOpen(true)}
         shiftStatus={shiftStatus}
       />
+      <div
+        className={`rounded-xl border px-4 py-3 text-sm shadow-sm ${
+          billingLocked ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-white'
+        }`}
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              Подписка: {billing?.status ?? '—'}
+              {billing?.plan ? ` (${billing.plan === 'trial' ? 'триал' : 'оплачено'})` : ''}
+            </p>
+            <p className="text-xs text-slate-600">
+              {billing?.plan === 'trial'
+                ? `Демо до ${formatBillingDate(billing?.trialEndsAt)}`
+                : `Следующий платёж: ${formatBillingDate(billing?.nextPaymentDueAt)}`}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/settings')}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white shadow-soft transition hover:bg-primary-dark"
+            >
+              Перейти к продлению
+            </button>
+            <button
+              type="button"
+              onClick={() => void refreshBilling()}
+              disabled={billingLoading}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 disabled:opacity-60"
+            >
+              {billingLoading ? 'Обновляем…' : 'Обновить статус'}
+            </button>
+          </div>
+        </div>
+        {billingError ? (
+          <p className="mt-2 text-xs text-rose-700">{billingError}</p>
+        ) : billingLocked ? (
+          <p className="mt-2 text-xs text-rose-700">
+            Подписка неактивна. Продлите её в настройках, чтобы пробивать чеки и изменять данные.
+          </p>
+        ) : null}
+      </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
         <div className="custom-scrollbar hidden min-h-0 flex-shrink-0 lg:flex lg:h-full lg:w-auto lg:overflow-y-auto">
           <CategorySidebar
@@ -408,7 +518,7 @@ const POSPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => void handleStartOrder()}
-                  disabled={isStartingOrder}
+                  disabled={isStartingOrder || billingLocked}
                   className="w-full rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
                 >
                   {startOrderButtonLabel}

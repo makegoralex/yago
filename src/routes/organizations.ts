@@ -3,8 +3,10 @@ import mongoose from 'mongoose';
 
 import {
   OrganizationModel,
+  type SubscriptionPlan,
   type FiscalProviderSettings,
   type OrganizationSettings,
+  type OrganizationDocument,
 } from '../models/Organization';
 import { SubscriptionPlanModel } from '../models/SubscriptionPlan';
 import { UserModel, type UserRole } from '../models/User';
@@ -13,11 +15,72 @@ import { RestaurantSettingsModel } from '../modules/restaurant/restaurantSetting
 import { generateTokens, hashPassword } from '../services/authService';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { getFiscalProviderFromSettings, sendAtolTestReceipt } from '../services/fiscal/atol.service';
+import {
+  buildBillingInfo,
+  DEFAULT_BILLING_CYCLE_DAYS,
+  loadPlanPricing,
+  simulatePaymentCycle,
+  synchronizeOrganizationBilling,
+  TRIAL_PERIOD_DAYS,
+} from '../services/billing.service';
 
 export const organizationsRouter = Router();
 
 const DEFAULT_CATEGORIES = ['Горячие напитки', 'Холодные напитки', 'Десерты'];
 const ALLOWED_ROLES: UserRole[] = ['cashier', 'owner', 'superAdmin'];
+const ONE_DAY_MS = 1000 * 60 * 60 * 24;
+
+const addDays = (date: Date, days: number) => new Date(date.getTime() + days * ONE_DAY_MS);
+
+const isSubscriptionReadOnly = (status: string | null | undefined) => ['expired', 'paused'].includes(status ?? '');
+
+const ensureOrganizationIsEditable = async (
+  req: Request,
+  res: Response,
+  organizationId: string
+): Promise<OrganizationDocument | null> => {
+  const organization = await OrganizationModel.findById(organizationId).select('subscriptionStatus');
+
+  if (!organization) {
+    res.status(404).json({ data: null, error: 'Organization not found' });
+    return null;
+  }
+
+  if (req.user?.role === 'superAdmin') {
+    return organization;
+  }
+
+  if (isSubscriptionReadOnly(organization.subscriptionStatus)) {
+    res
+      .status(402)
+      .json({ data: null, error: 'Подписка неактивна. Продлите её, чтобы продолжить редактирование данных.' });
+    return null;
+  }
+
+  return organization;
+};
+
+const normalizePlanName = (rawPlan: unknown, allowCustomPlan: boolean): SubscriptionPlan => {
+  if (!allowCustomPlan) {
+    return 'trial';
+  }
+
+  if (typeof rawPlan !== 'string') {
+    return 'trial';
+  }
+
+  const normalized = rawPlan.trim();
+
+  if (!normalized) {
+    return 'trial';
+  }
+
+  if (!['trial', 'paid'].includes(normalized)) {
+    throw new HttpError(400, 'subscriptionPlan must be trial or paid');
+  }
+
+  return normalized as SubscriptionPlan;
+};
 
 const isOwnerRequestingOtherOrganization = (req: Request, organizationId: string) =>
   req.user?.role === 'owner' && String(req.user.organizationId) !== organizationId;
@@ -85,7 +148,7 @@ const validateFiscalProviderSettings = (payload: unknown): FiscalProviderSetting
 organizationsRouter.get('/', authMiddleware, requireRole('superAdmin'), async (_req: Request, res: Response) => {
   try {
     const organizations = await OrganizationModel.find()
-      .select('name subscriptionPlan subscriptionStatus ownerUserId createdAt settings')
+      .select('name subscriptionPlan subscriptionStatus ownerUserId createdAt settings trialEndsAt nextPaymentDueAt updatedAt')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -103,15 +166,28 @@ organizationsRouter.get('/', authMiddleware, requireRole('superAdmin'), async (_
         }, {})
       );
 
-    const payload = organizations.map((org) => ({
-      id: String(org._id),
-      name: org.name,
-      subscriptionPlan: org.subscriptionPlan ?? null,
-      subscriptionStatus: org.subscriptionStatus,
-      createdAt: org.createdAt,
-      settings: org.settings ?? {},
-      owner: org.ownerUserId ? ownersById[String(org.ownerUserId)] ?? null : null,
-    }));
+    const pricing = await loadPlanPricing(organizations.map((org) => org.subscriptionPlan));
+
+    const payload = await Promise.all(
+      organizations.map(async (org) => {
+        const billing = await synchronizeOrganizationBilling(org as any, pricing);
+
+        return {
+          id: String(org._id),
+          name: org.name,
+          subscriptionPlan: org.subscriptionPlan ?? 'trial',
+          subscriptionStatus: billing.status,
+          createdAt: org.createdAt,
+          settings: org.settings ?? {},
+          owner: org.ownerUserId ? ownersById[String(org.ownerUserId)] ?? null : null,
+          billing: {
+            ...billing,
+            trialEndsAt: billing.trialEndsAt ?? null,
+            nextPaymentDueAt: billing.nextPaymentDueAt ?? null,
+          },
+        };
+      })
+    );
 
     res.json({ data: payload, error: null });
   } catch (error) {
@@ -144,10 +220,7 @@ const createOrganizationWithOwner = async (
     throw new HttpError(400, 'name and owner credentials are required');
   }
 
-  const normalizedPlan =
-    allowCustomPlan && typeof subscriptionPlan === 'string' && subscriptionPlan.trim()
-      ? subscriptionPlan.trim()
-      : undefined;
+  const normalizedPlan = normalizePlanName(subscriptionPlan, allowCustomPlan);
 
   const normalizedName = name.trim();
   const normalizedEmail = owner.email.toLowerCase();
@@ -165,10 +238,13 @@ const createOrganizationWithOwner = async (
   const createdResources: { organizationId?: mongoose.Types.ObjectId; userId?: mongoose.Types.ObjectId } = {};
 
   try {
+    const now = new Date();
     const organization = await OrganizationModel.create({
       name: normalizedName,
       subscriptionPlan: normalizedPlan,
-      subscriptionStatus: 'trial',
+      subscriptionStatus: normalizedPlan === 'paid' ? 'active' : 'trial',
+      trialEndsAt: normalizedPlan === 'trial' ? addDays(now, TRIAL_PERIOD_DAYS) : undefined,
+      nextPaymentDueAt: normalizedPlan === 'paid' ? addDays(now, DEFAULT_BILLING_CYCLE_DAYS) : undefined,
       settings: allowCustomSettings && settings && typeof settings === 'object' ? settings : {},
     });
 
@@ -217,13 +293,16 @@ const createOrganizationWithOwner = async (
     }
 
     const tokens = generateTokens(user);
+    const pricing = await loadPlanPricing([normalizedPlan]);
+    const billing = buildBillingInfo(organization as any, pricing);
 
     return {
       organization: {
         id: String(organization._id),
         name: organization.name,
         subscriptionPlan: organization.subscriptionPlan,
-        subscriptionStatus: organization.subscriptionStatus,
+        subscriptionStatus: billing.status,
+        billing,
       },
       owner: {
         id: String(user._id),
@@ -287,6 +366,67 @@ organizationsRouter.post('/public/create', async (req: Request, res: Response) =
     res.status(status).json({ data: null, error: displayMessage });
   }
 });
+
+organizationsRouter.get(
+  '/billing/summary',
+  authMiddleware,
+  requireRole('superAdmin'),
+  async (_req: Request, res: Response) => {
+    try {
+      const organizations = await OrganizationModel.find()
+        .select('subscriptionPlan subscriptionStatus createdAt updatedAt trialEndsAt nextPaymentDueAt')
+        .lean();
+
+      const pricing = await loadPlanPricing(organizations.map((org) => org.subscriptionPlan));
+      const billings = await Promise.all(
+        organizations.map((org) => synchronizeOrganizationBilling(org as any, pricing))
+      );
+
+      const summary = billings.reduce(
+        (acc, billing) => {
+          if (billing.plan === 'trial') {
+            acc.activeTrials += billing.status === 'trial' ? 1 : 0;
+            acc.expiredTrials += billing.status === 'expired' ? 1 : 0;
+          }
+
+          if (billing.plan === 'paid') {
+            if (billing.status === 'active') {
+              acc.activePaid += 1;
+              acc.projectedMrr += billing.monthlyPrice;
+            }
+
+            if (billing.status === 'paused') {
+              acc.pausedPaid += 1;
+            }
+
+            if (billing.isPaymentDue) {
+              acc.overduePayments += 1;
+            }
+
+            acc.expectedNext30DaysRevenue += billing.monthlyPrice;
+          }
+
+          return acc;
+        },
+        {
+          totalOrganizations: organizations.length,
+          activeTrials: 0,
+          expiredTrials: 0,
+          activePaid: 0,
+          pausedPaid: 0,
+          overduePayments: 0,
+          projectedMrr: 0,
+          expectedNext30DaysRevenue: 0,
+        }
+      );
+
+      res.json({ data: summary, error: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load billing summary';
+      res.status(500).json({ data: null, error: message });
+    }
+  }
+);
 
 organizationsRouter.get(
   '/users',
@@ -477,21 +617,31 @@ organizationsRouter.get(
       return;
     }
 
-    const organization = await OrganizationModel.findById(organizationId).lean();
+    const organization = await OrganizationModel.findById(organizationId)
+      .select('name subscriptionPlan subscriptionStatus createdAt settings trialEndsAt nextPaymentDueAt updatedAt')
+      .lean();
 
     if (!organization) {
       res.status(404).json({ data: null, error: 'Organization not found' });
       return;
     }
 
+    const pricing = await loadPlanPricing([organization.subscriptionPlan]);
+    const billing = await synchronizeOrganizationBilling(organization as any, pricing);
+
     res.json({
       data: {
         id: String(organization._id),
         name: organization.name,
-        subscriptionPlan: organization.subscriptionPlan ?? null,
-        subscriptionStatus: organization.subscriptionStatus,
+        subscriptionPlan: organization.subscriptionPlan ?? 'trial',
+        subscriptionStatus: billing.status,
         createdAt: organization.createdAt,
         settings: organization.settings ?? {},
+        billing: {
+          ...billing,
+          trialEndsAt: billing.trialEndsAt ?? null,
+          nextPaymentDueAt: billing.nextPaymentDueAt ?? null,
+        },
       },
       error: null,
     });
@@ -511,14 +661,44 @@ organizationsRouter.patch(
         return;
       }
 
-      if (isOwnerRequestingOtherOrganization(req, organizationId)) {
-        res.status(403).json({ data: null, error: 'Forbidden' });
-        return;
-      }
+    if (isOwnerRequestingOtherOrganization(req, organizationId)) {
+      res.status(403).json({ data: null, error: 'Forbidden' });
+      return;
+    }
 
-      const updates: Record<string, unknown> = {};
-      const setOperations: Record<string, unknown> = {};
-      const unsetOperations: Record<string, unknown> = {};
+    const editableOrganization = await ensureOrganizationIsEditable(req, res, organizationId);
+    if (!editableOrganization) {
+      return;
+    }
+
+    const updates: Record<string, unknown> = {};
+    const setOperations: Record<string, unknown> = {};
+    const unsetOperations: Record<string, unknown> = {};
+
+      const parseDateField = (value: unknown, field: 'trialEndsAt' | 'nextPaymentDueAt') => {
+        if (value === undefined) {
+          return true;
+        }
+
+        if (value === null || value === '') {
+          unsetOperations[field] = '';
+          return true;
+        }
+
+        if (value instanceof Date || typeof value === 'string' || typeof value === 'number') {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) {
+            res.status(400).json({ data: null, error: `${field} must be a valid date` });
+            return false;
+          }
+
+          setOperations[field] = date;
+          return true;
+        }
+
+        res.status(400).json({ data: null, error: `${field} must be a date string` });
+        return false;
+      };
 
       if (req.user?.role === 'superAdmin') {
         if (typeof req.body?.name === 'string' && req.body.name.trim()) {
@@ -526,7 +706,19 @@ organizationsRouter.patch(
         }
 
         if (typeof req.body?.subscriptionPlan === 'string') {
-          updates.subscriptionPlan = req.body.subscriptionPlan.trim() || undefined;
+          const normalizedPlan = normalizePlanName(req.body.subscriptionPlan, true);
+          updates.subscriptionPlan = normalizedPlan;
+
+          if (normalizedPlan === 'trial') {
+            setOperations.trialEndsAt = addDays(new Date(), TRIAL_PERIOD_DAYS);
+            unsetOperations.nextPaymentDueAt = '';
+            updates.subscriptionStatus = 'trial';
+          }
+
+          if (normalizedPlan === 'paid') {
+            setOperations.nextPaymentDueAt = simulatePaymentCycle();
+            updates.subscriptionStatus = updates.subscriptionStatus ?? 'active';
+          }
         }
 
         if (
@@ -535,6 +727,12 @@ organizationsRouter.patch(
         ) {
           updates.subscriptionStatus = req.body.subscriptionStatus;
         }
+
+        const parsedTrial = parseDateField(req.body?.trialEndsAt, 'trialEndsAt');
+        if (!parsedTrial) return;
+
+        const parsedNextPayment = parseDateField(req.body?.nextPaymentDueAt, 'nextPaymentDueAt');
+        if (!parsedNextPayment) return;
       }
 
       if ('fiscalProvider' in (req.body?.settings ?? req.body)) {
@@ -587,14 +785,22 @@ organizationsRouter.patch(
         );
       }
 
+      const pricing = await loadPlanPricing([organization.subscriptionPlan]);
+      const billing = await synchronizeOrganizationBilling(organization as any, pricing);
+
       res.json({
         data: {
           id: String(organization._id),
           name: organization.name,
           subscriptionPlan: organization.subscriptionPlan ?? null,
-          subscriptionStatus: organization.subscriptionStatus,
+          subscriptionStatus: billing.status,
           createdAt: organization.createdAt,
           settings: organization.settings ?? {},
+          billing: {
+            ...billing,
+            trialEndsAt: billing.trialEndsAt ?? null,
+            nextPaymentDueAt: billing.nextPaymentDueAt ?? null,
+          },
         },
         error: null,
       });
@@ -602,6 +808,55 @@ organizationsRouter.patch(
       const message = error instanceof Error ? error.message : 'Unable to update organization';
       res.status(500).json({ data: null, error: message });
     }
+  }
+);
+
+organizationsRouter.post(
+  '/:organizationId/billing/simulate-payment',
+  authMiddleware,
+  requireRole(['owner', 'superAdmin']),
+  async (req: Request, res: Response) => {
+    const { organizationId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+      res.status(400).json({ data: null, error: 'Invalid organization id' });
+      return;
+    }
+
+    if (isOwnerRequestingOtherOrganization(req, organizationId)) {
+      res.status(403).json({ data: null, error: 'Forbidden' });
+      return;
+    }
+
+    const organization = await OrganizationModel.findById(organizationId);
+
+    if (!organization) {
+      res.status(404).json({ data: null, error: 'Organization not found' });
+      return;
+    }
+
+    organization.subscriptionPlan = 'paid';
+    organization.subscriptionStatus = 'active';
+    organization.nextPaymentDueAt = simulatePaymentCycle(organization.nextPaymentDueAt ?? new Date());
+
+    await organization.save();
+
+    const pricing = await loadPlanPricing([organization.subscriptionPlan]);
+    const billing = buildBillingInfo(organization as any, pricing);
+
+    res.json({
+      data: {
+        id: String(organization._id),
+        subscriptionPlan: organization.subscriptionPlan,
+        subscriptionStatus: billing.status,
+        billing: {
+          ...billing,
+          trialEndsAt: billing.trialEndsAt ?? null,
+          nextPaymentDueAt: billing.nextPaymentDueAt ?? null,
+        },
+      },
+      error: null,
+    });
   }
 );
 
@@ -619,6 +874,11 @@ organizationsRouter.post(
 
     if (isOwnerRequestingOtherOrganization(req, organizationId)) {
       res.status(403).json({ data: null, error: 'Forbidden' });
+      return;
+    }
+
+    const editableOrganization = await ensureOrganizationIsEditable(req, res, organizationId);
+    if (!editableOrganization) {
       return;
     }
 

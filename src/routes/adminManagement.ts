@@ -2,6 +2,8 @@ import { Router, type Request, type RequestHandler, type Response } from 'expres
 import { Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../middleware/auth';
+import { enforceActiveSubscription } from '../middleware/subscription';
+import { OrganizationModel } from '../models/Organization';
 import { CategoryModel, ProductModel } from '../modules/catalog/catalog.model';
 import { IngredientModel } from '../modules/catalog/ingredient.model';
 import {
@@ -36,6 +38,7 @@ const router = Router();
 
 router.use(authMiddleware);
 router.use(requireRole(['owner', 'superAdmin']));
+router.use(enforceActiveSubscription);
 
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {

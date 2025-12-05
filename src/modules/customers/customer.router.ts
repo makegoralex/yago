@@ -1,6 +1,7 @@
 import { Router, type RequestHandler } from 'express';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { enforceActiveSubscription } from '../../middleware/subscription';
 import { CustomerModel } from './customer.model';
 
 const router = Router();
@@ -18,6 +19,7 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
 
 router.use(authMiddleware);
 router.use(requireRole(MANAGER_ROLES));
+router.use(enforceActiveSubscription);
 
 const requireOrganization: RequestHandler = (req, res, next) => {
   const organizationId = req.organization?.id;
