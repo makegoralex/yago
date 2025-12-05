@@ -136,7 +136,13 @@ const SuperAdminPage: React.FC = () => {
   const [createMessage, setCreateMessage] = useState('');
   const [createError, setCreateError] = useState('');
   const [editingOrganization, setEditingOrganization] = useState<OrganizationSummary | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', subscriptionPlan: '', subscriptionStatus: 'trial' });
+  const [editForm, setEditForm] = useState({
+    name: '',
+    subscriptionPlan: '',
+    subscriptionStatus: 'trial',
+    trialEndsAt: '',
+    nextPaymentDueAt: '',
+  });
   const [updateLoading, setUpdateLoading] = useState(false);
   const [updateError, setUpdateError] = useState('');
   const [fiscalOrganizationId, setFiscalOrganizationId] = useState('');
@@ -431,6 +437,8 @@ const SuperAdminPage: React.FC = () => {
       name: organization.name,
       subscriptionPlan: organization.subscriptionPlan ?? '',
       subscriptionStatus: organization.subscriptionStatus,
+      trialEndsAt: formatDateInputValue(organization.billing?.trialEndsAt ?? null),
+      nextPaymentDueAt: formatDateInputValue(organization.billing?.nextPaymentDueAt ?? null),
     });
     setUpdateError('');
   };
@@ -448,6 +456,8 @@ const SuperAdminPage: React.FC = () => {
         name: editForm.name,
         subscriptionPlan: editForm.subscriptionPlan,
         subscriptionStatus: editForm.subscriptionStatus,
+        trialEndsAt: editForm.trialEndsAt || null,
+        nextPaymentDueAt: editForm.nextPaymentDueAt || null,
       });
 
       await fetchOrganizations();
@@ -529,6 +539,13 @@ const SuperAdminPage: React.FC = () => {
     const date = new Date(isoDate);
     if (Number.isNaN(date.getTime())) return '—';
     return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+  };
+
+  const formatDateInputValue = (isoDate?: string | null) => {
+    if (!isoDate) return '';
+    const date = new Date(isoDate);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 10);
   };
 
   const formatCurrency = (value: number) =>
@@ -1220,6 +1237,28 @@ const SuperAdminPage: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                </label>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Дата конца trial</span>
+                  <input
+                    type="date"
+                    value={editForm.trialEndsAt}
+                    onChange={(event) => setEditForm((form) => ({ ...form, trialEndsAt: event.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Следующий платёж</span>
+                  <input
+                    type="date"
+                    value={editForm.nextPaymentDueAt}
+                    onChange={(event) => setEditForm((form) => ({ ...form, nextPaymentDueAt: event.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-inner shadow-slate-100 outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                  />
                 </label>
               </div>
 

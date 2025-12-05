@@ -641,6 +641,31 @@ organizationsRouter.patch(
       const setOperations: Record<string, unknown> = {};
       const unsetOperations: Record<string, unknown> = {};
 
+      const parseDateField = (value: unknown, field: 'trialEndsAt' | 'nextPaymentDueAt') => {
+        if (value === undefined) {
+          return true;
+        }
+
+        if (value === null || value === '') {
+          unsetOperations[field] = '';
+          return true;
+        }
+
+        if (value instanceof Date || typeof value === 'string' || typeof value === 'number') {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) {
+            res.status(400).json({ data: null, error: `${field} must be a valid date` });
+            return false;
+          }
+
+          setOperations[field] = date;
+          return true;
+        }
+
+        res.status(400).json({ data: null, error: `${field} must be a date string` });
+        return false;
+      };
+
       if (req.user?.role === 'superAdmin') {
         if (typeof req.body?.name === 'string' && req.body.name.trim()) {
           updates.name = req.body.name.trim();
@@ -668,6 +693,12 @@ organizationsRouter.patch(
         ) {
           updates.subscriptionStatus = req.body.subscriptionStatus;
         }
+
+        const parsedTrial = parseDateField(req.body?.trialEndsAt, 'trialEndsAt');
+        if (!parsedTrial) return;
+
+        const parsedNextPayment = parseDateField(req.body?.nextPaymentDueAt, 'nextPaymentDueAt');
+        if (!parsedNextPayment) return;
       }
 
       if ('fiscalProvider' in (req.body?.settings ?? req.body)) {
