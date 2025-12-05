@@ -2,28 +2,7 @@ import { Document, Schema, model, Types } from 'mongoose';
 
 export type SubscriptionStatus = 'active' | 'expired' | 'trial' | 'paused';
 
-export type FiscalProviderMode = 'test' | 'prod';
-
-export interface FiscalProviderSettings {
-  enabled: boolean;
-  provider: 'atol';
-  mode: FiscalProviderMode;
-  login: string;
-  password: string;
-  groupCode: string;
-  inn: string;
-  paymentAddress: string;
-  deviceId?: string;
-  lastTest?: {
-    status: 'registered' | 'pending' | 'failed';
-    testedAt: Date;
-    receiptId?: string;
-    message?: string;
-  };
-}
-
 export interface OrganizationSettings {
-  fiscalProvider?: FiscalProviderSettings;
   [key: string]: unknown;
 }
 
@@ -38,30 +17,8 @@ export interface OrganizationDocument extends Document {
   subscriptionStatus: SubscriptionStatus;
 }
 
-const fiscalProviderSchema = new Schema<FiscalProviderSettings>(
-  {
-    enabled: { type: Boolean, default: false },
-    provider: { type: String, enum: ['atol'], required: true, default: 'atol' },
-    mode: { type: String, enum: ['test', 'prod'], required: true, default: 'test' },
-    login: { type: String, required: true, trim: true },
-    password: { type: String, required: true, trim: true },
-    groupCode: { type: String, required: true, trim: true },
-    inn: { type: String, required: true, trim: true },
-    paymentAddress: { type: String, required: true, trim: true },
-    deviceId: { type: String, required: false, trim: true },
-    lastTest: {
-      status: { type: String, enum: ['registered', 'pending', 'failed'], required: true },
-      testedAt: { type: Date, required: true },
-      receiptId: { type: String, required: false, trim: true },
-      message: { type: String, required: false, trim: true },
-    },
-  },
-  { _id: false }
-);
-
 const settingsSchema = new Schema<OrganizationSettings>(
   {
-    fiscalProvider: { type: fiscalProviderSchema, required: false },
   },
   { _id: false, strict: false }
 );

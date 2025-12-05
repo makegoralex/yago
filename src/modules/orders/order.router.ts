@@ -2,7 +2,6 @@ import { Router, type Request, type RequestHandler } from 'express';
 import { FilterQuery, isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
-import { OrganizationModel } from '../../models/Organization';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
 import { CustomerModel } from '../customers/customer.model';
 import { earnLoyaltyPoints } from '../loyalty/loyalty.service';
@@ -18,7 +17,6 @@ import { WarehouseModel } from '../inventory/warehouse.model';
 import { adjustInventoryQuantity } from '../inventory/inventoryCost.service';
 import { calculateOrderTotals } from '../discounts/discount.service';
 import { ShiftDocument, ShiftModel } from '../shifts/shift.model';
-import { getFiscalProviderFromSettings, sendAtolReceipt } from '../../services/fiscal/atol.service';
 
 const router = Router();
 
@@ -124,14 +122,6 @@ const normalizeOrderTag = (value: unknown): OrderTag | null => {
 
   return normalized as OrderTag;
 };
-
-const buildFiscalItems = (items: OrderItem[]) =>
-  items.map((item) => ({
-    name: item.name,
-    price: roundCurrency(item.price),
-    quantity: item.qty,
-    sum: roundCurrency(item.total),
-  }));
 
 const buildShiftHistoryFilter = (
   shift: ShiftDocument,
@@ -839,52 +829,12 @@ router.post(
       return;
     }
 
-    const organization = await OrganizationModel.findById(organizationId).lean();
-    const fiscalProvider = getFiscalProviderFromSettings(organization?.settings);
-
-    let receiptId: string | undefined;
-    let fiscalStatus: 'pending' | 'registered' | 'failed' | undefined;
-
-    if (fiscalProvider?.enabled && fiscalProvider.provider === 'atol') {
-      try {
-        const orderIdString = order._id instanceof Types.ObjectId ? order._id.toString() : String(order._id);
-
-        const fiscalResult = await sendAtolReceipt({
-          mode: fiscalProvider.mode,
-          credentials: {
-            login: fiscalProvider.login,
-            password: fiscalProvider.password,
-            groupCode: fiscalProvider.groupCode,
-            inn: fiscalProvider.inn,
-            paymentAddress: fiscalProvider.paymentAddress,
-            deviceId: fiscalProvider.deviceId,
-          },
-          items: buildFiscalItems(order.items),
-          paymentMethod: method,
-          total: order.total,
-          externalId: `order-${orderIdString}`,
-        });
-
-        receiptId = fiscalResult.receiptId;
-        fiscalStatus = fiscalResult.status;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to fiscalize receipt';
-        res.status(502).json({ data: null, error: message });
-        return;
-      }
-    }
-
     order.payment = {
       method,
       amount: normalizedAmount,
       change: normalizedChange > 0 ? normalizedChange : undefined,
-      receiptId,
-      fiscalStatus,
     };
     order.status = 'paid';
-    order.receiptId = receiptId;
-    order.fiscalStatus = fiscalStatus;
-    order.fiscalError = undefined;
 
     await order.save();
 
