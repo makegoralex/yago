@@ -75,17 +75,22 @@ export const buildBillingInfo = (
   const daysLeftInTrial = organization.subscriptionPlan === 'trial' ? calculateDiffInDays(now, trialEndsAt) : undefined;
   const daysUsedInTrial = organization.subscriptionPlan === 'trial' ? calculateDiffInDays(trialStartedAt, now) : undefined;
   const isTrialExpired = organization.subscriptionPlan === 'trial' && daysLeftInTrial === 0 && now >= trialEndsAt;
+  const nextPaymentDueAt = resolveNextPaymentDate(organization);
+  const isPaymentDue = Boolean(nextPaymentDueAt && nextPaymentDueAt.getTime() <= now.getTime());
 
   let status: SubscriptionStatus = organization.subscriptionStatus;
   if (organization.subscriptionPlan === 'trial') {
     status = isTrialExpired ? 'expired' : 'trial';
   }
 
-  if (organization.subscriptionPlan === 'paid' && status === 'trial') {
-    status = 'active';
+  if (organization.subscriptionPlan === 'paid') {
+    if (isPaymentDue) {
+      status = 'paused';
+    } else if (status === 'trial' || status === 'expired') {
+      status = 'active';
+    }
   }
 
-  const nextPaymentDueAt = resolveNextPaymentDate(organization);
   const daysUntilNextPayment = nextPaymentDueAt ? calculateDiffInDays(now, nextPaymentDueAt) : undefined;
   const monthlyPrice = resolvePlanPrice(organization.subscriptionPlan, pricing);
 
@@ -99,7 +104,7 @@ export const buildBillingInfo = (
     nextPaymentDueAt,
     daysUntilNextPayment,
     monthlyPrice,
-    isPaymentDue: Boolean(nextPaymentDueAt && nextPaymentDueAt.getTime() <= now.getTime()),
+    isPaymentDue,
   };
 };
 
