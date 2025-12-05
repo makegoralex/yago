@@ -6,17 +6,23 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#10B981',
+          DEFAULT: '#22C55E',
           light: '#34D399',
-          dark: '#059669',
+          dark: '#16A34A',
         },
         secondary: '#3B82F6',
+        info: '#3B82F6',
+        danger: '#EF4444',
+        border: '#E5E7EB',
+        background: '#F9FAFB',
+        card: '#FFFFFF',
+        text: '#111827',
       },
       fontFamily: {
-        sans: ['"SF Pro Display"', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
-        soft: '0px 8px 24px rgba(15, 23, 42, 0.08)',
+        soft: '0 1px 4px rgba(0, 0, 0, 0.04)',
       },
     },
     screens: {
