@@ -289,6 +289,178 @@ organizationsRouter.post('/public/create', async (req: Request, res: Response) =
 });
 
 organizationsRouter.get(
+  '/users',
+  authMiddleware,
+  requireRole('superAdmin'),
+  async (_req: Request, res: Response) => {
+    try {
+      const users = await UserModel.aggregate([
+        { $sort: { createdAt: -1 } },
+        {
+          $lookup: {
+            from: 'organizations',
+            localField: 'organizationId',
+            foreignField: '_id',
+            as: 'organization',
+          },
+        },
+        { $unwind: { path: '$organization', preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            name: 1,
+            email: 1,
+            role: 1,
+            createdAt: 1,
+            organization: {
+              id: '$organization._id',
+              name: '$organization.name',
+            },
+          },
+        },
+      ]);
+
+      const payload = users.map((user) => ({
+        id: String(user._id),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt,
+        organization: user.organization?.id
+          ? { id: String(user.organization.id), name: user.organization.name ?? '—' }
+          : null,
+      }));
+
+      res.json({ data: payload, error: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load users';
+      res.status(500).json({ data: null, error: message });
+    }
+  }
+);
+
+organizationsRouter.patch(
+  '/users/:userId',
+  authMiddleware,
+  requireRole('superAdmin'),
+  async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        res.status(400).json({ data: null, error: 'Invalid user id' });
+        return;
+      }
+
+      const { name, email, role, organizationId } = req.body ?? {};
+      const updates: Record<string, unknown> = {};
+
+      if (typeof name === 'string' && name.trim()) {
+        updates.name = name.trim();
+      }
+
+      if (typeof email === 'string' && email.trim()) {
+        updates.email = email.trim().toLowerCase();
+      }
+
+      if (typeof role === 'string' && ALLOWED_ROLES.includes(role as UserRole)) {
+        updates.role = role;
+      }
+
+      if (organizationId === null || organizationId === '') {
+        updates.organizationId = undefined;
+      } else if (typeof organizationId === 'string') {
+        if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+          res.status(400).json({ data: null, error: 'Invalid organization id' });
+          return;
+        }
+
+        const organization = await OrganizationModel.findById(organizationId);
+        if (!organization) {
+          res.status(404).json({ data: null, error: 'Organization not found' });
+          return;
+        }
+
+        updates.organizationId = organization._id;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        res.status(400).json({ data: null, error: 'No valid fields to update' });
+        return;
+      }
+
+      const user = await UserModel.findById(userId);
+
+      if (!user) {
+        res.status(404).json({ data: null, error: 'User not found' });
+        return;
+      }
+
+      Object.assign(user, updates);
+      await user.save();
+
+      const organization =
+        user.organizationId && mongoose.Types.ObjectId.isValid(user.organizationId)
+          ? await OrganizationModel.findById(user.organizationId).select('name').lean()
+          : null;
+
+      res.json({
+        data: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          createdAt: user.createdAt,
+          organization: organization ? { id: String(organization._id), name: organization.name } : null,
+        },
+        error: null,
+      });
+    } catch (error) {
+      const isDuplicateKey = typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 11000;
+      const message = error instanceof Error ? error.message : 'Unable to update user';
+      const status = isDuplicateKey
+        ? 409
+        : message.toLowerCase().includes('invalid')
+          ? 400
+          : message.toLowerCase().includes('not found')
+            ? 404
+            : 500;
+
+      res.status(status).json({ data: null, error: isDuplicateKey ? 'User with this email already exists' : message });
+    }
+  }
+);
+
+organizationsRouter.delete(
+  '/users/:userId',
+  authMiddleware,
+  requireRole('superAdmin'),
+  async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        res.status(400).json({ data: null, error: 'Invalid user id' });
+        return;
+      }
+
+      const deleted = await UserModel.findByIdAndDelete(userId);
+
+      if (!deleted) {
+        res.status(404).json({ data: null, error: 'User not found' });
+        return;
+      }
+
+      await OrganizationModel.updateMany({ ownerUserId: userId }, { $unset: { ownerUserId: '' } });
+
+      res.json({ data: { id: userId }, error: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete user';
+      res.status(500).json({ data: null, error: message });
+    }
+  }
+);
+
+organizationsRouter.get(
   '/:organizationId',
   authMiddleware,
   requireRole(['owner', 'superAdmin']),
@@ -531,176 +703,5 @@ organizationsRouter.delete(
   }
 );
 
-organizationsRouter.get(
-  '/users',
-  authMiddleware,
-  requireRole('superAdmin'),
-  async (_req: Request, res: Response) => {
-    try {
-      const users = await UserModel.aggregate([
-        { $sort: { createdAt: -1 } },
-        {
-          $lookup: {
-            from: 'organizations',
-            localField: 'organizationId',
-            foreignField: '_id',
-            as: 'organization',
-          },
-        },
-        { $unwind: { path: '$organization', preserveNullAndEmptyArrays: true } },
-        {
-          $project: {
-            name: 1,
-            email: 1,
-            role: 1,
-            createdAt: 1,
-            organization: {
-              id: '$organization._id',
-              name: '$organization.name',
-            },
-          },
-        },
-      ]);
-
-      const payload = users.map((user) => ({
-        id: String(user._id),
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        createdAt: user.createdAt,
-        organization: user.organization?.id
-          ? { id: String(user.organization.id), name: user.organization.name ?? '—' }
-          : null,
-      }));
-
-      res.json({ data: payload, error: null });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to load users';
-      res.status(500).json({ data: null, error: message });
-    }
-  }
-);
-
-organizationsRouter.patch(
-  '/users/:userId',
-  authMiddleware,
-  requireRole('superAdmin'),
-  async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.params;
-
-      if (!mongoose.Types.ObjectId.isValid(userId)) {
-        res.status(400).json({ data: null, error: 'Invalid user id' });
-        return;
-      }
-
-      const { name, email, role, organizationId } = req.body ?? {};
-      const updates: Record<string, unknown> = {};
-
-      if (typeof name === 'string' && name.trim()) {
-        updates.name = name.trim();
-      }
-
-      if (typeof email === 'string' && email.trim()) {
-        updates.email = email.trim().toLowerCase();
-      }
-
-      if (typeof role === 'string' && ALLOWED_ROLES.includes(role as UserRole)) {
-        updates.role = role;
-      }
-
-      if (organizationId === null || organizationId === '') {
-        updates.organizationId = undefined;
-      } else if (typeof organizationId === 'string') {
-        if (!mongoose.Types.ObjectId.isValid(organizationId)) {
-          res.status(400).json({ data: null, error: 'Invalid organization id' });
-          return;
-        }
-
-        const organization = await OrganizationModel.findById(organizationId);
-        if (!organization) {
-          res.status(404).json({ data: null, error: 'Organization not found' });
-          return;
-        }
-
-        updates.organizationId = organization._id;
-      }
-
-      if (Object.keys(updates).length === 0) {
-        res.status(400).json({ data: null, error: 'No valid fields to update' });
-        return;
-      }
-
-      const user = await UserModel.findById(userId);
-
-      if (!user) {
-        res.status(404).json({ data: null, error: 'User not found' });
-        return;
-      }
-
-      Object.assign(user, updates);
-      await user.save();
-
-      const organization =
-        user.organizationId && mongoose.Types.ObjectId.isValid(user.organizationId)
-          ? await OrganizationModel.findById(user.organizationId).select('name').lean()
-          : null;
-
-      res.json({
-        data: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          createdAt: user.createdAt,
-          organization: organization ? { id: String(organization._id), name: organization.name } : null,
-        },
-        error: null,
-      });
-    } catch (error) {
-      const isDuplicateKey = typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 11000;
-      const message = error instanceof Error ? error.message : 'Unable to update user';
-      const status = isDuplicateKey
-        ? 409
-        : message.toLowerCase().includes('invalid')
-          ? 400
-          : message.toLowerCase().includes('not found')
-            ? 404
-            : 500;
-
-      res.status(status).json({ data: null, error: isDuplicateKey ? 'User with this email already exists' : message });
-    }
-  }
-);
-
-organizationsRouter.delete(
-  '/users/:userId',
-  authMiddleware,
-  requireRole('superAdmin'),
-  async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.params;
-
-      if (!mongoose.Types.ObjectId.isValid(userId)) {
-        res.status(400).json({ data: null, error: 'Invalid user id' });
-        return;
-      }
-
-      const deleted = await UserModel.findByIdAndDelete(userId);
-
-      if (!deleted) {
-        res.status(404).json({ data: null, error: 'User not found' });
-        return;
-      }
-
-      await OrganizationModel.updateMany({ ownerUserId: userId }, { $unset: { ownerUserId: '' } });
-
-      res.json({ data: { id: userId }, error: null });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to delete user';
-      res.status(500).json({ data: null, error: message });
-    }
-  }
-);
 
 export default organizationsRouter;
