@@ -1,12 +1,14 @@
 import { Router, type Request, type Response } from 'express';
 import { authMiddleware } from '../middleware/auth';
-import { UserModel, UserRole } from '../models/User';
+import { UserModel } from '../models/User';
 import {
   authenticateUser,
   generateTokens,
   registerUser,
   verifyRefreshToken,
 } from '../services/authService';
+import { validateRequest } from '../middleware/validation';
+import { authSchemas, type LoginBody, type RefreshBody, type RegisterBody } from '../validation/authSchemas';
 
 export const authRouter = Router();
 
@@ -24,30 +26,16 @@ const resolveUserId = (user: { id?: string; _id?: unknown } | { id?: string } | 
   throw new Error('User identifier is not available');
 };
 
-authRouter.post('/register', async (req: Request, res: Response) => {
+authRouter.post('/register', validateRequest({ body: authSchemas.register }), async (req: Request, res: Response) => {
   try {
-    const { name, email, password, role, organizationId } = req.body ?? {};
-
-    const allowedRoles: UserRole[] = ['cashier', 'owner'];
-    const normalizedRole =
-      typeof role === 'string' ? (role.toLowerCase() as UserRole) : undefined;
-
-    if (!name || !email || !password) {
-      res.status(400).json({ data: null, error: 'name, email, and password are required' });
-      return;
-    }
-
-    if (normalizedRole && !allowedRoles.includes(normalizedRole)) {
-      res.status(400).json({ data: null, error: 'Invalid role value' });
-      return;
-    }
+    const { name, email, password, role, organizationId } = req.body as RegisterBody;
 
     const { user, tokens } = await registerUser({
       name,
       email,
       password,
       organizationId,
-      role: normalizedRole,
+      role,
     });
 
     res.status(201).json({
@@ -71,14 +59,9 @@ authRouter.post('/register', async (req: Request, res: Response) => {
   }
 });
 
-authRouter.post('/login', async (req: Request, res: Response) => {
+authRouter.post('/login', validateRequest({ body: authSchemas.login }), async (req: Request, res: Response) => {
   try {
-    const { email, password, organizationId } = req.body ?? {};
-
-    if (!email || !password) {
-      res.status(400).json({ data: null, error: 'email and password are required' });
-      return;
-    }
+    const { email, password, organizationId } = req.body as LoginBody;
 
     const { user, tokens } = await authenticateUser(email, password, organizationId);
 
@@ -102,14 +85,9 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   }
 });
 
-authRouter.post('/refresh', async (req: Request, res: Response) => {
+authRouter.post('/refresh', validateRequest({ body: authSchemas.refresh }), async (req: Request, res: Response) => {
   try {
-    const { refreshToken } = req.body ?? {};
-
-    if (!refreshToken) {
-      res.status(400).json({ data: null, error: 'refreshToken is required' });
-      return;
-    }
+    const { refreshToken } = req.body as RefreshBody;
 
     const payload = verifyRefreshToken(refreshToken);
     const user = await UserModel.findById(payload.sub);

@@ -2,6 +2,7 @@ import { Router, type Request, type RequestHandler } from 'express';
 import { FilterQuery, isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { validateRequest } from '../../middleware/validation';
 import { OrganizationModel } from '../../models/Organization';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
 import { CustomerModel } from '../customers/customer.model';
@@ -19,6 +20,7 @@ import { adjustInventoryQuantity } from '../inventory/inventoryCost.service';
 import { calculateOrderTotals } from '../discounts/discount.service';
 import { ShiftDocument, ShiftModel } from '../shifts/shift.model';
 import { getFiscalProviderFromSettings, sendAtolReceipt } from '../../services/fiscal/atol.service';
+import { orderSchemas, type OrderItemsBody, type OrderPaymentBody, type StartOrderBody } from '../../validation/orderSchemas';
 
 const router = Router();
 
@@ -557,8 +559,9 @@ const ensureOrderShiftIsActive = async (
 router.post(
   '/start',
   requireRole(CASHIER_ROLES),
+  validateRequest(orderSchemas.startOrder),
   asyncHandler(async (req, res) => {
-    const { locationId, registerId, customerId, warehouseId, orderTag } = req.body ?? {};
+    const { locationId, registerId, customerId, warehouseId, orderTag } = req.body as StartOrderBody;
     const organizationId = getOrganizationObjectId(req);
     const cashierId = req.user?.id;
 
@@ -572,21 +575,9 @@ router.post(
       return;
     }
 
-    if (!locationId || !registerId) {
-      res
-        .status(400)
-        .json({ data: null, error: 'locationId and registerId are required to start an order' });
-      return;
-    }
-
     let normalizedCustomerId: Types.ObjectId | undefined;
     let normalizedWarehouseId: Types.ObjectId | null = null;
     if (customerId) {
-      if (typeof customerId !== 'string' || !isValidObjectId(customerId)) {
-        res.status(400).json({ data: null, error: 'customerId must be a valid identifier' });
-        return;
-      }
-
       const customer = await CustomerModel.findById(customerId);
       if (!customer) {
         res.status(404).json({ data: null, error: 'Customer not found' });
@@ -604,12 +595,7 @@ router.post(
     }
 
     let normalizedOrderTag: OrderTag | null = null;
-    try {
-      normalizedOrderTag = normalizeOrderTag(orderTag);
-    } catch (error) {
-      res.status(400).json({ data: null, error: error instanceof Error ? error.message : 'Invalid orderTag' });
-      return;
-    }
+    normalizedOrderTag = normalizeOrderTag(orderTag);
 
     const normalizedOrgId = organizationId.toString();
     const normalizedLocationId = String(locationId).trim();
@@ -651,17 +637,13 @@ router.post(
 router.post(
   '/:id/items',
   requireRole(CASHIER_ROLES),
+  validateRequest(orderSchemas.orderItems),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const organizationId = getOrganizationObjectId(req);
 
     if (!organizationId) {
       res.status(403).json({ data: null, error: 'Organization context is required' });
-      return;
-    }
-
-    if (!isValidObjectId(id)) {
-      res.status(400).json({ data: null, error: 'Invalid order id' });
       return;
     }
 
@@ -691,7 +673,7 @@ router.post(
       return;
     }
 
-    const payload = (req.body ?? {}) as ItemsRequestPayload;
+    const payload = req.body as OrderItemsBody;
 
     let items: OrderItem[] = [];
     try {
@@ -718,24 +700,14 @@ router.post(
     if (payload.customerId !== undefined) {
       if (payload.customerId === null) {
         order.customerId = undefined;
-      } else if (typeof payload.customerId === 'string') {
-        const trimmedCustomerId = payload.customerId.trim();
-
-        if (!isValidObjectId(trimmedCustomerId)) {
-          res.status(400).json({ data: null, error: 'customerId must be a valid identifier or null' });
-          return;
-        }
-
-        const customer = await CustomerModel.findById(trimmedCustomerId);
+      } else {
+        const customer = await CustomerModel.findById(payload.customerId);
         if (!customer) {
           res.status(404).json({ data: null, error: 'Customer not found' });
           return;
         }
 
         order.customerId = customer._id as Types.ObjectId;
-      } else {
-        res.status(400).json({ data: null, error: 'customerId must be a valid identifier or null' });
-        return;
       }
     }
 
@@ -769,28 +741,14 @@ router.post(
 router.post(
   '/:id/pay',
   requireRole(CASHIER_ROLES),
+  validateRequest(orderSchemas.orderPayment),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { method, amount, change } = req.body ?? {};
+    const { method, amount, change } = req.body as OrderPaymentBody;
     const organizationId = getOrganizationObjectId(req);
 
     if (!organizationId) {
       res.status(403).json({ data: null, error: 'Organization context is required' });
-      return;
-    }
-
-    if (!isValidObjectId(id)) {
-      res.status(400).json({ data: null, error: 'Invalid order id' });
-      return;
-    }
-
-    if (!method || !PAYMENT_METHODS.includes(method)) {
-      res.status(400).json({ data: null, error: 'Payment method must be cash or card' });
-      return;
-    }
-
-    if (typeof amount !== 'number' || Number.isNaN(amount) || amount <= 0) {
-      res.status(400).json({ data: null, error: 'Payment amount must be greater than zero' });
       return;
     }
 
