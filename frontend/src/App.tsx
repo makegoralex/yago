@@ -6,6 +6,10 @@ import AdminPage from './pages/Admin';
 import SettingsPage from './pages/Settings';
 import LandingPage from './pages/Landing';
 import SuperAdminPage from './pages/SuperAdmin';
+import BlogPage from './pages/Blog';
+import BlogPostPage from './pages/BlogPost';
+import DocsPage from './pages/Docs';
+import NewsPage from './pages/News';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import { type AuthUser, type UserRole, useAuthStore } from './store/auth';
 import MobileNav from './components/ui/MobileNav';
@@ -41,6 +45,11 @@ const App: React.FC = () => {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/blog" element={<BlogPage />} />
+        <Route path="/blog/:slug" element={<BlogPostPage />} />
+        <Route path="/docs" element={<DocsPage />} />
+        <Route path="/help" element={<DocsPage />} />
+        <Route path="/news" element={<NewsPage />} />
         <Route element={<ProtectedRoute allowed={['cashier', 'owner']} />}>
           <Route path="/pos" element={<POSPage />} />
           <Route path="/settings" element={<SettingsPage />} />
