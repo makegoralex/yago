@@ -17,6 +17,7 @@ import {
 import api from '../lib/api';
 import { useAuthStore, type AuthUser } from '../store/auth';
 import { useToast } from '../providers/ToastProvider';
+import { useTheme } from '../providers/ThemeProvider';
 import { blogPosts, instructionLinks, newsItems, screenshotGallery } from '../constants/content';
 
 const advantages = [
@@ -50,6 +51,7 @@ const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { setSession } = useAuthStore();
   const { notify } = useToast();
+  const { theme, toggleTheme } = useTheme();
   const authSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [organizationName, setOrganizationName] = useState('');
@@ -431,7 +433,7 @@ const LandingPage: React.FC = () => {
               </div>
               <form className="space-y-3" onSubmit={handleSignup}>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700" htmlFor="organizationName">
+                  <label className="block text-sm font-medium text-slate-300" htmlFor="organizationName">
                     Название кофейни
                   </label>
                   <input
@@ -445,7 +447,7 @@ const LandingPage: React.FC = () => {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700" htmlFor="ownerName">
+                    <label className="block text-sm font-medium text-slate-300" htmlFor="ownerName">
                       Имя владельца
                     </label>
                     <input
@@ -458,7 +460,7 @@ const LandingPage: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700" htmlFor="ownerEmail">
+                    <label className="block text-sm font-medium text-slate-300" htmlFor="ownerEmail">
                       Email владельца
                     </label>
                     <input
@@ -473,7 +475,7 @@ const LandingPage: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700" htmlFor="ownerPassword">
+                  <label className="block text-sm font-medium text-slate-300" htmlFor="ownerPassword">
                     Пароль
                   </label>
                   <input
@@ -524,7 +526,7 @@ const LandingPage: React.FC = () => {
                   className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
                   placeholder="ID организации (опционально)"
                 />
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
