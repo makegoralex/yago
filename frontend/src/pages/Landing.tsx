@@ -1,6 +1,21 @@
 import React, { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BarChart3, Coffee, Gift, Moon, Receipt, Sun, Users, Wallet2 } from 'lucide-react';
+import {
+  BarChart3,
+  Coffee,
+  CreditCard,
+  Gift,
+  Headset,
+  MapPin,
+  Moon,
+  Receipt,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  TimerReset,
+  Users,
+  Wallet2,
+} from 'lucide-react';
 import api from '../lib/api';
 import { useAuthStore, type AuthUser } from '../store/auth';
 import { useToast } from '../providers/ToastProvider';
@@ -8,28 +23,28 @@ import { useTheme } from '../providers/ThemeProvider';
 import { blogPosts, instructionLinks, newsItems, screenshotGallery } from '../constants/content';
 
 const advantages = [
-  { icon: Receipt, title: 'Фискальные чеки', description: 'Прямая интеграция с АТОЛ' },
-  { icon: Coffee, title: 'Меню', description: 'Позиции, группы и модификаторы' },
-  { icon: Users, title: 'Сотрудники', description: 'Доступы и роли' },
-  { icon: Wallet2, title: 'Учёт смен', description: 'Оплата, возвраты, смены' },
-  { icon: Gift, title: 'Лояльность', description: 'Скидки, баллы без CRM' },
-  { icon: BarChart3, title: 'Отчёты', description: 'Выручка, средний чек, прибыль' },
+  { icon: Receipt, title: 'Онлайн-чек и ФН', description: 'Работаем с АТОЛ: фискализация, X/Z-отчёты, смены' },
+  { icon: Coffee, title: 'Меню кофейни', description: 'Категории, модификаторы, альтернативное молоко, доп.соусы' },
+  { icon: CreditCard, title: 'Эквайринг', description: 'Принимаем карты, QR и Apple Pay без доп. интеграций' },
+  { icon: Wallet2, title: 'Учёт смен', description: 'Выручка, инкассация, возвраты, контроль по кассирам' },
+  { icon: Gift, title: 'Лояльность', description: 'Скидки и бонусы без отдельной CRM, автоматическое начисление' },
+  { icon: BarChart3, title: 'Отчёты', description: 'Средний чек, маржинальность, топ-позиции по времени' },
 ];
 
 const onboardingSteps = [
   {
-    title: 'Зарегистрируйтесь и создайте организацию',
-    description: 'Получите роль владельца сразу после отправки формы. Без менеджеров и звонков.',
+    title: 'Заявка без звонков',
+    description: 'Создайте организацию — касса активируется сразу, как на restik.com/automation.',
     screenshotTitle: 'Создание организации',
   },
   {
-    title: 'Добавьте меню',
-    description: 'Позиции, группы, модификаторы и себестоимость — в одном окне.',
+    title: 'Настройка меню и оплаты',
+    description: 'Загрузите позиции, подключите эквайринг и кассу АТОЛ — всё в личном кабинете.',
     screenshotTitle: 'Меню и модификаторы',
   },
   {
-    title: 'Подключите кассу и начинайте продажи',
-    description: 'Поддержка АТОЛ, X/Z-отчёты, смены и чеки сразу в кассе.',
+    title: 'Старт продаж за 1 день',
+    description: 'Кассиры работают в веб-терминале: чеки, скидки, возвраты, смены.',
     screenshotTitle: 'Продажи и чеки',
   },
 ];
@@ -146,9 +161,9 @@ const LandingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#111827] text-slate-100">
+    <div className="min-h-screen bg-[#0a0f1f] text-slate-100">
       <div className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(124,58,237,0.16),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(109,40,217,0.18),transparent_30%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(124,58,237,0.22),transparent_38%),radial-gradient(circle_at_70%_0%,rgba(109,40,217,0.18),transparent_32%),linear-gradient(120deg,rgba(124,58,237,0.05),transparent_35%,rgba(124,58,237,0.08))]" />
         <header className="relative mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-6 sm:px-6">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/15 text-lg font-bold text-primary">
@@ -156,19 +171,19 @@ const LandingPage: React.FC = () => {
             </div>
             <div>
               <div className="heading-font text-xl font-semibold">Yago POS</div>
-              <div className="text-xs text-slate-400">Касса и учёт для кофейни</div>
+              <div className="text-xs text-slate-400">Автоматизация кофейни</div>
             </div>
           </div>
           <nav className="flex flex-1 flex-wrap items-center justify-end gap-2 text-sm font-medium sm:flex-none sm:gap-4">
             <a href="#advantages" className="rounded-lg px-3 py-2 text-nav transition hover:text-navHover">
-              Преимущества
+              Возможности
             </a>
-            <a href="#instructions" className="rounded-lg px-3 py-2 text-nav transition hover:text-navHover">
-              Инструкции
+            <a href="#flow" className="rounded-lg px-3 py-2 text-nav transition hover:text-navHover">
+              Как подключиться
             </a>
-            <Link to="/blog" className="rounded-lg px-3 py-2 text-nav transition hover:text-navHover">
-              Блог
-            </Link>
+            <a href="#signup" className="rounded-lg px-3 py-2 text-nav transition hover:text-navHover">
+              Заявка
+            </a>
             <Link to="/login" className="rounded-lg px-3 py-2 text-nav transition hover:text-navHover">
               Вход
             </Link>
@@ -192,22 +207,24 @@ const LandingPage: React.FC = () => {
       </div>
 
       <main className="relative mx-auto flex max-w-6xl flex-col gap-12 px-4 pb-16 sm:px-6 lg:gap-16">
-        <section className="relative grid items-center gap-10 overflow-hidden rounded-3xl border border-[#1F2937] bg-gradient-to-br from-[#0b1224] via-[#0f172a] to-[#1b1237] p-6 shadow-soft md:p-10 lg:grid-cols-[1.05fr_1fr]">
-          <div className="space-y-6 lg:space-y-8">
+        <section className="relative grid items-center gap-10 overflow-hidden rounded-3xl border border-[#1F2937] bg-gradient-to-br from-[#0c1329] via-[#0d1228] to-[#1b1237] p-6 shadow-soft md:p-10 lg:grid-cols-[1.05fr_1fr]">
+          <div className="absolute -left-10 -top-10 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
+          <div className="absolute -right-10 -bottom-16 h-48 w-48 rounded-full bg-secondary/20 blur-3xl" />
+          <div className="relative space-y-6 lg:space-y-8">
             <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-primary">
-              Касса и учёт для кофейни
+              Подобие restik.com/automation
               <span className="h-2 w-2 rounded-full bg-primary" />
-              <span className="text-primary/80">без интеграций, CRM и сложностей</span>
+              <span className="text-primary/80">автоматизация кофейни за 1 день</span>
             </div>
             <h1 className="heading-font text-4xl font-semibold leading-tight sm:text-5xl">
-              Тёмный лендинг Yago POS — касса и учёт без лишних сервисов
+              Полноценная касса и эквайринг для кофейни — как в референсе Restik
             </h1>
             <p className="text-lg text-slate-300">
-              Меню, продажи, сотрудники и смены — в одном окне. Подключайте АТОЛ, запускайте лояльность и пробивайте чеки через пару минут после регистрации.
+              Веб-терминал, АТОЛ, лояльность и учёт смен без интеграторов. Запускайтесь по сценарию, знакомому по restik.com/automation/kofejnya: заявка → касса → первые чеки.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <button type="button" onClick={handleDemoClick} className={primaryButtonClass}>
-                Попробовать демо
+                Попробовать демо, как на лендинге
               </button>
               <button
                 type="button"
@@ -217,56 +234,66 @@ const LandingPage: React.FC = () => {
                 Создать организацию
               </button>
             </div>
-            <div className="text-sm text-slate-400">Работает на любом планшете. Печатает чеки через АТОЛ.</div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-[#1F2937] bg-[#0f172a]/70 p-4 text-sm text-slate-300">
-                <div className="text-2xl font-bold text-primary">2 мин</div>
-                <div>от регистрации до первого чека</div>
+                <div className="text-2xl font-bold text-primary">24/7</div>
+                <div>онлайн-терминал и смены без установки</div>
               </div>
               <div className="rounded-2xl border border-[#1F2937] bg-[#0f172a]/70 p-4 text-sm text-slate-300">
-                <div className="text-2xl font-bold text-primary">X/Z отчёты</div>
-                <div>смены и контроль кассы</div>
+                <div className="text-2xl font-bold text-primary">1 день</div>
+                <div>от заявки до пробитого чека</div>
               </div>
               <div className="rounded-2xl border border-[#1F2937] bg-[#0f172a]/70 p-4 text-sm text-slate-300">
-                <div className="text-2xl font-bold text-primary">Лояльность</div>
-                <div>скидки и баллы без CRM</div>
+                <div className="text-2xl font-bold text-primary">Без CRM</div>
+                <div>лояльность и скидки внутри Yago</div>
               </div>
             </div>
           </div>
 
-          <div className="space-y-4 rounded-2xl border border-[#1F2937] bg-[#0b1224]/70 p-4 shadow-soft md:p-6">
-            <div className="rounded-2xl border border-dashed border-primary/30 bg-[#0f172a] p-5 shadow-inner">
-              <div className="text-sm font-semibold uppercase tracking-wide text-primary">Скриншот терминала</div>
-              <div className="mt-4 rounded-xl border border-[#1F2937] bg-[#0b1224] p-5 text-slate-200">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
-                  <span>Yago POS · Терминал</span>
-                  <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[11px] text-green-300">Онлайн</span>
-                </div>
-                <div className="mt-4 grid gap-3 text-sm">
-                  <div className="rounded-xl border border-[#1F2937] bg-[#111827] p-3 shadow-inner">
-                    <div className="text-xs font-semibold text-slate-500">Заказ</div>
-                    <div className="mt-2 flex items-center justify-between text-base font-bold text-slate-100">
-                      <span>Флэт уайт</span>
-                      <span>210 ₽</span>
-                    </div>
-                    <p className="text-xs text-slate-500">Добавить сироп, альтернативное молоко</p>
+          <div className="relative space-y-4 rounded-2xl border border-[#1F2937] bg-[#0b1224]/70 p-4 shadow-soft md:p-6">
+            <div className="absolute inset-x-6 top-6 h-24 rounded-3xl bg-gradient-to-r from-primary/10 via-primary/5 to-secondary/10 blur-2xl" />
+            <div className="relative rounded-2xl border border-dashed border-primary/30 bg-[#0f172a] p-5 shadow-inner">
+              <div className="flex items-center justify-between text-sm font-semibold uppercase tracking-wide text-primary">
+                <span>Терминал кофейни</span>
+                <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[11px] text-green-300">Онлайн</span>
+              </div>
+              <div className="mt-4 grid gap-3 text-sm">
+                <div className="rounded-xl border border-[#1F2937] bg-[#111827] p-3 shadow-inner">
+                  <div className="text-xs font-semibold text-slate-500">Заказ · Столы / Навынос</div>
+                  <div className="mt-2 flex items-center justify-between text-base font-bold text-slate-100">
+                    <span>Флэт уайт</span>
+                    <span>210 ₽</span>
                   </div>
-                  <div className="rounded-xl border border-[#1F2937] bg-[#111827] p-3 shadow-inner">
-                    <div className="text-xs font-semibold text-slate-500">Смена</div>
-                    <div className="mt-2 flex items-center justify-between text-sm text-slate-200">
-                      <span>Чеков за сегодня</span>
-                      <span className="font-semibold text-primary">46</span>
+                  <p className="text-xs text-slate-500">Сироп Ваниль · Овсяное молоко</p>
+                </div>
+                <div className="rounded-xl border border-[#1F2937] bg-[#111827] p-3 shadow-inner">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                    <span>Смена</span>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">Кассир онлайн</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-slate-200">
+                    <div className="rounded-lg bg-[#0b1224] p-2">
+                      <div className="text-[11px] text-slate-500">Чеков сегодня</div>
+                      <div className="text-lg font-semibold text-primary">46</div>
                     </div>
-                    <div className="mt-1 flex items-center justify-between text-sm text-slate-200">
-                      <span>Выручка</span>
-                      <span className="font-semibold text-primary">38 200 ₽</span>
+                    <div className="rounded-lg bg-[#0b1224] p-2">
+                      <div className="text-[11px] text-slate-500">Выручка</div>
+                      <div className="text-lg font-semibold text-primary">38 200 ₽</div>
+                    </div>
+                    <div className="rounded-lg bg-[#0b1224] p-2">
+                      <div className="text-[11px] text-slate-500">Средний чек</div>
+                      <div className="text-lg font-semibold text-primary">830 ₽</div>
+                    </div>
+                    <div className="rounded-lg bg-[#0b1224] p-2">
+                      <div className="text-[11px] text-slate-500">Безнал</div>
+                      <div className="text-lg font-semibold text-primary">82%</div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-between rounded-2xl bg-primary/15 px-4 py-3 text-sm font-semibold text-slate-100">
-              <span className="text-center sm:text-left">Демо-организация заполнится автоматически</span>
+            <div className="relative flex flex-col gap-3 rounded-2xl bg-primary/15 px-4 py-3 text-sm font-semibold text-slate-100 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-center sm:text-left">Демо-организация заполнится автоматически — как на референсе</span>
               <Link to="/login" className="rounded-lg border border-primary/30 px-3 py-1 text-primary transition hover:bg-primary/10">
                 Или войти
               </Link>
@@ -274,44 +301,59 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        <section id="advantages" className="grid gap-4 rounded-3xl border border-[#1F2937] bg-[#0b1224]/70 p-6 shadow-soft md:p-8 lg:grid-cols-2">
-          <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wide text-primary">Преимущества</p>
-            <h2 className="heading-font text-3xl font-semibold">Меню, смены и чеки в одном окне</h2>
-            <p className="text-base text-slate-300">
-              Запускайте кассу, лояльность и склад без интеграторов. Все хранится внутри Yago POS — роли, отчёты и права доступа уже настроены.
-            </p>
+        <section className="grid gap-3 rounded-3xl border border-[#1F2937] bg-[#0b1224]/70 p-4 shadow-soft md:p-6 lg:grid-cols-3">
+          {[
+            { icon: MapPin, title: 'Работа по всей России', text: 'Касса в браузере — подходит для островков, каворкингов и точек без стойки.' },
+            { icon: TimerReset, title: 'Запуск за день', text: 'Повторяем сценарий restik: регистрация, эквайринг, первый чек в тот же день.' },
+            { icon: Headset, title: 'Поддержка без менеджеров', text: 'Чаты и инструкции в /help, e-mail support@yagopos.ru, без звонков.' },
+          ].map((item) => (
+            <div key={item.title} className="flex items-start gap-3 rounded-2xl border border-[#1F2937] bg-[#0f172a]/80 p-4">
+              {React.createElement(item.icon, { size: 22, className: 'mt-1 text-primary' })}
+              <div>
+                <div className="font-semibold text-slate-100">{item.title}</div>
+                <p className="text-sm text-slate-400">{item.text}</p>
+              </div>
+            </div>
+          ))}
+        </section>
+
+        <section id="advantages" className="grid gap-6 rounded-3xl border border-[#1F2937] bg-[#0b1224]/70 p-6 shadow-soft md:p-8">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold uppercase tracking-wide text-primary">Что входит</p>
+              <h2 className="heading-font text-3xl font-semibold">Yago POS для кофейни</h2>
+              <p className="text-base text-slate-300">Все основные блоки референса restik: касса, оплата, лояльность, отчёты и роли в одном окне.</p>
+            </div>
+            <div className="flex items-center gap-3 rounded-2xl border border-[#1F2937] bg-[#0f172a]/70 px-4 py-3 text-sm text-slate-300">
+              <Sparkles size={18} className="text-primary" />
+              <span>Кнопки крупные, радиус 12px, без лишних теней</span>
+            </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {advantages.map((feature) => (
               <div key={feature.title} className="rounded-2xl border border-[#1F2937] bg-[#0f172a]/80 p-4 shadow-soft">
-                <div className="flex items-center gap-2 text-base font-semibold text-slate-100">
-                  {React.createElement(feature.icon, { size: 20, className: 'text-primary' })}
-                  <span>{feature.title}</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-base font-semibold text-slate-100">
+                    {React.createElement(feature.icon, { size: 20, className: 'text-primary' })}
+                    <span>{feature.title}</span>
+                  </div>
+                  <span className="rounded-full bg-primary/15 px-2 py-1 text-[11px] font-semibold text-primary">Включено</span>
                 </div>
-                <p className="mt-1 text-sm text-slate-400">{feature.description}</p>
+                <p className="mt-2 text-sm text-slate-400">{feature.description}</p>
               </div>
             ))}
           </div>
         </section>
 
-        <section className="grid gap-6 rounded-3xl border border-[#1F2937] bg-[#0b1224]/70 p-6 shadow-soft md:p-8 lg:grid-cols-[1.1fr_0.9fr]">
+        <section id="flow" className="grid gap-6 rounded-3xl border border-[#1F2937] bg-[#0b1224]/70 p-6 shadow-soft md:p-8 lg:grid-cols-[1fr_1fr]">
           <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wide text-primary">Как начать</p>
-            <h2 className="heading-font text-3xl font-semibold">Три шага до работы в кассе</h2>
-            <ul className="space-y-3 text-base text-slate-200">
-              {onboardingSteps.map((step) => (
-                <li key={step.title} className="flex items-start gap-3">
-                  <span className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
-                    ✓
-                  </span>
-                  <span>
-                    <div className="font-semibold text-slate-100">{step.title}</div>
-                    <div className="text-sm text-slate-400">{step.description}</div>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <p className="text-sm font-semibold uppercase tracking-wide text-primary">Как подключиться</p>
+            <h2 className="heading-font text-3xl font-semibold">Повторяем сценарий restik.com/automation</h2>
+            <p className="text-base text-slate-300">Три шага, без звонков менеджеров. После шага 3 касса уже готова: авторизация, АТОЛ, эквайринг и лояльность.</p>
+            <div className="flex items-center gap-3 text-sm text-slate-300">
+              <ShieldCheck size={18} className="text-primary" />
+              <span>Данные шифруются, токены храним только в localStorage пользователя.</span>
+            </div>
           </div>
           <div className="space-y-4 rounded-2xl border border-[#1F2937] bg-[#0f172a]/80 p-6 shadow-soft">
             <div className="flex items-center justify-between">
@@ -338,11 +380,11 @@ const LandingPage: React.FC = () => {
               <div className="mt-2 text-lg font-bold text-slate-100">{onboardingSteps[activeStep].screenshotTitle}</div>
               <p className="mt-1 text-slate-400">{onboardingSteps[activeStep].description}</p>
               <div className="mt-4 rounded-xl border border-primary/15 bg-[#0b1224] p-4 text-center text-sm font-semibold text-primary">
-                Карусель со скриншотами шага · уже реализована
+                Карусель со скриншотами шага · интерфейс совпадает с демо
               </div>
             </div>
             <div className="rounded-2xl border border-[#1F2937] bg-primary/10 p-4 text-sm text-slate-200">
-              Вход и регистрация работают прямо на этой странице. Если нужна отдельная ссылка, используйте /login.
+              Вход и регистрация работают прямо на этой странице. Нужна ссылка для кассира? Используйте /login.
             </div>
           </div>
         </section>
@@ -350,8 +392,8 @@ const LandingPage: React.FC = () => {
         <section className="grid gap-4 rounded-3xl border border-[#1F2937] bg-[#0b1224]/70 p-6 shadow-soft md:p-8 lg:grid-cols-3">
           <div className="space-y-3 lg:col-span-1">
             <p className="text-sm font-semibold uppercase tracking-wide text-primary">Скриншоты и видео</p>
-            <h2 className="heading-font text-3xl font-semibold">Посмотрите интерфейсы</h2>
-            <p className="text-base text-slate-300">Касса, меню, склад и аналитика — выберите нужный экран или откройте видео «Как пробить чек в Yago».</p>
+            <h2 className="heading-font text-3xl font-semibold">Интерфейсы Yago POS</h2>
+            <p className="text-base text-slate-300">Касса, меню, склад и аналитика — посмотрите, что увидит кассир и владелец.</p>
           </div>
           <div className="grid gap-3 lg:col-span-2 lg:grid-cols-2">
             {screenshotGallery.map((shot) => (
@@ -382,9 +424,9 @@ const LandingPage: React.FC = () => {
         <section ref={authSectionRef} id="signup" className="grid gap-4 rounded-3xl border border-[#1F2937] bg-[#0b1224]/70 p-6 shadow-soft md:p-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-3">
             <p className="text-sm font-semibold uppercase tracking-wide text-primary">Онбординг без менеджеров</p>
-            <h2 className="heading-font text-3xl font-semibold">Создайте организацию или войдите</h2>
+            <h2 className="heading-font text-3xl font-semibold">Заявка и вход как на restik</h2>
             <p className="text-base text-slate-300">
-              Форма регистрации и входа работает прямо на лендинге. После создания организации вы сразу попадёте в кассу и сможете настроить меню, сотрудников и права.
+              Форма повторяет логику restik.com/automation/kofejnya: заявка → данные владельца → сразу вход в кассу. После создания организации вы можете настроить меню, сотрудников и права.
             </p>
             <div className="flex flex-wrap gap-3 text-sm text-slate-300">
               <span className="rounded-full bg-primary/15 px-3 py-1 font-semibold text-primary">Без звонков</span>
@@ -511,9 +553,9 @@ const LandingPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={loginLoading}
-                  className="flex h-11 w-full items-center justify-center rounded-[12px] border border-primary bg-transparent text-sm font-semibold text-slate-50 transition hover:bg-primary/15 disabled:opacity-70"
+                  className="flex h-11 w-full items-center justify-center rounded-[12px] border border-primary bg-transparent text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-70 disabled:hover:bg-primary/10"
                 >
-                  {loginLoading ? 'Входим...' : 'Войти в кабинет'}
+                  {loginLoading ? 'Входим...' : 'Войти'}
                 </button>
               </form>
             </div>
