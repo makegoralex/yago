@@ -13,7 +13,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Detect npm lockfiles
+        id: lockfiles
+        run: |
+          if find . -name "package-lock.json" -print -quit | grep -q .; then
+            echo "has_lockfiles=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_lockfiles=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js (cached)
+        if: steps.lockfiles.outputs.has_lockfiles == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -21,6 +31,12 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             frontend/package-lock.json
+
+      - name: Set up Node.js (no cache)
+        if: steps.lockfiles.outputs.has_lockfiles != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       # ------------------------------------
       # INSTALL FRONTEND + BUILD (on GitHub)
