@@ -17,8 +17,15 @@ import {
 import api from '../lib/api';
 import { useAuthStore, type AuthUser } from '../store/auth';
 import { useToast } from '../providers/ToastProvider';
-import { useTheme } from '../providers/ThemeProvider';
-import { blogPosts, instructionLinks, newsItems, screenshotGallery } from '../constants/content';
+import {
+  blogPosts,
+  instructionLinks,
+  newsItems,
+  screenshotGallery,
+  type BlogPost,
+  type InstructionLink,
+  type NewsItem,
+} from '../constants/content';
 
 const advantages = [
   { icon: Receipt, title: 'Онлайн-чек и ФН', description: 'Работаем с АТОЛ: фискализация, X/Z-отчёты, смены' },
@@ -47,6 +54,11 @@ const onboardingSteps = [
   },
 ];
 
+type ContentBlock =
+  | { label: 'Новости'; link: string; items: NewsItem[] }
+  | { label: 'Инструкции'; link: string; items: InstructionLink[] }
+  | { label: 'Блог'; link: string; items: BlogPost[] };
+
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { setSession } = useAuthStore();
@@ -65,6 +77,12 @@ const LandingPage: React.FC = () => {
   const [loginRemember, setLoginRemember] = useState(true);
   const [loginLoading, setLoginLoading] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
+
+  const contentBlocks: ContentBlock[] = [
+    { label: 'Новости', items: newsItems.slice(0, 2), link: '/news' },
+    { label: 'Инструкции', items: instructionLinks.slice(0, 2), link: '/help' },
+    { label: 'Блог', items: blogPosts.slice(0, 2), link: '/blog' },
+  ];
 
   const primaryButtonClass =
     'inline-flex items-center justify-center gap-2 rounded-[12px] bg-primary px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark hover:shadow-md';
@@ -534,7 +552,7 @@ const LandingPage: React.FC = () => {
         >
           <div className="absolute -right-20 top-8 h-28 w-28 rounded-full bg-primary/10 blur-3xl" />
           <div className="relative grid gap-4 lg:grid-cols-3">
-            {[{ label: 'Новости', items: newsItems.slice(0, 2), link: '/news' }, { label: 'Инструкции', items: instructionLinks.slice(0, 2), link: '/help' }, { label: 'Блог', items: blogPosts.slice(0, 2), link: '/blog' }].map((block) => (
+            {contentBlocks.map((block) => (
               <div
                 key={block.label}
                 className="rounded-2xl bg-gradient-to-br from-white via-white to-slate-50 p-5 shadow-[0_12px_40px_rgba(15,23,42,0.04)] ring-1 ring-slate-200"
@@ -557,17 +575,22 @@ const LandingPage: React.FC = () => {
                           <p className="text-xs text-slate-500">{item.href}</p>
                         </a>
                       ))
-                    : block.items.map((item: any) => (
-                        <Link
-                          key={item.slug ?? item.title}
-                          to={`/${block.label === 'Блог' ? 'blog' : 'news'}/${item.slug ?? item.href}`}
-                          className="block rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:ring-primary/40"
-                        >
-                          <div className="text-xs font-semibold uppercase tracking-wide text-primary">{item.date ?? 'Статья'}</div>
-                          <div className="text-base font-semibold text-slate-900">{item.title}</div>
-                          <p className="text-xs text-slate-600">{item.description ?? item.excerpt}</p>
-                        </Link>
-                      ))}
+                    : block.items.map((item) => {
+                        const linkPrefix = block.label === 'Блог' ? 'blog' : 'news';
+                        return (
+                          <Link
+                            key={item.slug}
+                            to={`/${linkPrefix}/${item.slug}`}
+                            className="block rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:ring-primary/40"
+                          >
+                            <div className="text-xs font-semibold uppercase tracking-wide text-primary">{item.date}</div>
+                            <div className="text-base font-semibold text-slate-900">{item.title}</div>
+                            <p className="text-xs text-slate-600">
+                              {'description' in item ? item.description : item.excerpt}
+                            </p>
+                          </Link>
+                        );
+                      })}
                 </div>
               </div>
             ))}
