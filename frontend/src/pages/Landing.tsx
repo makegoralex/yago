@@ -17,6 +17,7 @@ import {
 import api from '../lib/api';
 import { useAuthStore, type AuthUser } from '../store/auth';
 import { useToast } from '../providers/ToastProvider';
+import { useTheme } from '../providers/ThemeProvider';
 import { blogPosts, instructionLinks, newsItems, screenshotGallery } from '../constants/content';
 
 const advantages = [
@@ -50,6 +51,7 @@ const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { setSession } = useAuthStore();
   const { notify } = useToast();
+  const { theme, toggleTheme } = useTheme();
   const authSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [organizationName, setOrganizationName] = useState('');
