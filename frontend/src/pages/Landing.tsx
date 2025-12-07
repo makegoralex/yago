@@ -159,9 +159,9 @@ const LandingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f7fb] text-slate-800">
-      <div className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(124,58,237,0.15),transparent_35%),radial-gradient(circle_at_75%_10%,rgba(99,102,241,0.12),transparent_32%),linear-gradient(120deg,rgba(124,58,237,0.04),transparent_38%,rgba(124,58,237,0.06))]" />
+    <div className="min-h-screen bg-gradient-to-b from-[#f8f9ff] via-[#f5f0ff] to-[#f7f9fb] text-slate-800">
+      <div className="relative overflow-hidden pb-6">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(124,58,237,0.18),transparent_32%),radial-gradient(circle_at_80%_5%,rgba(109,40,217,0.18),transparent_30%),linear-gradient(120deg,rgba(124,58,237,0.06),transparent_28%,rgba(109,40,217,0.08))]" />
         <header className="relative mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-6 sm:px-6">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-lg font-bold text-primary">
@@ -194,27 +194,25 @@ const LandingPage: React.FC = () => {
             </button>
           </nav>
         </header>
-      </div>
 
-      <main className="relative mx-auto flex max-w-6xl flex-col gap-12 px-4 pb-16 sm:px-6 lg:gap-16">
-        <section className="relative grid items-center gap-10 overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-[#f6f1ff] to-[#eef2ff] p-6 shadow-[0_20px_70px_rgba(124,58,237,0.08)] md:p-10 lg:grid-cols-[1.05fr_1fr]">
-          <div className="absolute -left-10 -top-10 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
-          <div className="absolute -right-10 -bottom-16 h-48 w-48 rounded-full bg-secondary/20 blur-3xl" />
+        <div className="relative mx-auto mt-4 grid max-w-6xl items-center gap-10 rounded-[32px] bg-white/80 p-6 shadow-[0_30px_90px_rgba(124,58,237,0.14)] backdrop-blur md:p-10 lg:grid-cols-[1.05fr_1fr]">
+          <div className="absolute -left-16 -top-24 h-48 w-48 rounded-full bg-primary/15 blur-3xl" />
+          <div className="absolute -right-10 -bottom-10 h-56 w-56 rounded-full bg-secondary/15 blur-3xl" />
           <div className="relative space-y-6 lg:space-y-8">
             <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-primary">
-              Подобие restik.com/automation
+              Вдохновение restik.com
               <span className="h-2 w-2 rounded-full bg-primary" />
-              <span className="text-primary/80">автоматизация кофейни за 1 день</span>
+              <span className="text-primary/80">сразу запускаем кофейню</span>
             </div>
             <h1 className="heading-font text-4xl font-semibold leading-tight text-slate-900 sm:text-5xl">
-              Полноценная касса и эквайринг для кофейни — теперь в светлом стиле
+              Светлый лендинг Yago POS для кофейни
             </h1>
             <p className="text-lg text-slate-600">
-              Веб-терминал, АТОЛ, лояльность и учёт смен без интеграторов. Запускайтесь по сценарию, знакомому по restik.com/automation/kofejnya: заявка → касса → первые чеки.
+              Всё как на референсе: заявка, касса в браузере, эквайринг и лояльность без менеджеров. Запускайтесь за день и принимайте оплату с первого захода в терминал.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <button type="button" onClick={handleDemoClick} className={primaryButtonClass}>
-                Попробовать демо, как на лендинге
+                Попробовать демо
               </button>
               <button
                 type="button"
@@ -224,31 +222,32 @@ const LandingPage: React.FC = () => {
                 Создать организацию
               </button>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-                <div className="text-2xl font-bold text-primary">24/7</div>
-                <div>онлайн-терминал и смены без установки</div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-                <div className="text-2xl font-bold text-primary">1 день</div>
-                <div>от заявки до пробитого чека</div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-                <div className="text-2xl font-bold text-primary">Без CRM</div>
-                <div>лояльность и скидки внутри Yago</div>
-              </div>
+            <div className="flex flex-wrap gap-3 rounded-2xl bg-slate-50/80 p-3 text-sm text-slate-700">
+              {[
+                { label: 'Работа по всей России', icon: MapPin },
+                { label: 'Запуск за 1 день', icon: TimerReset },
+                { label: 'Поддержка без менеджеров', icon: Headset },
+              ].map((pill) => (
+                <div
+                  key={pill.label}
+                  className="flex items-center gap-2 rounded-xl bg-white/80 px-4 py-2 shadow-sm ring-1 ring-slate-200"
+                >
+                  {React.createElement(pill.icon, { size: 18, className: 'text-primary' })}
+                  <span className="font-semibold text-slate-800">{pill.label}</span>
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="relative space-y-4 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-lg md:p-6">
+          <div className="relative space-y-4 rounded-2xl border border-primary/15 bg-white/90 p-4 shadow-[0_15px_60px_rgba(124,58,237,0.12)] md:p-6">
             <div className="absolute inset-x-6 top-6 h-24 rounded-3xl bg-gradient-to-r from-primary/10 via-primary/5 to-secondary/10 blur-2xl" />
-            <div className="relative rounded-2xl border border-dashed border-primary/30 bg-white p-5 shadow-inner">
+            <div className="relative rounded-2xl border border-slate-200/70 bg-white p-5 shadow-inner">
               <div className="flex items-center justify-between text-sm font-semibold uppercase tracking-wide text-primary">
                 <span>Терминал кофейни</span>
                 <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[11px] text-green-700">Онлайн</span>
               </div>
               <div className="mt-4 grid gap-3 text-sm">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 shadow-inner">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 shadow-inner">
                   <div className="text-xs font-semibold text-slate-500">Заказ · Столы / Навынос</div>
                   <div className="mt-2 flex items-center justify-between text-base font-bold text-slate-900">
                     <span>Флэт уайт</span>
@@ -256,7 +255,7 @@ const LandingPage: React.FC = () => {
                   </div>
                   <p className="text-xs text-slate-500">Сироп Ваниль · Овсяное молоко</p>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 shadow-inner">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 shadow-inner">
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
                     <span>Смена</span>
                     <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">Кассир онлайн</span>
@@ -289,349 +288,335 @@ const LandingPage: React.FC = () => {
               </Link>
             </div>
           </div>
-        </section>
+        </div>
+      </div>
 
-        <section className="grid gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_20px_50px_rgba(15,23,42,0.05)] md:p-6 lg:grid-cols-3">
-          {[
-            { icon: MapPin, title: 'Работа по всей России', text: 'Касса в браузере — подходит для островков, каворкингов и точек без стойки.' },
-            { icon: TimerReset, title: 'Запуск за день', text: 'Повторяем сценарий restik: регистрация, эквайринг, первый чек в тот же день.' },
-            { icon: Headset, title: 'Поддержка без менеджеров', text: 'Чаты и инструкции в /help, e-mail support@yagopos.ru, без звонков.' },
-          ].map((item) => (
-            <div key={item.title} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              {React.createElement(item.icon, { size: 22, className: 'mt-1 text-primary' })}
-              <div>
-                <div className="font-semibold text-slate-900">{item.title}</div>
-                <p className="text-sm text-slate-600">{item.text}</p>
-              </div>
-            </div>
-          ))}
-        </section>
-
-        <section id="advantages" className="grid gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_50px_rgba(15,23,42,0.05)] md:p-8">
-          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+      <main className="relative mx-auto flex max-w-6xl flex-col gap-10 px-4 pb-16 sm:px-6 lg:gap-14">
+        <section
+          id="advantages"
+          className="relative overflow-hidden rounded-[28px] bg-white/90 p-6 shadow-[0_28px_70px_rgba(15,23,42,0.06)] ring-1 ring-white/60 md:p-8"
+        >
+          <div className="absolute -left-24 top-10 h-32 w-32 rounded-full bg-primary/10 blur-3xl" />
+          <div className="absolute -right-16 bottom-4 h-28 w-28 rounded-full bg-secondary/15 blur-3xl" />
+          <div className="relative flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
             <div className="space-y-2">
               <p className="text-sm font-semibold uppercase tracking-wide text-primary">Что входит</p>
               <h2 className="heading-font text-3xl font-semibold text-slate-900">Yago POS для кофейни</h2>
-              <p className="text-base text-slate-600">Все основные блоки референса restik: касса, оплата, лояльность, отчёты и роли в одном окне.</p>
+              <p className="text-base text-slate-600">Касса, оплата, лояльность и отчёты — ровно тот набор, что вы видели на restik.</p>
             </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              <Sparkles size={18} className="text-primary" />
-              <span>Кнопки крупные, радиус 12px, без лишних теней</span>
+            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
+              <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-2 shadow-sm ring-1 ring-slate-200">
+                <Sparkles size={18} className="text-primary" />
+                <span>Крупные кнопки, радиус 12px</span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-2 shadow-sm ring-1 ring-slate-200">
+                <ShieldCheck size={18} className="text-primary" />
+                <span>Без лишних разделов</span>
+              </div>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="relative mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {advantages.map((feature) => (
-              <div key={feature.title} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                    {React.createElement(feature.icon, { size: 20, className: 'text-primary' })}
-                    <span>{feature.title}</span>
-                  </div>
-                  <span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">Включено</span>
+              <div
+                key={feature.title}
+                className="group rounded-2xl bg-gradient-to-br from-white via-white to-slate-50 p-4 shadow-[0_12px_40px_rgba(15,23,42,0.04)] ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:ring-primary/40"
+              >
+                <div className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                  {React.createElement(feature.icon, { size: 20, className: 'text-primary' })}
+                  <span>{feature.title}</span>
                 </div>
                 <p className="mt-2 text-sm text-slate-600">{feature.description}</p>
+                <span className="mt-3 inline-flex rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">Включено</span>
               </div>
             ))}
           </div>
         </section>
 
-        <section id="flow" className="grid gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_50px_rgba(15,23,42,0.05)] md:p-8 lg:grid-cols-[1fr_1fr]">
-          <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wide text-primary">Как подключиться</p>
-            <h2 className="heading-font text-3xl font-semibold text-slate-900">Повторяем сценарий restik.com/automation</h2>
-            <p className="text-base text-slate-600">Три шага, без звонков менеджеров. После шага 3 касса уже готова: авторизация, АТОЛ, эквайринг и лояльность.</p>
-            <div className="flex items-center gap-3 text-sm text-slate-600">
-              <ShieldCheck size={18} className="text-primary" />
-              <span>Данные шифруются, токены храним только в localStorage пользователя.</span>
-            </div>
-          </div>
-          <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-semibold text-slate-900">Шаг {activeStep + 1} из {onboardingSteps.length}</div>
-              <div className="flex gap-2 text-sm font-semibold text-primary">
-                <button
-                  type="button"
-                  onClick={() => setActiveStep((prev) => (prev - 1 + onboardingSteps.length) % onboardingSteps.length)}
-                  className="rounded-lg border border-slate-200 px-3 py-1 transition hover:border-primary/50 hover:text-primary"
-                >
-                  ←
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveStep((prev) => (prev + 1) % onboardingSteps.length)}
-                  className="rounded-lg border border-slate-200 px-3 py-1 transition hover:border-primary/50 hover:text-primary"
-                >
-                  →
-                </button>
+        <section
+          id="flow"
+          className="relative overflow-hidden rounded-[28px] bg-white/90 p-6 shadow-[0_28px_70px_rgba(15,23,42,0.06)] ring-1 ring-white/60 md:p-8"
+        >
+          <div className="absolute -right-24 top-6 h-32 w-32 rounded-full bg-primary/10 blur-3xl" />
+          <div className="absolute -left-16 bottom-0 h-28 w-28 rounded-full bg-secondary/15 blur-3xl" />
+          <div className="relative grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+            <div className="space-y-3">
+              <p className="text-sm font-semibold uppercase tracking-wide text-primary">Как подключиться</p>
+              <h2 className="heading-font text-3xl font-semibold text-slate-900">Сценарий restik в три шага</h2>
+              <p className="text-base text-slate-600">Без звонков и блоков: заявка, эквайринг и первые чеки в едином потоке.</p>
+              <div className="flex flex-wrap gap-3 text-sm text-slate-700">
+                <span className="rounded-full bg-primary/10 px-3 py-1 font-semibold text-primary">Данные шифруются</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-800">Подключение за день</span>
               </div>
             </div>
-            <div className="rounded-2xl border border-dashed border-primary/25 bg-white p-5 text-sm text-slate-700">
-              <div className="text-xs font-semibold uppercase tracking-wide text-primary">{onboardingSteps[activeStep].title}</div>
-              <div className="mt-2 text-lg font-bold text-slate-900">{onboardingSteps[activeStep].screenshotTitle}</div>
-              <p className="mt-1 text-slate-600">{onboardingSteps[activeStep].description}</p>
-              <div className="mt-4 rounded-xl border border-primary/15 bg-primary/5 p-4 text-center text-sm font-semibold text-primary">
-                Карусель со скриншотами шага · интерфейс совпадает с демо
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-              Вход и регистрация работают прямо на этой странице. Нужна ссылка для кассира? Используйте /login.
-            </div>
-          </div>
-        </section>
-
-        <section className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_50px_rgba(15,23,42,0.05)] md:p-8 lg:grid-cols-3">
-          <div className="space-y-3 lg:col-span-1">
-            <p className="text-sm font-semibold uppercase tracking-wide text-primary">Скриншоты и видео</p>
-            <h2 className="heading-font text-3xl font-semibold text-slate-900">Интерфейсы Yago POS</h2>
-            <p className="text-base text-slate-600">Касса, меню, склад и аналитика — посмотрите, что увидит кассир и владелец.</p>
-          </div>
-          <div className="grid gap-3 lg:col-span-2 lg:grid-cols-2">
-            {screenshotGallery.map((shot) => (
-              <div key={shot.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-                <div className="text-lg font-semibold text-slate-900">{shot.title}</div>
-                <p className="mt-1 text-sm text-slate-600">{shot.description}</p>
-                <div className="mt-3 h-28 rounded-xl border border-dashed border-primary/30 bg-white text-center text-sm font-semibold text-primary">
-                  Скриншот интерфейса
+            <div className="space-y-4 rounded-2xl bg-slate-50/80 p-5 shadow-inner ring-1 ring-slate-200">
+              <div className="flex items-center justify-between">
+                <div className="text-lg font-semibold text-slate-900">Шаг {activeStep + 1} из {onboardingSteps.length}</div>
+                <div className="flex gap-2 text-sm font-semibold text-primary">
+                  <button
+                    type="button"
+                    onClick={() => setActiveStep((prev) => (prev - 1 + onboardingSteps.length) % onboardingSteps.length)}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 transition hover:border-primary/50 hover:text-primary"
+                  >
+                    ←
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveStep((prev) => (prev + 1) % onboardingSteps.length)}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 transition hover:border-primary/50 hover:text-primary"
+                  >
+                    →
+                  </button>
                 </div>
               </div>
-            ))}
-            <div className="lg:col-span-2">
-              <div className="relative overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
-                <div className="aspect-video w-full bg-slate-100">
-                  <iframe
-                    className="h-full w-full"
-                    src="https://www.youtube.com/embed/2vjPBrBU-TM"
-                    title="Как пробить чек в Yago"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
+              <div className="rounded-2xl border border-dashed border-primary/25 bg-white p-5 text-sm text-slate-700 shadow-sm">
+                <div className="text-xs font-semibold uppercase tracking-wide text-primary">{onboardingSteps[activeStep].title}</div>
+                <div className="mt-2 text-lg font-bold text-slate-900">{onboardingSteps[activeStep].screenshotTitle}</div>
+                <p className="mt-1 text-slate-600">{onboardingSteps[activeStep].description}</p>
+                <div className="mt-4 rounded-xl border border-primary/15 bg-primary/5 p-4 text-center text-sm font-semibold text-primary">
+                  Мини-кадр интерфейса шага · совпадает с демо
                 </div>
+              </div>
+              <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-700 ring-1 ring-slate-200">
+                Вход и регистрация работают здесь же — никакого отдельного блока или перехода.
               </div>
             </div>
           </div>
         </section>
 
-        <section ref={authSectionRef} id="signup" className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_50px_rgba(15,23,42,0.05)] md:p-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wide text-primary">Онбординг без менеджеров</p>
-            <h2 className="heading-font text-3xl font-semibold text-slate-900">Заявка и вход как на restik</h2>
-            <p className="text-base text-slate-600">
-              Форма повторяет логику restik.com/automation/kofejnya: заявка → данные владельца → сразу вход в кассу. После создания организации вы можете настроить меню, сотрудников и права.
-            </p>
-            <div className="flex flex-wrap gap-3 text-sm text-slate-700">
-              <span className="rounded-full bg-primary/10 px-3 py-1 font-semibold text-primary">Без звонков</span>
-              <span className="rounded-full bg-secondary/10 px-3 py-1 font-semibold text-slate-800">Демо-профиль заполняется</span>
-              <span className="rounded-full border border-slate-200 px-3 py-1 font-semibold text-slate-700">Поддержка: support@yagopos.ru</span>
-            </div>
-          </div>
-          <div className="grid gap-6">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm md:p-5">
-              <div className="mb-4 space-y-1 text-center">
-                <div className="text-xs font-semibold uppercase tracking-wide text-primary">Шаг 1</div>
-                <h3 className="heading-font text-2xl font-semibold text-slate-900">Создайте организацию</h3>
-                <p className="text-sm text-slate-600">Владелец и базовые данные появятся автоматически.</p>
+        <section
+          ref={authSectionRef}
+          id="signup"
+          className="relative overflow-hidden rounded-[28px] bg-white p-6 shadow-[0_28px_70px_rgba(15,23,42,0.06)] ring-1 ring-white/60 md:p-8"
+        >
+          <div className="absolute -left-10 top-0 h-28 w-28 rounded-full bg-primary/10 blur-3xl" />
+          <div className="absolute -right-16 bottom-8 h-28 w-28 rounded-full bg-secondary/12 blur-3xl" />
+          <div className="relative grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+            <div className="space-y-3">
+              <p className="text-sm font-semibold uppercase tracking-wide text-primary">Онбординг без менеджеров</p>
+              <h2 className="heading-font text-3xl font-semibold text-slate-900">Заявка и вход как на restik</h2>
+              <p className="text-base text-slate-600">
+                Форма повторяет логику restik.com/automation/kofejnya: заявка → данные владельца → сразу вход в кассу. Меню, сотрудники и права — уже в личном кабинете.
+              </p>
+              <div className="flex flex-wrap gap-3 text-sm text-slate-700">
+                <span className="rounded-full bg-primary/10 px-3 py-1 font-semibold text-primary">Без звонков</span>
+                <span className="rounded-full bg-secondary/10 px-3 py-1 font-semibold text-slate-800">Демо-профиль заполняется</span>
+                <span className="rounded-full border border-slate-200 px-3 py-1 font-semibold text-slate-700">support@yagopos.ru</span>
               </div>
-              <form className="space-y-3" onSubmit={handleSignup}>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300" htmlFor="organizationName">
-                    Название кофейни
-                  </label>
-                  <input
-                    id="organizationName"
-                    required
-                    value={organizationName}
-                    onChange={(event) => setOrganizationName(event.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
-                    placeholder="Например, Кофе на районе"
-                  />
+            </div>
+            <div className="grid gap-5">
+              <div className="rounded-2xl bg-slate-50/80 p-5 shadow-inner ring-1 ring-slate-200">
+                <div className="mb-4 space-y-1 text-center">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-primary">Шаг 1</div>
+                  <h3 className="heading-font text-2xl font-semibold text-slate-900">Создайте организацию</h3>
+                  <p className="text-sm text-slate-600">Владелец и базовые данные появятся автоматически.</p>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <form className="space-y-3" onSubmit={handleSignup}>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300" htmlFor="ownerName">
-                      Имя владельца
+                    <label className="block text-sm font-medium text-slate-700" htmlFor="organizationName">
+                      Название кофейни
                     </label>
                     <input
-                      id="ownerName"
+                      id="organizationName"
                       required
-                      value={ownerName}
-                      onChange={(event) => setOwnerName(event.target.value)}
+                      value={organizationName}
+                      onChange={(event) => setOrganizationName(event.target.value)}
                       className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
-                      placeholder="Александр"
+                      placeholder="Например, Кофе на районе"
                     />
                   </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700" htmlFor="ownerName">
+                        Имя владельца
+                      </label>
+                      <input
+                        id="ownerName"
+                        required
+                        value={ownerName}
+                        onChange={(event) => setOwnerName(event.target.value)}
+                        className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
+                        placeholder="Александр"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700" htmlFor="ownerEmail">
+                        Email владельца
+                      </label>
+                      <input
+                        id="ownerEmail"
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
+                        placeholder="owner@coffee.ru"
+                      />
+                    </div>
+                  </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300" htmlFor="ownerEmail">
-                      Email владельца
+                    <label className="block text-sm font-medium text-slate-700" htmlFor="ownerPassword">
+                      Пароль
                     </label>
                     <input
-                      id="ownerEmail"
+                      id="ownerPassword"
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
+                      placeholder="Придумайте надёжный пароль"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={signupLoading}
+                    className="flex h-12 w-full items-center justify-center rounded-[12px] bg-primary text-sm font-semibold text-slate-50 transition hover:bg-primary-dark disabled:opacity-70 disabled:hover:bg-primary"
+                  >
+                    {signupLoading ? 'Создаем аккаунт...' : 'Создать организацию и войти'}
+                  </button>
+                </form>
+              </div>
+
+              <div className="rounded-2xl bg-white px-5 py-4 text-sm shadow-[0_12px_40px_rgba(15,23,42,0.05)] ring-1 ring-primary/15">
+                <div className="font-semibold text-slate-900">Есть доступ? Войдите сразу.</div>
+                <form className="mt-3 space-y-3" onSubmit={handleLogin}>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input
                       type="email"
                       required
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
-                      placeholder="owner@coffee.ru"
+                      value={loginEmail}
+                      onChange={(event) => setLoginEmail(event.target.value)}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
+                      placeholder="Email"
+                    />
+                    <input
+                      type="password"
+                      required
+                      value={loginPassword}
+                      onChange={(event) => setLoginPassword(event.target.value)}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
+                      placeholder="Пароль"
                     />
                   </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300" htmlFor="ownerPassword">
-                    Пароль
-                  </label>
-                  <input
-                    id="ownerPassword"
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
-                    placeholder="Придумайте надёжный пароль"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={signupLoading}
-                  className="flex h-12 w-full items-center justify-center rounded-[12px] bg-primary text-sm font-semibold text-slate-50 transition hover:bg-primary-dark disabled:opacity-70 disabled:hover:bg-primary"
-                >
-                  {signupLoading ? 'Создаем аккаунт...' : 'Создать организацию и войти'}
-                </button>
-              </form>
-            </div>
-
-            <div className="rounded-2xl border border-dashed border-primary/30 bg-white px-5 py-4 text-sm shadow-sm">
-              <div className="font-semibold text-slate-900">Есть доступ? Войдите сразу.</div>
-              <form className="mt-3 space-y-3" onSubmit={handleLogin}>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input
-                    type="email"
-                    required
-                    value={loginEmail}
-                    onChange={(event) => setLoginEmail(event.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
-                    placeholder="Email"
-                  />
-                  <input
-                    type="password"
-                    required
-                    value={loginPassword}
-                    onChange={(event) => setLoginPassword(event.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
-                    placeholder="Пароль"
-                  />
-                </div>
-                <input
-                  type="text"
-                  value={loginOrganizationId}
-                  onChange={(event) => setLoginOrganizationId(event.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
-                  placeholder="ID организации (опционально)"
-                />
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-                  <label className="flex items-center gap-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <input
-                      type="checkbox"
-                      checked={loginRemember}
-                      onChange={(event) => setLoginRemember(event.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 bg-white text-primary focus:ring-primary"
+                      value={loginOrganizationId}
+                      onChange={(event) => setLoginOrganizationId(event.target.value)}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-inner transition focus:border-primary"
+                      placeholder="ID организации (необязательно)"
                     />
-                    Запомнить меня
-                  </label>
-                  <Link to="/login" className="font-semibold text-primary hover:text-primary/80">
-                    Отдельная страница входа
-                  </Link>
-                </div>
-                <button
-                  type="submit"
-                  disabled={loginLoading}
-                  className="flex h-11 w-full items-center justify-center rounded-[12px] border border-primary bg-transparent text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-70 disabled:hover:bg-primary/10"
-                >
-                  {loginLoading ? 'Входим...' : 'Войти'}
-                </button>
-              </form>
+                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={loginRemember}
+                        onChange={(event) => setLoginRemember(event.target.checked)}
+                        className="h-4 w-4 rounded border border-slate-300 text-primary focus:ring-primary"
+                      />
+                      Запомнить вход
+                    </label>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loginLoading}
+                    className="flex h-11 w-full items-center justify-center rounded-[12px] border border-primary bg-white text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-70 disabled:hover:bg-primary/10"
+                  >
+                    {loginLoading ? 'Входим...' : 'Войти'}
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
         </section>
 
-        <section id="news" className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_50px_rgba(15,23,42,0.05)] md:p-8 lg:grid-cols-[1fr_1.1fr]">
-          <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wide text-primary">Новости</p>
-            <h2 className="heading-font text-3xl font-semibold text-slate-900">Новости и обновления</h2>
-            <p className="text-base text-slate-600">Следите за релизами: changelog закреплён на лендинге и доступен по ссылке /news.</p>
-            <Link to="/news" className={primaryButtonClass}>
-              Перейти в /news
-            </Link>
-          </div>
-          <div className="space-y-3">
-            {newsItems.map((item) => (
+        <section
+          id="content"
+          className="relative overflow-hidden rounded-[28px] bg-white/90 p-6 shadow-[0_28px_70px_rgba(15,23,42,0.06)] ring-1 ring-white/60 md:p-8"
+        >
+          <div className="absolute -right-20 top-8 h-28 w-28 rounded-full bg-primary/10 blur-3xl" />
+          <div className="relative grid gap-4 lg:grid-cols-3">
+            {[{ label: 'Новости', items: newsItems.slice(0, 2), link: '/news' }, { label: 'Инструкции', items: instructionLinks.slice(0, 2), link: '/help' }, { label: 'Блог', items: blogPosts.slice(0, 2), link: '/blog' }].map((block) => (
               <div
-                key={item.date}
-                className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                key={block.label}
+                className="rounded-2xl bg-gradient-to-br from-white via-white to-slate-50 p-5 shadow-[0_12px_40px_rgba(15,23,42,0.04)] ring-1 ring-slate-200"
               >
-                <div className="space-y-1">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-primary">{item.date}</div>
-                  <div className="text-base font-semibold text-slate-900">{item.title}</div>
-                  <p className="text-sm text-slate-600">{item.description}</p>
-                  <Link to={`/news/${item.slug}`} className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
-                    Читать полностью
-                    <span>→</span>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold uppercase tracking-wide text-primary">{block.label}</div>
+                  <Link to={block.link} className="text-sm font-semibold text-primary hover:underline">
+                    Все →
                   </Link>
                 </div>
-                <span className="text-lg">🆕</span>
+                <div className="mt-3 space-y-3 text-sm text-slate-700">
+                  {block.label === 'Инструкции'
+                    ? block.items.map((item) => (
+                        <a
+                          key={item.title}
+                          href={item.href}
+                          className="block rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:ring-primary/40"
+                        >
+                          <div className="font-semibold text-slate-900">{item.title}</div>
+                          <p className="text-xs text-slate-500">{item.href}</p>
+                        </a>
+                      ))
+                    : block.items.map((item: any) => (
+                        <Link
+                          key={item.slug ?? item.title}
+                          to={`/${block.label === 'Блог' ? 'blog' : 'news'}/${item.slug ?? item.href}`}
+                          className="block rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:ring-primary/40"
+                        >
+                          <div className="text-xs font-semibold uppercase tracking-wide text-primary">{item.date ?? 'Статья'}</div>
+                          <div className="text-base font-semibold text-slate-900">{item.title}</div>
+                          <p className="text-xs text-slate-600">{item.description ?? item.excerpt}</p>
+                        </Link>
+                      ))}
+                </div>
               </div>
             ))}
           </div>
         </section>
 
-        <section id="instructions" className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_50px_rgba(15,23,42,0.05)] md:p-8 lg:grid-cols-[1fr_1.1fr]">
-          <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wide text-primary">Инструкции</p>
-            <h2 className="heading-font text-3xl font-semibold text-slate-900">Готовые гайды внутри /help</h2>
-            <p className="text-base text-slate-600">/docs оставили под Swagger API. Все инструкции вынесли в /help — открывайте статьи в CMS или markdown-файлах.</p>
-            <Link to="/help" className={secondaryButtonClass}>
-              Перейти к инструкциям
-            </Link>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {instructionLinks.map((item) => (
-              <a
-                key={item.title}
-                href={item.href}
-                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/60"
-              >
-                <div className="text-xs font-semibold uppercase tracking-wide text-primary">Гайд</div>
-                <div className="mt-1 text-base font-semibold text-slate-900">{item.title}</div>
-                <p className="text-sm text-slate-600">Ссылка: {item.href}</p>
-              </a>
-            ))}
-          </div>
-        </section>
-
-        <section id="blog" className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_50px_rgba(15,23,42,0.05)] md:p-8 lg:grid-cols-[1fr_1.1fr]">
-          <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wide text-primary">Блог</p>
-            <h2 className="heading-font text-3xl font-semibold text-slate-900">Блог для владельцев кофеен</h2>
-            <p className="text-base text-slate-600">Последние статьи о запуске, лояльности и управлении кофейней.</p>
-            <Link to="/blog" className={primaryButtonClass}>
-              Читать все статьи
-            </Link>
-          </div>
-          <div className="grid gap-3">
-            {blogPosts.slice(0, 3).map((post) => (
-              <article key={post.slug} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                <div className="text-xs font-semibold uppercase tracking-wide text-primary">{post.date}</div>
-                <div className="mt-1 text-lg font-bold text-slate-900">{post.title}</div>
-                <p className="mt-1 text-sm text-slate-600">{post.excerpt}</p>
-                <Link to={`/blog/${post.slug}`} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary">
-                  Читать
-                  <span>→</span>
-                </Link>
-              </article>
-            ))}
+        <section
+          id="media"
+          className="relative overflow-hidden rounded-[28px] bg-white/90 p-6 shadow-[0_28px_70px_rgba(15,23,42,0.06)] ring-1 ring-white/60 md:p-8"
+        >
+          <div className="absolute -left-16 top-6 h-28 w-28 rounded-full bg-primary/10 blur-3xl" />
+          <div className="relative grid gap-4 lg:grid-cols-3 lg:items-start">
+            <div className="space-y-3">
+              <p className="text-sm font-semibold uppercase tracking-wide text-primary">Скриншоты и видео</p>
+              <h2 className="heading-font text-3xl font-semibold text-slate-900">Интерфейсы Yago POS</h2>
+              <p className="text-base text-slate-600">Касса, меню, склад и аналитика — что увидит кассир и владелец.</p>
+            </div>
+            <div className="grid gap-3 lg:col-span-2 lg:grid-cols-2">
+              {screenshotGallery.map((shot) => (
+                <div
+                  key={shot.title}
+                  className="rounded-2xl bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.04)] ring-1 ring-slate-200"
+                >
+                  <div className="text-lg font-semibold text-slate-900">{shot.title}</div>
+                  <p className="mt-1 text-sm text-slate-600">{shot.description}</p>
+                  <div className="mt-3 h-28 rounded-xl border border-dashed border-primary/30 bg-slate-50 text-center text-sm font-semibold text-primary">
+                    Скриншот интерфейса
+                  </div>
+                </div>
+              ))}
+              <div className="lg:col-span-2">
+                <div className="relative overflow-hidden rounded-2xl bg-white shadow-[0_12px_40px_rgba(15,23,42,0.04)] ring-1 ring-slate-200">
+                  <div className="aspect-video w-full bg-slate-100">
+                    <iframe
+                      className="h-full w-full"
+                      src="https://www.youtube.com/embed/2vjPBrBU-TM"
+                      title="Как пробить чек в Yago"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </main>
 
-      <footer className="mt-10 bg-white py-8 text-sm text-slate-600">
+      <footer className="mt-10 bg-white/70 py-8 text-sm text-slate-600 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="space-y-1">
             <div className="heading-font text-lg font-semibold text-slate-900">Yago POS</div>
