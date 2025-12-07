@@ -69,6 +69,7 @@ const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { setSession } = useAuthStore();
   const { notify } = useToast();
+  const { theme, toggleTheme } = useTheme();
   const authSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [organizationName, setOrganizationName] = useState('');
