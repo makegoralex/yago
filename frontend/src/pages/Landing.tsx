@@ -59,6 +59,12 @@ type ContentBlock =
   | { label: 'Инструкции'; link: string; items: InstructionLink[] }
   | { label: 'Блог'; link: string; items: BlogPost[] };
 
+const contentBlocks: ContentBlock[] = [
+  { label: 'Новости', items: newsItems.slice(0, 2), link: '/news' },
+  { label: 'Инструкции', items: instructionLinks.slice(0, 2), link: '/help' },
+  { label: 'Блог', items: blogPosts.slice(0, 2), link: '/blog' },
+];
+
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { setSession } = useAuthStore();
@@ -77,12 +83,6 @@ const LandingPage: React.FC = () => {
   const [loginRemember, setLoginRemember] = useState(true);
   const [loginLoading, setLoginLoading] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
-
-  const contentBlocks: ContentBlock[] = [
-    { label: 'Новости', items: newsItems.slice(0, 2), link: '/news' },
-    { label: 'Инструкции', items: instructionLinks.slice(0, 2), link: '/help' },
-    { label: 'Блог', items: blogPosts.slice(0, 2), link: '/blog' },
-  ];
 
   const primaryButtonClass =
     'inline-flex items-center justify-center gap-2 rounded-[12px] bg-primary px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark hover:shadow-md';
