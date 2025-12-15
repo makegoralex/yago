@@ -39,16 +39,6 @@ export const newsItems: NewsItem[] = [
     ],
   },
   {
-    slug: 'atol-direct-integration',
-    date: '30.11.2025',
-    title: 'Прямая интеграция с АТОЛ',
-    description: 'Фискальные чеки без сторонних сервисов.',
-    content: [
-      'Владелец подключает учётную запись АТОЛ в пару полей, после чего чеки уходят напрямую без прокси-сервисов.',
-      'Добавили тестовый чек в суперадминке, чтобы сразу проверить связку терминала и АТОЛ.',
-    ],
-  },
-  {
     slug: 'x-z-reports-printing',
     date: '28.11.2025',
     title: 'Печать X/Z отчётов',
@@ -61,7 +51,6 @@ export const newsItems: NewsItem[] = [
 
 export const instructionLinks: InstructionLink[] = [
   { title: 'Как добавить товары', href: '/help#products' },
-  { title: 'Как подключить кассу', href: '/help#fiscal' },
   { title: 'Как пробить первый чек', href: '/help#first-sale' },
   { title: 'Как создать сотрудника', href: '/help#team' },
 ];

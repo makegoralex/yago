@@ -4,8 +4,6 @@ import mongoose from 'mongoose';
 import {
   OrganizationModel,
   type SubscriptionPlan,
-  type FiscalProviderSettings,
-  type OrganizationSettings,
   type OrganizationDocument,
 } from '../models/Organization';
 import { SubscriptionPlanModel } from '../models/SubscriptionPlan';
@@ -14,7 +12,6 @@ import { CategoryModel } from '../modules/catalog/catalog.model';
 import { RestaurantSettingsModel } from '../modules/restaurant/restaurantSettings.model';
 import { generateTokens, hashPassword } from '../services/authService';
 import { authMiddleware, requireRole } from '../middleware/auth';
-import { getFiscalProviderFromSettings, sendAtolTestReceipt } from '../services/fiscal/atol.service';
 import {
   buildBillingInfo,
   DEFAULT_BILLING_CYCLE_DAYS,
@@ -84,66 +81,6 @@ const normalizePlanName = (rawPlan: unknown, allowCustomPlan: boolean): Subscrip
 
 const isOwnerRequestingOtherOrganization = (req: Request, organizationId: string) =>
   req.user?.role === 'owner' && String(req.user.organizationId) !== organizationId;
-
-const normalizeString = (value: unknown, fieldName: string): string => {
-  if (typeof value !== 'string') {
-    throw new HttpError(400, `${fieldName} is required`);
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new HttpError(400, `${fieldName} is required`);
-  }
-
-  return trimmed;
-};
-
-const validateFiscalProviderSettings = (payload: unknown): FiscalProviderSettings | null => {
-  if (payload === null) {
-    return null;
-  }
-
-  if (typeof payload !== 'object' || Array.isArray(payload)) {
-    throw new HttpError(400, 'fiscalProvider must be an object');
-  }
-
-  const normalizedProvider = (payload as { provider?: unknown }).provider ?? 'atol';
-  if (normalizedProvider !== 'atol') {
-    throw new HttpError(400, 'Only ATOL fiscal provider is supported');
-  }
-
-  const enabled = Boolean((payload as { enabled?: unknown }).enabled);
-  const mode = (payload as { mode?: unknown }).mode === 'prod' ? 'prod' : 'test';
-  const login = enabled
-    ? normalizeString((payload as { login?: unknown }).login, 'login')
-    : (payload as { login?: string }).login?.trim() ?? '';
-  const password = enabled
-    ? normalizeString((payload as { password?: unknown }).password, 'password')
-    : (payload as { password?: string }).password?.trim() ?? '';
-  const groupCode = enabled
-    ? normalizeString((payload as { groupCode?: unknown }).groupCode, 'groupCode')
-    : (payload as { groupCode?: string }).groupCode?.trim() ?? '';
-  const inn = enabled
-    ? normalizeString((payload as { inn?: unknown }).inn, 'inn')
-    : (payload as { inn?: string }).inn?.trim() ?? '';
-  const paymentAddress = enabled
-    ? normalizeString((payload as { paymentAddress?: unknown }).paymentAddress, 'paymentAddress')
-    : (payload as { paymentAddress?: string }).paymentAddress?.trim() ?? '';
-  const deviceIdRaw = (payload as { deviceId?: unknown }).deviceId;
-  const deviceId = typeof deviceIdRaw === 'string' && deviceIdRaw.trim() ? deviceIdRaw.trim() : undefined;
-
-  return {
-    enabled,
-    provider: 'atol',
-    mode,
-    login,
-    password,
-    groupCode,
-    inn,
-    paymentAddress,
-    deviceId,
-  };
-};
 
 organizationsRouter.get('/', authMiddleware, requireRole('superAdmin'), async (_req: Request, res: Response) => {
   try {
@@ -735,22 +672,6 @@ organizationsRouter.patch(
         if (!parsedNextPayment) return;
       }
 
-      if ('fiscalProvider' in (req.body?.settings ?? req.body)) {
-        try {
-          const fiscal = validateFiscalProviderSettings((req.body?.settings ?? req.body).fiscalProvider);
-
-          if (fiscal === null) {
-            unsetOperations['settings.fiscalProvider'] = '';
-          } else {
-            setOperations['settings.fiscalProvider'] = fiscal;
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Invalid fiscalProvider settings';
-          res.status(400).json({ data: null, error: message });
-          return;
-        }
-      }
-
       if (
         Object.keys(updates).length === 0 &&
         Object.keys(setOperations).length === 0 &&
@@ -857,81 +778,6 @@ organizationsRouter.post(
       },
       error: null,
     });
-  }
-);
-
-organizationsRouter.post(
-  '/:organizationId/fiscal/test',
-  authMiddleware,
-  requireRole(['owner', 'superAdmin']),
-  async (req: Request, res: Response) => {
-    const { organizationId } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(organizationId)) {
-      res.status(400).json({ data: null, error: 'Invalid organization id' });
-      return;
-    }
-
-    if (isOwnerRequestingOtherOrganization(req, organizationId)) {
-      res.status(403).json({ data: null, error: 'Forbidden' });
-      return;
-    }
-
-    const editableOrganization = await ensureOrganizationIsEditable(req, res, organizationId);
-    if (!editableOrganization) {
-      return;
-    }
-
-    const organization = await OrganizationModel.findById(organizationId).lean();
-
-    if (!organization) {
-      res.status(404).json({ data: null, error: 'Organization not found' });
-      return;
-    }
-
-    const fiscalProvider = getFiscalProviderFromSettings(organization.settings as OrganizationSettings | undefined);
-
-    if (!fiscalProvider || fiscalProvider.provider !== 'atol') {
-      res.status(400).json({ data: null, error: 'Fiscal provider is not configured for ATOL' });
-      return;
-    }
-
-    try {
-      const result = await sendAtolTestReceipt(fiscalProvider.mode, {
-        login: fiscalProvider.login,
-        password: fiscalProvider.password,
-        groupCode: fiscalProvider.groupCode,
-        inn: fiscalProvider.inn,
-        paymentAddress: fiscalProvider.paymentAddress,
-        deviceId: fiscalProvider.deviceId,
-      });
-
-      const lastTest = {
-        status: result.status,
-        testedAt: new Date(),
-        receiptId: result.receiptId,
-      } as FiscalProviderSettings['lastTest'];
-
-      await OrganizationModel.findByIdAndUpdate(organizationId, {
-        $set: { 'settings.fiscalProvider.lastTest': lastTest },
-      });
-
-      res.json({ data: lastTest, error: null });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to send test receipt';
-
-      const lastTest = {
-        status: 'failed' as const,
-        testedAt: new Date(),
-        message,
-      };
-
-      await OrganizationModel.findByIdAndUpdate(organizationId, {
-        $set: { 'settings.fiscalProvider.lastTest': lastTest },
-      });
-
-      res.status(502).json({ data: null, error: message });
-    }
   }
 );
 
