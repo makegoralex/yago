@@ -5324,7 +5324,7 @@ const AdminPage: React.FC = () => {
 
       {activeTab === 'fiscal' ? (
         <div className="space-y-6">
-          <Card>
+          <Card title="Быстрое тестирование кассы">
             <div className="flex flex-col gap-2 rounded-xl bg-slate-50 p-4 text-sm text-slate-700 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="font-semibold text-slate-800">Быстрое тестирование кассы</p>
