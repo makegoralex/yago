@@ -33,6 +33,18 @@ import {
   listCashiers,
   updateCashierAccount,
 } from '../modules/staff/cashier.service';
+import {
+  FiscalDeviceError,
+  closeShift as closeFiscalShift,
+  createFiscalDevice,
+  deleteFiscalDevice,
+  getShiftStatus,
+  listFiscalDevices,
+  openShift as openFiscalShift,
+  sellTestReceipt,
+  sendXReport,
+  updateFiscalDevice,
+} from '../modules/fiscalDevices/fiscalDevice.service';
 
 const router = Router();
 
@@ -87,6 +99,18 @@ const getOrganizationObjectId = (req: Request): Types.ObjectId | null => {
   }
 
   return new Types.ObjectId(organizationId);
+};
+
+const resolveOrganizationId = (req: Request): Types.ObjectId | null => {
+  return (
+    getOrganizationObjectId(req) ??
+    (typeof req.body?.organizationId === 'string' && Types.ObjectId.isValid(req.body.organizationId)
+      ? new Types.ObjectId(req.body.organizationId)
+      : null) ??
+    (typeof req.query.organizationId === 'string' && Types.ObjectId.isValid(req.query.organizationId)
+      ? new Types.ObjectId(req.query.organizationId)
+      : null)
+  );
 };
 
 const parseDateOnly = (value: unknown): Date | undefined => {
@@ -528,5 +552,148 @@ router.get(
     res.json({ data: stats, error: null });
   })
 );
+
+router.get(
+  '/fiscal-devices',
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = resolveOrganizationId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const devices = await listFiscalDevices(organizationId);
+
+    res.json({ data: { devices }, error: null });
+  })
+);
+
+router.post(
+  '/fiscal-devices',
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = resolveOrganizationId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    try {
+      const device = await createFiscalDevice({
+        organizationId,
+        name: req.body?.name,
+        ip: req.body?.ip,
+        port: req.body?.port,
+        taxationSystem: req.body?.taxationSystem,
+        operatorName: req.body?.operatorName,
+        operatorVatin: req.body?.operatorVatin,
+        auth: req.body?.auth,
+      });
+
+      res.status(201).json({ data: { device }, error: null });
+    } catch (error) {
+      if (error instanceof FiscalDeviceError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
+
+router.put(
+  '/fiscal-devices/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const organizationId = resolveOrganizationId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    try {
+      const device = await updateFiscalDevice({
+        id,
+        organizationId,
+        name: req.body?.name,
+        ip: req.body?.ip,
+        port: req.body?.port,
+        taxationSystem: req.body?.taxationSystem,
+        operatorName: req.body?.operatorName,
+        operatorVatin: req.body?.operatorVatin,
+        auth: req.body?.auth,
+      });
+
+      res.json({ data: { device }, error: null });
+    } catch (error) {
+      if (error instanceof FiscalDeviceError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
+
+router.delete(
+  '/fiscal-devices/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const organizationId = resolveOrganizationId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    try {
+      await deleteFiscalDevice(id, organizationId);
+      res.json({ data: { deleted: true }, error: null });
+    } catch (error) {
+      if (error instanceof FiscalDeviceError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
+
+const handleFiscalAction = (
+  action: (id: string, organizationId: Types.ObjectId) => Promise<unknown>
+): RequestHandler => {
+  return asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const organizationId = resolveOrganizationId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    try {
+      const result = await action(id, organizationId);
+      res.json({ data: result, error: null });
+    } catch (error) {
+      if (error instanceof FiscalDeviceError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  });
+};
+
+router.post('/fiscal-devices/:id/ping', handleFiscalAction(getShiftStatus));
+router.post('/fiscal-devices/:id/open-shift', handleFiscalAction(openFiscalShift));
+router.post('/fiscal-devices/:id/close-shift', handleFiscalAction(closeFiscalShift));
+router.post('/fiscal-devices/:id/x-report', handleFiscalAction(sendXReport));
+router.post('/fiscal-devices/:id/sell-test', handleFiscalAction(sellTestReceipt));
 
 export default router;

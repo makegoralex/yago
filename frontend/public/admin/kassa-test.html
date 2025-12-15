@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Тест кассы АТОЛ 50Ф</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      width: 100%;
+      max-width: 900px;
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    .header .ip-address {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 8px 15px;
+      border-radius: 50px;
+      display: inline-block;
+      font-family: monospace;
+      font-size: 18px;
+    }
+
+    .content {
+      padding: 40px;
+    }
+
+    .status-card {
+      background: #f8fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 30px;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .status-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+
+    .status-dot.connected {
+      background: #10b981;
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.error {
+      background: #ef4444;
+    }
+
+    @keyframes pulse {
+      0% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.5;
+      }
+
+      100% {
+        opacity: 1;
+      }
+    }
+
+    .buttons-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-top: 30px;
+    }
+
+    .test-btn {
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      color: white;
+      border: none;
+      padding: 20px;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .test-btn:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+    }
+
+    .test-btn:active {
+      transform: translateY(-2px);
+    }
+
+    .test-btn.danger {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    .test-btn.success {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+
+    .btn-icon {
+      font-size: 24px;
+    }
+
+    .results {
+      margin-top: 30px;
+      background: #f1f5f9;
+      border-radius: 12px;
+      padding: 20px;
+      display: none;
+    }
+
+    .results.active {
+      display: block;
+      animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .result-item {
+      padding: 10px 0;
+      border-bottom: 1px solid #cbd5e1;
+    }
+
+    .result-item:last-child {
+      border-bottom: none;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3b82f6;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 15px;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .hint {
+      margin-top: 12px;
+      color: #475569;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Тестирование кассы АТОЛ 50Ф</h1>
+      <div class="ip-address" id="ipTag">192.168.0.139:5555</div>
+      <p style="margin-top: 10px; opacity: 0.9">Панель для владельца организации</p>
+    </div>
+
+    <div class="content">
+      <div class="status-card">
+        <div class="status-indicator">
+          <div class="status-dot" id="statusDot"></div>
+          <h3 id="statusText">Проверка состояния...</h3>
+        </div>
+        <div id="statusDetails">Инициализация подключения к кассе...</div>
+        <p class="hint">
+          Сервер должен видеть кассу в одной сети или через VPN. Порт по умолчанию 5555 (или 16732 для драйвера), проверьте,
+          что он открыт.
+        </p>
+      </div>
+
+      <div class="buttons-grid">
+        <button class="test-btn" onclick="testConnection()">
+          <span class="btn-icon">🔌</span>
+          <span>Тест подключения</span>
+          <small>Проверить связь с кассой</small>
+        </button>
+
+        <button class="test-btn success" onclick="printTestReceipt(100)">
+          <span class="btn-icon">🧾</span>
+          <span>Чек 100₽</span>
+          <small>Тестовая печать</small>
+        </button>
+
+        <button class="test-btn success" onclick="printTestReceipt(500)">
+          <span class="btn-icon">💰</span>
+          <span>Чек 500₽</span>
+          <small>Печать на 500₽</small>
+        </button>
+
+        <button class="test-btn danger" onclick="printTestReceipt(1)">
+          <span class="btn-icon">⚠️</span>
+          <span>Чек 1₽</span>
+          <small>Минимальный тест</small>
+        </button>
+      </div>
+
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Выполняется запрос к кассе...</p>
+      </div>
+
+      <div class="results" id="results">
+        <h3>Результаты теста:</h3>
+        <div id="resultsContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const statusDetails = document.getElementById('statusDetails');
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('results');
+    const resultsContent = document.getElementById('resultsContent');
+    const ipTag = document.getElementById('ipTag');
+
+    const DEFAULT_IP = '192.168.0.139';
+    const DEFAULT_PORT = '5555';
+
+    window.onload = checkStatus;
+
+    async function checkStatus() {
+      try {
+        const response = await fetch('/api/kassa-test/status');
+        const data = await response.json();
+
+        ipTag.textContent = `${data.ip ?? DEFAULT_IP}:${data.port ?? DEFAULT_PORT}`;
+
+        if (data.success) {
+          statusDot.className = 'status-dot connected';
+          statusText.textContent = 'Касса подключена';
+          statusDetails.innerHTML = `
+            <p><strong>IP:</strong> ${data.ip}</p>
+            <p><strong>Порт:</strong> ${data.port}</p>
+            <p><strong>Статус:</strong> ${data.status}</p>
+            <p><strong>Время:</strong> ${new Date(data.timestamp).toLocaleString()}</p>
+          `;
+        } else {
+          statusDot.className = 'status-dot error';
+          statusText.textContent = 'Ошибка подключения';
+          statusDetails.innerHTML = `
+            <p><strong>Ошибка:</strong> ${data.message || 'Неизвестная ошибка'}</p>
+            <p><strong>IP:</strong> ${data.ip ?? DEFAULT_IP}</p>
+            <p><strong>Порт:</strong> ${data.port ?? DEFAULT_PORT}</p>
+            <p style="color: #ef4444">Проверьте: включена ли касса, подключена ли к сети</p>
+          `;
+        }
+      } catch (error) {
+        statusDot.className = 'status-dot error';
+        statusText.textContent = 'Ошибка сети';
+        statusDetails.textContent = 'Не удалось подключиться к серверу: ' + error.message;
+      }
+    }
+
+    async function testConnection() {
+      showLoading();
+
+      try {
+        const response = await fetch('/api/kassa-test/test-connection');
+        const data = await response.json();
+
+        showResults('Тест подключения', data);
+        if (data.success) {
+          checkStatus();
+        }
+      } catch (error) {
+        showResults('Тест подключения', {
+          success: false,
+          error: 'Сетевая ошибка: ' + error.message,
+        });
+      }
+    }
+
+    async function printTestReceipt(amount) {
+      showLoading();
+
+      try {
+        const response = await fetch('/api/kassa-test/print-test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: amount,
+            paymentType: 1,
+          }),
+        });
+
+        const data = await response.json();
+        showResults(`Печать чека на ${amount}₽`, data);
+      } catch (error) {
+        showResults('Печать чека', {
+          success: false,
+          error: 'Сетевая ошибка: ' + error.message,
+        });
+      }
+    }
+
+    function showLoading() {
+      loading.classList.add('active');
+      results.classList.remove('active');
+    }
+
+    function showResults(title, data) {
+      loading.classList.remove('active');
+      results.classList.add('active');
+
+      let html = `
+        <div class="result-item">
+          <strong>Тест:</strong> ${title}
+        </div>
+        <div class="result-item">
+          <strong>Статус:</strong>
+          <span style="color: ${data.success ? '#10b981' : '#ef4444'};">
+            ${data.success ? '✅ УСПЕХ' : '❌ ОШИБКА'}
+          </span>
+        </div>
+      `;
+
+      if (data.message) {
+        html += `
+          <div class="result-item">
+            <strong>Сообщение:</strong> ${data.message}
+          </div>
+        `;
+      }
+
+      if (data.error) {
+        html += `
+          <div class="result-item">
+            <strong>Ошибка:</strong>
+            <span style="color: #ef4444;">${data.error}</span>
+          </div>
+        `;
+      }
+
+      if (data.data) {
+        html += `
+          <div class="result-item">
+            <strong>Данные от кассы:</strong>
+            <pre style="background: white; padding: 10px; border-radius: 5px; margin-top: 5px; overflow: auto;">${JSON.stringify(
+              data.data,
+              null,
+              2
+            )}</pre>
+          </div>
+        `;
+      }
+
+      if (data.config) {
+        html += `
+          <div class="result-item">
+            <strong>Конфигурация:</strong>
+            <pre style="background: white; padding: 10px; border-radius: 5px; margin-top: 5px;">
+IP: ${data.config.ip}
+Порт: ${data.config.port}
+Статус: ${data.config.status}
+            </pre>
+          </div>
+        `;
+      }
+
+      resultsContent.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
