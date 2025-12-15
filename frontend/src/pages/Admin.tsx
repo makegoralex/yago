@@ -2864,7 +2864,10 @@ const AdminPage: React.FC = () => {
       setFiscalActionMessage(message);
       notify({ title: message || 'Запрос отправлен', type: 'success' });
     } catch (error) {
-      const message = extractErrorMessage(error, 'Не удалось выполнить запрос к кассе');
+      let message = extractErrorMessage(error, 'Не удалось выполнить запрос к кассе');
+      if (/EHOSTUNREACH|ENETUNREACH|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|касса недоступна/i.test(message)) {
+        message = `${message}. Проверьте, что касса в одной сети/VPN с сервером или порт проброшен наружу.`;
+      }
       setFiscalActionMessage(message);
       notify({ title: message, type: 'error' });
     } finally {
@@ -5430,6 +5433,7 @@ const AdminPage: React.FC = () => {
               </form>
               <div className="mt-4 rounded-2xl border border-dashed border-amber-200 bg-amber-50 p-4 text-xs text-amber-700">
                 <p>Убедитесь, что касса доступна в сети и открыт порт 16732 (по умолчанию).</p>
+                <p className="mt-1 text-gray-600">Бэкенд должен видеть кассу в той же сети или через VPN/проброшенный порт.</p>
                 <p className="mt-2">Можно подключить несколько касс с разными IP для разных владельцев или локаций.</p>
               </div>
             </Card>

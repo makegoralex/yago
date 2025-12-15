@@ -1,4 +1,4 @@
-import fetch, { AbortError } from 'node-fetch';
+import fetch, { AbortError, FetchError } from 'node-fetch';
 import { Types } from 'mongoose';
 
 import { FiscalDeviceDocument, FiscalDeviceModel, FiscalDeviceShiftState, FiscalDeviceStatus } from './fiscalDevice.model';
@@ -26,6 +26,8 @@ const validateIpAddress = (value: string): boolean => IP_REGEXP.test(value.trim(
 const validatePort = (value: number): boolean => Number.isInteger(value) && value > 0 && value <= 65535;
 
 const REQUEST_TIMEOUT_MS = 5000;
+
+const NETWORK_ERROR_CODES = new Set(['EHOSTUNREACH', 'ENETUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND']);
 
 const normalizeString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
@@ -229,6 +231,13 @@ const buildHeaders = (device: FiscalDeviceDocument): Record<string, string> => {
   return headers;
 };
 
+const buildNetworkErrorMessage = (device: FiscalDeviceDocument, details?: string): string => {
+  const baseMessage = `Не удалось подключиться к кассе ${device.ip}:${device.port}`;
+  const hint =
+    ' Убедитесь, что касса доступна из сервера (одна сеть/VPN) и открыт нужный порт. Если касса в локальной сети, облачный сервер до неё не дотянется без проброса.';
+  return details ? `${baseMessage}: ${details}.${hint}` : `${baseMessage}.${hint}`;
+};
+
 const sendDeviceRequest = async (
   device: FiscalDeviceDocument,
   payload: DeviceRequestPayload
@@ -252,11 +261,15 @@ const sendDeviceRequest = async (
     return (await response.json().catch(() => ({}))) as DeviceResponse;
   } catch (error) {
     if (error instanceof AbortError) {
-      throw new FiscalDeviceError('Не удалось подключиться к кассе: истек таймаут ожидания');
+      throw new FiscalDeviceError(buildNetworkErrorMessage(device, 'истек таймаут ожидания'), 503);
     }
 
     if (error instanceof FiscalDeviceError) {
       throw error;
+    }
+
+    if (error instanceof FetchError && error.code && NETWORK_ERROR_CODES.has(error.code)) {
+      throw new FiscalDeviceError(buildNetworkErrorMessage(device, error.code), 503);
     }
 
     const message = error instanceof Error ? error.message : 'Ошибка связи с кассой';
@@ -288,11 +301,15 @@ const fetchDeviceRequest = async (
     return (await response.json().catch(() => ({}))) as DeviceResponse;
   } catch (error) {
     if (error instanceof AbortError) {
-      throw new FiscalDeviceError('Не удалось дождаться ответа от кассы');
+      throw new FiscalDeviceError(buildNetworkErrorMessage(device, 'Не удалось дождаться ответа от кассы'), 503);
     }
 
     if (error instanceof FiscalDeviceError) {
       throw error;
+    }
+
+    if (error instanceof FetchError && error.code && NETWORK_ERROR_CODES.has(error.code)) {
+      throw new FiscalDeviceError(buildNetworkErrorMessage(device, error.code), 503);
     }
 
     const message = error instanceof Error ? error.message : 'Ошибка связи с кассой';
