@@ -17,6 +17,7 @@ import {
 import api from '../lib/api';
 import { useAuthStore, type AuthUser } from '../store/auth';
 import { useToast } from '../providers/ToastProvider';
+import { useTheme } from '../providers/ThemeProvider';
 import {
   blogPosts,
   instructionLinks,
