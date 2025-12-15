@@ -1,3 +1,4 @@
+import fetch, { AbortError } from 'node-fetch';
 import { Types } from 'mongoose';
 
 import { FiscalDeviceDocument, FiscalDeviceModel, FiscalDeviceShiftState, FiscalDeviceStatus } from './fiscalDevice.model';
@@ -23,6 +24,8 @@ const IP_REGEXP = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9
 const validateIpAddress = (value: string): boolean => IP_REGEXP.test(value.trim());
 
 const validatePort = (value: number): boolean => Number.isInteger(value) && value > 0 && value <= 65535;
+
+const REQUEST_TIMEOUT_MS = 5000;
 
 const normalizeString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
@@ -231,17 +234,36 @@ const sendDeviceRequest = async (
   payload: DeviceRequestPayload
 ): Promise<DeviceResponse> => {
   const url = `http://${device.ip}:${device.port}/requests`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: buildHeaders(device),
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  if (!response.ok) {
-    throw new FiscalDeviceError(`Касса ответила ошибкой ${response.status}`);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: buildHeaders(device),
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new FiscalDeviceError(`Касса ответила ошибкой ${response.status}`);
+    }
+
+    return (await response.json().catch(() => ({}))) as DeviceResponse;
+  } catch (error) {
+    if (error instanceof AbortError) {
+      throw new FiscalDeviceError('Не удалось подключиться к кассе: истек таймаут ожидания');
+    }
+
+    if (error instanceof FiscalDeviceError) {
+      throw error;
+    }
+
+    const message = error instanceof Error ? error.message : 'Ошибка связи с кассой';
+    throw new FiscalDeviceError(`Не удалось подключиться к кассе: ${message}`);
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return (await response.json().catch(() => ({}))) as DeviceResponse;
 };
 
 const fetchDeviceRequest = async (
@@ -249,16 +271,35 @@ const fetchDeviceRequest = async (
   requestId: string
 ): Promise<DeviceResponse> => {
   const url = `http://${device.ip}:${device.port}/requests/${encodeURIComponent(requestId)}`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: buildHeaders(device),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  if (!response.ok) {
-    throw new FiscalDeviceError(`Не удалось получить статус запроса ${requestId}`);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(device),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new FiscalDeviceError(`Не удалось получить статус запроса ${requestId}`);
+    }
+
+    return (await response.json().catch(() => ({}))) as DeviceResponse;
+  } catch (error) {
+    if (error instanceof AbortError) {
+      throw new FiscalDeviceError('Не удалось дождаться ответа от кассы');
+    }
+
+    if (error instanceof FiscalDeviceError) {
+      throw error;
+    }
+
+    const message = error instanceof Error ? error.message : 'Ошибка связи с кассой';
+    throw new FiscalDeviceError(`Не удалось получить статус запроса: ${message}`);
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return (await response.json().catch(() => ({}))) as DeviceResponse;
 };
 
 const extractRequestId = (response: DeviceResponse): string | undefined => {
