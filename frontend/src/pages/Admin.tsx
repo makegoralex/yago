@@ -5324,6 +5324,24 @@ const AdminPage: React.FC = () => {
 
       {activeTab === 'fiscal' ? (
         <div className="space-y-6">
+          <Card>
+            <div className="flex flex-col gap-2 rounded-xl bg-slate-50 p-4 text-sm text-slate-700 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="font-semibold text-slate-800">Быстрое тестирование кассы</p>
+                <p className="text-slate-500">
+                  Откройте отдельную страницу, чтобы проверить прямое подключение кассы по IP/порту без привязки к базе.
+                </p>
+              </div>
+              <a
+                href="/admin/kassa-test.html"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-indigo-500"
+              >
+                Открыть тестовую панель
+              </a>
+            </div>
+          </Card>
           <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
             <Card
               title={selectedFiscalDeviceId ? 'Редактировать кассу' : 'Новая касса'}
