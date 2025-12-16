@@ -146,6 +146,7 @@ type FiscalDevice = {
   name: string;
   ip: string;
   port: number;
+  agentToken?: string;
   taxationSystem?: string;
   operatorName?: string;
   operatorVatin?: string;
@@ -630,6 +631,7 @@ const AdminPage: React.FC = () => {
     name: '',
     ip: '',
     port: '16732',
+    agentToken: '',
     taxationSystem: 'osn',
     operatorName: '',
     operatorVatin: '',
@@ -2702,7 +2704,15 @@ const AdminPage: React.FC = () => {
 
   const resetFiscalForm = () => {
     setSelectedFiscalDeviceId(null);
-    setFiscalForm({ name: '', ip: '', port: '16732', taxationSystem: 'osn', operatorName: '', operatorVatin: '' });
+    setFiscalForm({
+      name: '',
+      ip: '',
+      port: '16732',
+      agentToken: '',
+      taxationSystem: 'osn',
+      operatorName: '',
+      operatorVatin: '',
+    });
     setFiscalActionMessage(null);
   };
 
@@ -2712,6 +2722,7 @@ const AdminPage: React.FC = () => {
       name: device.name ?? '',
       ip: device.ip ?? '',
       port: device.port ? device.port.toString() : '',
+      agentToken: device.agentToken ?? '',
       taxationSystem: device.taxationSystem ?? 'osn',
       operatorName: device.operatorName ?? '',
       operatorVatin: device.operatorVatin ?? '',
@@ -2756,6 +2767,7 @@ const AdminPage: React.FC = () => {
       name,
       ip,
       port,
+      agentToken: fiscalForm.agentToken.trim() || undefined,
       taxationSystem: fiscalForm.taxationSystem || undefined,
       operatorName: fiscalForm.operatorName.trim() || undefined,
       operatorVatin: fiscalForm.operatorVatin.trim() || undefined,
@@ -2806,7 +2818,7 @@ const AdminPage: React.FC = () => {
   };
 
   const handleFiscalAction = async (
-    action: 'ping' | 'openShift' | 'closeShift' | 'xReport' | 'sellTest'
+    action: 'ping' | 'agentCheck' | 'openShift' | 'closeShift' | 'xReport' | 'sellTest'
   ) => {
     if (!selectedFiscalDeviceId) {
       notify({ title: 'Выберите кассу в списке', type: 'info' });
@@ -2815,6 +2827,7 @@ const AdminPage: React.FC = () => {
 
     const pathMap: Record<typeof action, string> = {
       ping: 'ping',
+      agentCheck: 'check-connection',
       openShift: 'open-shift',
       closeShift: 'close-shift',
       xReport: 'x-report',
@@ -2823,6 +2836,7 @@ const AdminPage: React.FC = () => {
 
     const actionLabelMap: Record<typeof action, string> = {
       ping: 'Проверка подключения',
+      agentCheck: 'Проверка агента',
       openShift: 'Открытие смены',
       closeShift: 'Закрытие смены',
       xReport: 'X-отчёт',
@@ -5432,6 +5446,19 @@ const AdminPage: React.FC = () => {
                     />
                   </label>
                 </div>
+                <label className="block text-slate-700">
+                  <span className="mb-1 block text-xs uppercase text-slate-400">Токен агента кассы</span>
+                  <input
+                    type="text"
+                    value={fiscalForm.agentToken}
+                    onChange={(event) => handleFiscalFieldChange('agentToken', event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                    placeholder="Bearer-токен для /fiscal-tasks/next"
+                  />
+                  <span className="mt-1 block text-[11px] text-slate-500">
+                    Используется при запросе очереди задач агента (GET /fiscal-tasks/next).
+                  </span>
+                </label>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <button
                     type="submit"
@@ -5463,11 +5490,19 @@ const AdminPage: React.FC = () => {
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
+                  onClick={() => handleFiscalAction('agentCheck')}
+                  disabled={fiscalActionLoading || savingFiscalDevice || !selectedFiscalDeviceId}
+                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Проверить соединение
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleFiscalAction('ping')}
                   disabled={fiscalActionLoading || savingFiscalDevice || !selectedFiscalDeviceId}
                   className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
                 >
-                  Проверить подключение
+                  Статус кассы
                 </button>
                 <button
                   type="button"

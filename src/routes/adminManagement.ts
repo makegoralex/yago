@@ -36,6 +36,7 @@ import {
 import {
   FiscalDeviceError,
   closeShift as closeFiscalShift,
+  checkFiscalDeviceConnection,
   createFiscalDevice,
   deleteFiscalDevice,
   getShiftStatus,
@@ -585,6 +586,7 @@ router.post(
         name: req.body?.name,
         ip: req.body?.ip,
         port: req.body?.port,
+        agentToken: req.body?.agentToken,
         taxationSystem: req.body?.taxationSystem,
         operatorName: req.body?.operatorName,
         operatorVatin: req.body?.operatorVatin,
@@ -621,6 +623,7 @@ router.put(
         name: req.body?.name,
         ip: req.body?.ip,
         port: req.body?.port,
+        agentToken: req.body?.agentToken,
         taxationSystem: req.body?.taxationSystem,
         operatorName: req.body?.operatorName,
         operatorVatin: req.body?.operatorVatin,
@@ -691,6 +694,7 @@ const handleFiscalAction = (
 };
 
 router.post('/fiscal-devices/:id/ping', handleFiscalAction(getShiftStatus));
+router.post('/fiscal-devices/:id/check-connection', handleFiscalAction(checkFiscalDeviceConnection));
 router.post('/fiscal-devices/:id/open-shift', handleFiscalAction(openFiscalShift));
 router.post('/fiscal-devices/:id/close-shift', handleFiscalAction(closeFiscalShift));
 router.post('/fiscal-devices/:id/x-report', handleFiscalAction(sendXReport));
