@@ -21,6 +21,7 @@ import shiftRouter from './modules/shifts/shift.router';
 import restaurantSettingsRouter from './modules/restaurant/restaurantSettings.router';
 import organizationsRouter from './routes/organizations';
 import kassaTestRouter from './routes/kassaTest';
+import fiscalTasksRouter from './routes/fiscalTasks';
 
 const app = express();
 
@@ -65,6 +66,7 @@ app.use('/api/admin', adminManagementRouter);
 app.use('/api/shifts', shiftRouter);
 app.use('/api/restaurant', restaurantSettingsRouter);
 app.use('/api/kassa-test', authMiddleware, requireRole(['owner', 'superAdmin']), enforceActiveSubscription, kassaTestRouter);
+app.use('/api/fiscal-tasks', fiscalTasksRouter);
 
 app.get('/api/protected', authMiddleware, (req, res) => {
   res.json({
