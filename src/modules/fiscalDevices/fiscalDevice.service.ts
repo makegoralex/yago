@@ -30,6 +30,10 @@ const REQUEST_TIMEOUT_MS = 5000;
 const NETWORK_ERROR_CODES = new Set(['EHOSTUNREACH', 'ENETUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND']);
 
 const normalizeString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+const normalizeOptionalString = (value: unknown): string | undefined => {
+  const normalized = normalizeString(value);
+  return normalized || undefined;
+};
 
 const normalizeTaxationSystem = (value: unknown): string | undefined => {
   if (typeof value !== 'string') {
@@ -98,6 +102,7 @@ export const createFiscalDevice = async (params: {
   name: string;
   ip: string;
   port: number;
+  agentToken?: unknown;
   taxationSystem?: unknown;
   operatorName?: unknown;
   operatorVatin?: unknown;
@@ -106,6 +111,7 @@ export const createFiscalDevice = async (params: {
   const name = normalizeString(params.name);
   const ip = normalizeString(params.ip);
   const port = Number(params.port);
+  const agentToken = normalizeOptionalString(params.agentToken);
   const operatorName = normalizeString(params.operatorName);
   const operatorVatin = normalizeVatin(params.operatorVatin);
   const taxationSystem = normalizeTaxationSystem(params.taxationSystem);
@@ -131,6 +137,7 @@ export const createFiscalDevice = async (params: {
     name,
     ip,
     port,
+    agentToken,
     taxationSystem,
     operatorName: operatorName || undefined,
     operatorVatin,
@@ -147,6 +154,7 @@ export const updateFiscalDevice = async (params: {
   name?: unknown;
   ip?: unknown;
   port?: unknown;
+  agentToken?: unknown;
   taxationSystem?: unknown;
   operatorName?: unknown;
   operatorVatin?: unknown;
@@ -190,6 +198,10 @@ export const updateFiscalDevice = async (params: {
     device.taxationSystem = normalizeTaxationSystem(params.taxationSystem);
   }
 
+  if (params.agentToken !== undefined) {
+    device.agentToken = normalizeOptionalString(params.agentToken);
+  }
+
   if (params.auth !== undefined) {
     const login = normalizeString(params.auth?.login);
     const password = normalizeString(params.auth?.password);
@@ -224,6 +236,21 @@ const buildHeaders = (device: FiscalDeviceDocument): Record<string, string> => {
   };
 
   if (device.auth?.login && device.auth?.password) {
+    const encoded = Buffer.from(`${device.auth.login}:${device.auth.password}`).toString('base64');
+    headers.Authorization = `Basic ${encoded}`;
+  }
+
+  return headers;
+};
+
+const buildAgentHeaders = (device: FiscalDeviceDocument): Record<string, string> => {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  };
+
+  if (device.agentToken) {
+    headers.Authorization = `Bearer ${device.agentToken}`;
+  } else if (device.auth?.login && device.auth?.password) {
     const encoded = Buffer.from(`${device.auth.login}:${device.auth.password}`).toString('base64');
     headers.Authorization = `Basic ${encoded}`;
   }
@@ -419,6 +446,54 @@ export const getShiftStatus = async (
 ): Promise<{ device: FiscalDeviceDocument; requestId?: string; response: DeviceResponse }> => {
   const device = await findDeviceById(id, organizationId);
   return performDeviceOperation(device, 'getShiftStatus');
+};
+
+export const checkFiscalDeviceConnection = async (
+  id: string,
+  organizationId: Types.ObjectId
+): Promise<{ device: FiscalDeviceDocument; response?: unknown }> => {
+  const device = await findDeviceById(id, organizationId);
+  const url = `http://${device.ip}:${device.port}/fiscal-tasks/next`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: buildAgentHeaders(device),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new FiscalDeviceError(`Касса ответила ошибкой ${response.status}`);
+    }
+
+    const payload = await response.json().catch(() => undefined);
+    const updatedDevice = await updateDeviceHealth(device, 'online');
+    return { device: updatedDevice, response: payload };
+  } catch (error) {
+    if (error instanceof AbortError) {
+      await updateDeviceHealth(device, 'error', undefined, 'Таймаут проверки подключения');
+      throw new FiscalDeviceError(buildNetworkErrorMessage(device, 'истек таймаут ожидания'), 503);
+    }
+
+    if (error instanceof FiscalDeviceError) {
+      await updateDeviceHealth(device, 'error', undefined, error.message);
+      throw error;
+    }
+
+    if (error instanceof FetchError && error.code && NETWORK_ERROR_CODES.has(error.code)) {
+      const message = buildNetworkErrorMessage(device, error.code);
+      await updateDeviceHealth(device, 'error', undefined, message);
+      throw new FiscalDeviceError(message, 503);
+    }
+
+    const message = error instanceof Error ? error.message : 'Ошибка связи с кассой';
+    await updateDeviceHealth(device, 'error', undefined, message);
+    throw new FiscalDeviceError(message);
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 export const openShift = async (

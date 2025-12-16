@@ -16,6 +16,7 @@ export interface FiscalDevice {
   name: string;
   ip: string;
   port: number;
+  agentToken?: string;
   taxationSystem?: string;
   operatorName?: string;
   operatorVatin?: string;
@@ -46,6 +47,7 @@ const fiscalDeviceSchema = new Schema<FiscalDeviceDocument>(
     name: { type: String, required: true, trim: true },
     ip: { type: String, required: true, trim: true },
     port: { type: Number, required: true, min: 1, max: 65535 },
+    agentToken: { type: String, required: false, trim: true },
     taxationSystem: { type: String, required: false, trim: true },
     operatorName: { type: String, required: false, trim: true },
     operatorVatin: { type: String, required: false, trim: true },
