@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 
+import { AppSettingsModel } from '../models/AppSettings';
 import { OrganizationModel } from '../models/Organization';
 
 const isReadOnlyMethod = (method: string): boolean => ['GET', 'HEAD', 'OPTIONS'].includes(method);
@@ -32,7 +33,15 @@ export const enforceActiveSubscription = async (
       return;
     }
 
-    const organization = await OrganizationModel.findById(organizationId).select('subscriptionStatus').lean();
+    const [settings, organization] = await Promise.all([
+      AppSettingsModel.findOne().select('billingEnabled').lean(),
+      OrganizationModel.findById(organizationId).select('subscriptionStatus').lean(),
+    ]);
+
+    if (!settings || settings.billingEnabled === false) {
+      next();
+      return;
+    }
 
     if (!organization) {
       res.status(404).json({ data: null, error: 'Organization not found' });

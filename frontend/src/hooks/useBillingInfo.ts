@@ -30,12 +30,14 @@ const normalizeErrorMessage = (error: unknown, fallback: string): string => {
 export const useBillingInfo = () => {
   const user = useAuthStore((state) => state.user);
   const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [billingEnabled, setBillingEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const refreshBilling = useCallback(async () => {
     if (!user?.organizationId) {
       setBilling(null);
+      setBillingEnabled(false);
       return null;
     }
 
@@ -45,7 +47,9 @@ export const useBillingInfo = () => {
     try {
       const response = await api.get(`/api/organizations/${user.organizationId}`);
       const billingInfo = (response.data?.data?.billing ?? null) as BillingInfo | null;
+      const enabled = Boolean(response.data?.data?.billingEnabled);
       setBilling(billingInfo);
+      setBillingEnabled(enabled);
       return billingInfo;
     } catch (err) {
       const message = normalizeErrorMessage(err, 'Не удалось загрузить информацию о подписке');
@@ -62,10 +66,9 @@ export const useBillingInfo = () => {
   }, [refreshBilling]);
 
   const billingLocked = useMemo(
-    () => ['expired', 'paused'].includes(billing?.status?.toLowerCase() ?? ''),
-    [billing]
+    () => billingEnabled && ['expired', 'paused'].includes(billing?.status?.toLowerCase() ?? ''),
+    [billing, billingEnabled]
   );
 
-  return { billing, billingLocked, refreshBilling, loading, error } as const;
+  return { billing, billingEnabled, billingLocked, refreshBilling, loading, error } as const;
 };
-

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 import type {
   AppliedDiscount,
@@ -88,6 +88,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
     { value: 'takeaway', label: 'С собой' },
     { value: 'delivery', label: 'Доставка' },
   ];
+  const [isTagHintOpen, setTagHintOpen] = useState(false);
 
   const formatDiscountLabel = (discount: AppliedDiscount): string => {
     const parts: string[] = [discount.name];
@@ -112,7 +113,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
 
   return (
     <aside
-      className={`custom-scrollbar flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-xl bg-white shadow-soft transition-transform lg:w-[360px] ${
+      className={`custom-scrollbar flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-xl bg-white shadow-soft transition-transform ${
         visible ? 'translate-x-0' : 'translate-x-full'
       }`}
     >
@@ -170,8 +171,21 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           </div>
         </div>
       ) : (
-        <div className="mx-4 mb-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-          Чтобы отмечать «С собой» и «Доставка», включите метки в разделе «Ресторан» админ-панели.
+        <div className="relative mx-4 mb-3 flex items-center justify-between rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500">
+          <span>Метки заказов выключены</span>
+          <button
+            type="button"
+            onClick={() => setTagHintOpen((prev) => !prev)}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition hover:text-slate-600"
+            aria-label="Подсказка по меткам заказов"
+          >
+            i
+          </button>
+          {isTagHintOpen ? (
+            <div className="absolute right-6 mt-20 w-56 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-500 shadow-soft">
+              Чтобы отмечать «С собой» и «Доставка», включите метки в разделе «Ресторан» админ-панели.
+            </div>
+          ) : null}
         </div>
       )}
       {customer ? (

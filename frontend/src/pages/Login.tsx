@@ -11,6 +11,7 @@ const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [organizationId, setOrganizationId] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
 
@@ -80,21 +81,30 @@ const LoginPage: React.FC = () => {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-secondary focus:bg-white"
             />
           </div>
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-slate-600">
               Пароль
             </label>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
-            />
+            <div className="relative mt-2">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-secondary focus:bg-white"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500"
+              >
+                {showPassword ? 'Скрыть' : 'Показать'}
+              </button>
+            </div>
           </div>
           <div>
             <label htmlFor="organizationId" className="block text-sm font-medium text-slate-600">
@@ -105,7 +115,7 @@ const LoginPage: React.FC = () => {
               type="text"
               value={organizationId}
               onChange={(event) => setOrganizationId(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-secondary focus:bg-white"
               placeholder="Если у email несколько организаций"
             />
           </div>
