@@ -18,6 +18,7 @@ import {
 import type { TooltipProps } from 'recharts';
 import api from '../lib/api';
 import { useToast } from '../providers/ToastProvider';
+import { useTheme } from '../providers/ThemeProvider';
 import type { Category, ModifierGroup, Product } from '../store/catalog';
 import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
@@ -139,21 +140,6 @@ type CashierSummary = {
   email: string;
   createdAt?: string;
   updatedAt?: string;
-};
-
-type FiscalDevice = {
-  _id: string;
-  name: string;
-  ip: string;
-  port: number;
-  agentToken?: string;
-  taxationSystem?: string;
-  operatorName?: string;
-  operatorVatin?: string;
-  status?: string;
-  lastPing?: string;
-  lastShiftState?: string;
-  lastError?: string;
 };
 
 type SalesAndShiftStats = {
@@ -422,6 +408,7 @@ const endOfDay = (value: Date): Date => {
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { notify } = useToast();
+  const { theme, toggleTheme } = useTheme();
   const {
     billing,
     billingLocked,
@@ -434,7 +421,6 @@ const AdminPage: React.FC = () => {
       { id: 'dashboard' as const, label: 'Дашборд' },
       { id: 'menu' as const, label: 'Меню' },
       { id: 'inventory' as const, label: 'Склады' },
-      { id: 'fiscal' as const, label: 'Касса' },
       { id: 'loyalty' as const, label: 'Лояльность' },
       { id: 'staff' as const, label: 'Персонал' },
       { id: 'suppliers' as const, label: 'Поставщики' },
@@ -444,7 +430,7 @@ const AdminPage: React.FC = () => {
     []
   );
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'menu' | 'inventory' | 'fiscal' | 'loyalty' | 'suppliers' | 'discounts' | 'staff' | 'branding'
+    'dashboard' | 'menu' | 'inventory' | 'loyalty' | 'suppliers' | 'discounts' | 'staff' | 'branding'
   >(navItems[0].id);
   const [isNavOpen, setIsNavOpen] = useState(false);
   const currentTabLabel = useMemo(
@@ -623,23 +609,6 @@ const AdminPage: React.FC = () => {
   const [cashiersError, setCashiersError] = useState<string | null>(null);
   const [cashierForm, setCashierForm] = useState({ name: '', email: '', password: '' });
   const [creatingCashier, setCreatingCashier] = useState(false);
-  const [fiscalDevices, setFiscalDevices] = useState<FiscalDevice[]>([]);
-  const [fiscalDevicesLoading, setFiscalDevicesLoading] = useState(false);
-  const [fiscalDevicesLoaded, setFiscalDevicesLoaded] = useState(false);
-  const [fiscalDevicesError, setFiscalDevicesError] = useState<string | null>(null);
-  const [fiscalForm, setFiscalForm] = useState({
-    name: '',
-    ip: '',
-    port: '16732',
-    agentToken: '',
-    taxationSystem: 'osn',
-    operatorName: '',
-    operatorVatin: '',
-  });
-  const [selectedFiscalDeviceId, setSelectedFiscalDeviceId] = useState<string | null>(null);
-  const [fiscalActionMessage, setFiscalActionMessage] = useState<string | null>(null);
-  const [fiscalActionLoading, setFiscalActionLoading] = useState(false);
-  const [savingFiscalDevice, setSavingFiscalDevice] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerEditForm, setCustomerEditForm] = useState({
     name: '',
@@ -1215,25 +1184,6 @@ const AdminPage: React.FC = () => {
     }
   }, [notify]);
 
-  const loadFiscalDevices = useCallback(async () => {
-    setFiscalDevicesLoading(true);
-    setFiscalDevicesError(null);
-
-    try {
-      const response = await api.get('/api/admin/fiscal-devices');
-      const payload = getResponseData<{ devices?: FiscalDevice[] }>(response);
-      setFiscalDevices(payload?.devices ?? []);
-    } catch (error) {
-      console.error('Не удалось загрузить кассы', error);
-      const message = extractErrorMessage(error, 'Не удалось загрузить кассы');
-      setFiscalDevicesError(message);
-      notify({ title: message, type: 'error' });
-    } finally {
-      setFiscalDevicesLoading(false);
-      setFiscalDevicesLoaded(true);
-    }
-  }, [notify]);
-
   const loadDiscounts = useCallback(async () => {
     try {
       setDiscountsLoading(true);
@@ -1462,11 +1412,6 @@ const AdminPage: React.FC = () => {
       }
     }
 
-    if (activeTab === 'fiscal') {
-      if (!fiscalDevicesLoading && !fiscalDevicesLoaded) {
-        void loadFiscalDevices();
-      }
-    }
   }, [
     activeTab,
     categories.length,
@@ -1494,9 +1439,6 @@ const AdminPage: React.FC = () => {
     loadSalesAndShiftStats,
     cashiersLoading,
     cashiersLoaded,
-    fiscalDevicesLoaded,
-    fiscalDevicesLoading,
-    loadFiscalDevices,
     loadCashiersData,
   ]);
 
@@ -2702,193 +2644,6 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const resetFiscalForm = () => {
-    setSelectedFiscalDeviceId(null);
-    setFiscalForm({
-      name: '',
-      ip: '',
-      port: '16732',
-      agentToken: '',
-      taxationSystem: 'osn',
-      operatorName: '',
-      operatorVatin: '',
-    });
-    setFiscalActionMessage(null);
-  };
-
-  const handleSelectFiscalDevice = (device: FiscalDevice) => {
-    setSelectedFiscalDeviceId(device._id);
-    setFiscalForm({
-      name: device.name ?? '',
-      ip: device.ip ?? '',
-      port: device.port ? device.port.toString() : '',
-      agentToken: device.agentToken ?? '',
-      taxationSystem: device.taxationSystem ?? 'osn',
-      operatorName: device.operatorName ?? '',
-      operatorVatin: device.operatorVatin ?? '',
-    });
-    setFiscalActionMessage(null);
-  };
-
-  const handleFiscalFieldChange = (
-    field: keyof typeof fiscalForm,
-    value: string
-  ) => {
-    setFiscalForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const upsertFiscalDevice = (device: FiscalDevice) => {
-    setFiscalDevices((prev) => {
-      const exists = prev.some((item) => item._id === device._id);
-      if (exists) {
-        return prev.map((item) => (item._id === device._id ? device : item));
-      }
-      return [device, ...prev];
-    });
-  };
-
-  const handleSaveFiscalDevice = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const name = fiscalForm.name.trim();
-    const ip = fiscalForm.ip.trim();
-    const port = Number(fiscalForm.port);
-
-    if (!name || !ip || Number.isNaN(port)) {
-      notify({ title: 'Введите название, IP и порт кассы', type: 'info' });
-      return;
-    }
-
-    if (!Number.isInteger(port) || port <= 0) {
-      notify({ title: 'Порт должен быть целым числом', type: 'info' });
-      return;
-    }
-
-    const payload = {
-      name,
-      ip,
-      port,
-      agentToken: fiscalForm.agentToken.trim() || undefined,
-      taxationSystem: fiscalForm.taxationSystem || undefined,
-      operatorName: fiscalForm.operatorName.trim() || undefined,
-      operatorVatin: fiscalForm.operatorVatin.trim() || undefined,
-    };
-
-    try {
-      setSavingFiscalDevice(true);
-      const response = selectedFiscalDeviceId
-        ? await api.put(`/api/admin/fiscal-devices/${selectedFiscalDeviceId}`, payload)
-        : await api.post('/api/admin/fiscal-devices', payload);
-
-      const result = getResponseData<{ device?: FiscalDevice }>(response);
-      if (result?.device) {
-        upsertFiscalDevice(result.device);
-        setSelectedFiscalDeviceId(result.device._id);
-      } else {
-        void loadFiscalDevices();
-      }
-
-      notify({ title: 'Данные кассы сохранены', type: 'success' });
-      setFiscalDevicesError(null);
-    } catch (error) {
-      const message = extractErrorMessage(error, 'Не удалось сохранить кассу');
-      setFiscalDevicesError(message);
-      notify({ title: message, type: 'error' });
-    } finally {
-      setSavingFiscalDevice(false);
-    }
-  };
-
-  const handleDeleteFiscalDevice = async (deviceId: string) => {
-    if (!deviceId) return;
-    if (!window.confirm('Удалить кассу? Подключение будет сброшено.')) {
-      return;
-    }
-
-    try {
-      await api.delete(`/api/admin/fiscal-devices/${deviceId}`);
-      setFiscalDevices((prev) => prev.filter((device) => device._id !== deviceId));
-      if (selectedFiscalDeviceId === deviceId) {
-        resetFiscalForm();
-      }
-      notify({ title: 'Касса удалена', type: 'success' });
-    } catch (error) {
-      const message = extractErrorMessage(error, 'Не удалось удалить кассу');
-      notify({ title: message, type: 'error' });
-    }
-  };
-
-  const handleFiscalAction = async (
-    action: 'ping' | 'agentCheck' | 'openShift' | 'closeShift' | 'xReport' | 'sellTest'
-  ) => {
-    if (!selectedFiscalDeviceId) {
-      notify({ title: 'Выберите кассу в списке', type: 'info' });
-      return;
-    }
-
-    const pathMap: Record<typeof action, string> = {
-      ping: 'ping',
-      agentCheck: 'check-connection',
-      openShift: 'open-shift',
-      closeShift: 'close-shift',
-      xReport: 'x-report',
-      sellTest: 'sell-test',
-    };
-
-    const actionLabelMap: Record<typeof action, string> = {
-      ping: 'Проверка подключения',
-      agentCheck: 'Проверка агента',
-      openShift: 'Открытие смены',
-      closeShift: 'Закрытие смены',
-      xReport: 'X-отчёт',
-      sellTest: 'Тестовый чек',
-    };
-
-    try {
-      setFiscalActionLoading(true);
-      setFiscalActionMessage(null);
-
-      const response = await api.post(`/api/admin/fiscal-devices/${selectedFiscalDeviceId}/${pathMap[action]}`);
-      const payload = getResponseData<{ device?: FiscalDevice; requestId?: string; response?: unknown }>(response);
-
-      if (payload?.device) {
-        upsertFiscalDevice(payload.device);
-      }
-
-      const responseStatus =
-        payload && typeof payload.response === 'object'
-          ? (payload.response as { status?: string; shiftState?: string }).status
-          : undefined;
-      const responseShiftState =
-        (payload && typeof payload.response === 'object'
-          ? (payload.response as { shiftState?: string }).shiftState
-          : undefined) ?? payload?.device?.lastShiftState;
-
-      const parts = [actionLabelMap[action]];
-      if (responseStatus) {
-        parts.push(`статус: ${responseStatus}`);
-      }
-      if (responseShiftState) {
-        parts.push(`смена: ${responseShiftState}`);
-      }
-      if (payload?.requestId) {
-        parts.push(`запрос ${payload.requestId}`);
-      }
-
-      const message = parts.join(' · ');
-      setFiscalActionMessage(message);
-      notify({ title: message || 'Запрос отправлен', type: 'success' });
-    } catch (error) {
-      let message = extractErrorMessage(error, 'Не удалось выполнить запрос к кассе');
-      if (/EHOSTUNREACH|ENETUNREACH|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|касса недоступна/i.test(message)) {
-        message = `${message}. Проверьте, что касса в одной сети/VPN с сервером или порт проброшен наружу.`;
-      }
-      setFiscalActionMessage(message);
-      notify({ title: message, type: 'error' });
-    } finally {
-      setFiscalActionLoading(false);
-    }
-  };
-
   const handleSelectSupplier = (supplier: Supplier) => {
     setSelectedSupplier(supplier);
     setSupplierEditForm({
@@ -3202,11 +2957,11 @@ const AdminPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
+    <div className="admin-shell min-h-screen">
+      <header className="admin-header border-b">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-soft">
               YG
             </div>
             <div className="leading-tight">
@@ -3215,6 +2970,15 @@ const AdminPage: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="hidden items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 md:inline-flex"
+              aria-pressed={theme === 'dark'}
+            >
+              {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-gradient-to-r from-indigo-400 to-fuchsia-500" />
+            </button>
             <button
               type="button"
               onClick={() => navigate('/pos')}
@@ -3235,10 +2999,18 @@ const AdminPage: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition hover:border-slate-300 md:hidden"
+              aria-label="Сменить тему"
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
           </div>
         </div>
       </header>
-      <nav className="border-b border-slate-200 bg-white">
+      <nav className="admin-nav border-b">
         <div className="mx-auto max-w-7xl px-4 lg:px-8">
           <div className="hidden h-12 items-center gap-1 md:flex">
             {navItems.map((item) => (
@@ -5335,332 +5107,6 @@ const AdminPage: React.FC = () => {
           ) : null}
         </div>
       ) : null}
-
-      {activeTab === 'fiscal' ? (
-        <div className="space-y-6">
-          <Card title="Быстрое тестирование кассы">
-            <div className="flex flex-col gap-2 rounded-xl bg-slate-50 p-4 text-sm text-slate-700 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="font-semibold text-slate-800">Быстрое тестирование кассы</p>
-                <p className="text-slate-500">
-                  Откройте отдельную страницу, чтобы проверить прямое подключение кассы по IP/порту без привязки к базе.
-                </p>
-              </div>
-              <a
-                href="/admin/kassa-test.html"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-indigo-500"
-              >
-                Открыть тестовую панель
-              </a>
-            </div>
-          </Card>
-          <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-            <Card
-              title={selectedFiscalDeviceId ? 'Редактировать кассу' : 'Новая касса'}
-              actions={
-                selectedFiscalDeviceId ? (
-                  <button
-                    type="button"
-                    onClick={resetFiscalForm}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                  >
-                    Очистить форму
-                  </button>
-                ) : null
-              }
-            >
-              <form onSubmit={handleSaveFiscalDevice} className="space-y-3 text-sm">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="block text-slate-700">
-                    <span className="mb-1 block text-xs uppercase text-slate-400">Имя устройства</span>
-                    <input
-                      type="text"
-                      value={fiscalForm.name}
-                      onChange={(event) => handleFiscalFieldChange('name', event.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                      placeholder="Касса в зале"
-                      required
-                    />
-                  </label>
-                  <label className="block text-slate-700">
-                    <span className="mb-1 block text-xs uppercase text-slate-400">IP-адрес</span>
-                    <input
-                      type="text"
-                      value={fiscalForm.ip}
-                      onChange={(event) => handleFiscalFieldChange('ip', event.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                      placeholder="192.168.0.10"
-                      required
-                    />
-                  </label>
-                  <label className="block text-slate-700">
-                    <span className="mb-1 block text-xs uppercase text-slate-400">Порт</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="65535"
-                      value={fiscalForm.port}
-                      onChange={(event) => handleFiscalFieldChange('port', event.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                      placeholder="16732"
-                      required
-                    />
-                  </label>
-                  <label className="block text-slate-700">
-                    <span className="mb-1 block text-xs uppercase text-slate-400">Налоговый режим</span>
-                    <select
-                      value={fiscalForm.taxationSystem}
-                      onChange={(event) => handleFiscalFieldChange('taxationSystem', event.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                    >
-                      <option value="">ОСНО без НДС (по умолчанию)</option>
-                      {FISCAL_TAX_SYSTEM_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="block text-slate-700">
-                    <span className="mb-1 block text-xs uppercase text-slate-400">Оператор (ФИО)</span>
-                    <input
-                      type="text"
-                      value={fiscalForm.operatorName}
-                      onChange={(event) => handleFiscalFieldChange('operatorName', event.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                      placeholder="Иванов Иван Иванович"
-                    />
-                  </label>
-                  <label className="block text-slate-700">
-                    <span className="mb-1 block text-xs uppercase text-slate-400">ИНН оператора</span>
-                    <input
-                      type="text"
-                      value={fiscalForm.operatorVatin}
-                      onChange={(event) => handleFiscalFieldChange('operatorVatin', event.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                      placeholder="000000000000"
-                    />
-                  </label>
-                </div>
-                <label className="block text-slate-700">
-                  <span className="mb-1 block text-xs uppercase text-slate-400">Токен агента кассы</span>
-                  <input
-                    type="text"
-                    value={fiscalForm.agentToken}
-                    onChange={(event) => handleFiscalFieldChange('agentToken', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                    placeholder="Bearer-токен для /fiscal-tasks/next"
-                  />
-                  <span className="mt-1 block text-[11px] text-slate-500">
-                    Используется при запросе очереди задач агента (GET /fiscal-tasks/next).
-                  </span>
-                </label>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <button
-                    type="submit"
-                    disabled={savingFiscalDevice || fiscalActionLoading}
-                    className="w-full rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                  >
-                    {savingFiscalDevice ? 'Сохранение…' : 'Сохранить кассу'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={resetFiscalForm}
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    Сбросить
-                  </button>
-                </div>
-              </form>
-              <div className="mt-4 rounded-2xl border border-dashed border-amber-200 bg-amber-50 p-4 text-xs text-amber-700">
-                <p>Убедитесь, что касса доступна в сети и открыт порт 16732 (по умолчанию).</p>
-                <p className="mt-1 text-gray-600">Бэкенд должен видеть кассу в той же сети или через VPN/проброшенный порт.</p>
-                <p className="mt-2">Можно подключить несколько касс с разными IP для разных владельцев или локаций.</p>
-              </div>
-            </Card>
-
-            <Card title="Действия с кассой">
-              <p className="text-sm text-slate-600">
-                Выберите кассу в таблице и отправьте команду. Поддерживаются только устройства вашей организации.
-              </p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => handleFiscalAction('agentCheck')}
-                  disabled={fiscalActionLoading || savingFiscalDevice || !selectedFiscalDeviceId}
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                >
-                  Проверить соединение
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFiscalAction('ping')}
-                  disabled={fiscalActionLoading || savingFiscalDevice || !selectedFiscalDeviceId}
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                >
-                  Статус кассы
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFiscalAction('openShift')}
-                  disabled={fiscalActionLoading || savingFiscalDevice || !selectedFiscalDeviceId}
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                >
-                  Открыть смену
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFiscalAction('closeShift')}
-                  disabled={fiscalActionLoading || savingFiscalDevice || !selectedFiscalDeviceId}
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                >
-                  Закрыть смену (Z)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFiscalAction('xReport')}
-                  disabled={fiscalActionLoading || savingFiscalDevice || !selectedFiscalDeviceId}
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                >
-                  X-отчёт
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFiscalAction('sellTest')}
-                  disabled={fiscalActionLoading || savingFiscalDevice || !selectedFiscalDeviceId}
-                  className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60 sm:col-span-2"
-                >
-                  Тестовый чек
-                </button>
-              </div>
-              {fiscalActionMessage ? (
-                <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-xs text-emerald-800">
-                  {fiscalActionMessage}
-                </div>
-              ) : null}
-            </Card>
-          </section>
-
-          <Card
-            title="Кассы"
-            actions={
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => void loadFiscalDevices()}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Обновить список
-                </button>
-              </div>
-            }
-          >
-            {fiscalDevicesLoading ? (
-              <div className="grid gap-3">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="h-16 animate-pulse rounded-2xl bg-slate-200/70" />
-                ))}
-              </div>
-            ) : fiscalDevicesError ? (
-              <div className="space-y-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-600">
-                <p className="text-sm">{fiscalDevicesError}</p>
-                <button
-                  type="button"
-                  onClick={() => void loadFiscalDevices()}
-                  className="rounded-2xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100"
-                >
-                  Повторить попытку
-                </button>
-              </div>
-            ) : fiscalDevices.length ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Название</th>
-                      <th className="px-3 py-2 text-left">Адрес</th>
-                      <th className="px-3 py-2 text-left">Статус</th>
-                      <th className="px-3 py-2 text-left">Смена</th>
-                      <th className="px-3 py-2 text-left">Последний отклик</th>
-                      <th className="px-3 py-2 text-left">Ошибка</th>
-                      <th className="px-3 py-2 text-right">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {fiscalDevices.map((device) => (
-                      <tr key={device._id} className={selectedFiscalDeviceId === device._id ? 'bg-emerald-50' : ''}>
-                        <td className="px-3 py-2 font-semibold text-slate-800">{device.name || '—'}</td>
-                        <td className="px-3 py-2 text-slate-500">{`${device.ip}:${device.port}`}</td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              device.status === 'online'
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : device.status === 'error'
-                                  ? 'bg-red-50 text-red-700'
-                                  : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {device.status === 'online'
-                              ? 'Онлайн'
-                              : device.status === 'error'
-                                ? 'Ошибка'
-                                : device.status === 'offline'
-                                  ? 'Недоступна'
-                                  : 'Неизвестно'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-slate-500">{device.lastShiftState ?? '—'}</td>
-                        <td className="px-3 py-2 text-slate-500">{formatDateTime(device.lastPing)}</td>
-                        <td className="px-3 py-2 text-slate-500">
-                          {device.lastError ? (
-                            <span className="text-red-600">{device.lastError}</span>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-right text-xs">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleSelectFiscalDevice(device)}
-                              className="rounded-full border border-emerald-200 bg-white px-3 py-1 font-semibold text-emerald-700 transition hover:bg-emerald-50"
-                            >
-                              Выбрать
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleDeleteFiscalDevice(device._id)}
-                              className="rounded-full border border-red-200 bg-red-50 px-3 py-1 font-semibold text-red-700 transition hover:bg-red-100"
-                            >
-                              Удалить
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                <p>Пока кассы не добавлены. Создайте устройство, чтобы отправлять команды в фискальный регистратор.</p>
-                <button
-                  type="button"
-                  onClick={resetFiscalForm}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 sm:w-auto"
-                >
-                  Добавить первую кассу
-                </button>
-              </div>
-            )}
-          </Card>
-        </div>
-      ) : null}
       {activeTab === 'loyalty' ? (
         <div className="lg:flex lg:items-start lg:gap-6">
           <aside className="mb-4 w-full lg:mb-0 lg:w-64">
@@ -6532,12 +5978,12 @@ const Card: React.FC<
 > = ({ title, children, id, className, actions }) => (
   <section
     id={id}
-    className={`rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-[0_10px_40px_-28px_rgba(15,23,42,0.35)] ${
+    className={`rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-card)]/90 p-6 shadow-[0_24px_80px_-55px_rgba(15,23,42,0.45)] backdrop-blur ${
       className ?? ''
     }`}
   >
     <div className="mb-4 flex items-center justify-between">
-      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      <h2 className="text-lg font-semibold text-[color:var(--color-text)]">{title}</h2>
       {actions ?? null}
     </div>
     {children}
@@ -6545,9 +5991,9 @@ const Card: React.FC<
 );
 
 const SummaryCard: React.FC<{ title: string; value: string }> = ({ title, value }) => (
-  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-    <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
+  <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-card)] p-5 shadow-sm">
+    <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--color-info)]">{title}</p>
+    <p className="mt-2 text-2xl font-bold text-[color:var(--color-text)]">{value}</p>
   </div>
 );
 
