@@ -109,3 +109,74 @@ textarea:focus {
 .heading-font {
   font-family: var(--font-display);
 }
+
+.admin-shell {
+  background:
+    radial-gradient(900px circle at 10% 0%, color-mix(in srgb, var(--color-accent) 35%, transparent), transparent 60%),
+    radial-gradient(600px circle at 90% 10%, color-mix(in srgb, var(--color-accent) 22%, transparent), transparent 55%),
+    var(--color-bg);
+  color: var(--color-text);
+}
+
+.admin-header,
+.admin-nav {
+  background: color-mix(in srgb, var(--color-bg-card) 85%, transparent);
+  border-color: color-mix(in srgb, var(--color-border) 70%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.admin-shell .bg-white,
+.admin-shell .bg-white\/70,
+.admin-shell .bg-white\/80,
+.admin-shell .bg-white\/90,
+.admin-shell .bg-slate-50,
+.admin-shell .bg-slate-100 {
+  background-color: var(--color-bg-card) !important;
+}
+
+.admin-shell .bg-slate-200\/60,
+.admin-shell .bg-slate-200\/70 {
+  background-color: color-mix(in srgb, var(--color-border) 55%, transparent) !important;
+}
+
+.admin-shell .border-slate-100,
+.admin-shell .border-slate-200,
+.admin-shell .border-slate-300 {
+  border-color: var(--color-border) !important;
+}
+
+.admin-shell .border-slate-900 {
+  border-color: var(--color-accent) !important;
+}
+
+.admin-shell .text-slate-600,
+.admin-shell .text-slate-500,
+.admin-shell .text-slate-400 {
+  color: var(--color-info) !important;
+}
+
+.admin-shell .bg-slate-900 {
+  background-color: var(--color-accent) !important;
+}
+
+.admin-shell .text-slate-900,
+.admin-shell .text-slate-800,
+.admin-shell .text-slate-700,
+.admin-shell .text-emerald-700,
+.admin-shell .text-emerald-600 {
+  color: var(--color-text) !important;
+}
+
+.admin-shell .bg-emerald-50,
+.admin-shell .bg-emerald-100 {
+  background-color: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg-card)) !important;
+}
+
+.admin-shell .border-emerald-200,
+.admin-shell .border-emerald-400 {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border)) !important;
+}
+
+.admin-shell .hover\\:bg-slate-800:hover {
+  background-color: var(--color-accent-hover) !important;
+}
