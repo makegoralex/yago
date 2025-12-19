@@ -1354,7 +1354,7 @@ const SuperAdminPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Скриншоты лендинга</p>
-                  <h4 className="text-base font-semibold text-slate-900">Галерея / демо</h4>
+                  <h4 className="text-base font-semibold text-slate-900">Галерея / примеры</h4>
                 </div>
                 <span className="text-xs font-semibold text-slate-500">{screenshotDrafts.length} шт.</span>
               </div>
