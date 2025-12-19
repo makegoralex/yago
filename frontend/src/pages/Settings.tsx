@@ -65,7 +65,6 @@ const SettingsPage: React.FC = () => {
 
       <section className="rounded-3xl bg-white p-6 shadow-soft">
         <h2 className="text-lg font-semibold text-slate-900">Тема кассы</h2>
-        <p className="mt-2 text-sm text-slate-500">Переключается только интерфейс кассы (/pos).</p>
         <button
           type="button"
           onClick={handleThemeToggle}

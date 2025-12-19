@@ -427,7 +427,7 @@ const POSPage: React.FC = () => {
   };
 
   return (
-    <div className="pos-shell flex h-screen min-h-0 flex-col gap-3 overflow-hidden px-3 py-3 pb-28 lg:px-4 lg:pb-5 xl:px-5">
+    <div className="pos-shell flex h-screen min-h-0 flex-col gap-2 overflow-hidden px-2 py-2 pb-28 sm:gap-2.5 sm:px-2.5 sm:py-2.5 lg:px-4 lg:pb-5 xl:px-5">
       <HeaderBar
         onShowHistory={() => setHistoryOpen(true)}
         onShowShift={() => setShiftPanelOpen(true)}
@@ -515,21 +515,21 @@ const POSPage: React.FC = () => {
               </div>
             )
           )}
-        <div className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-3 overflow-y-auto pr-1">
-            <div className="rounded-xl bg-white p-3 shadow-soft">
+          <div className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto pr-1 sm:space-y-2.5">
+            <div className="rounded-xl bg-white p-2 shadow-soft sm:p-2.5">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
                 <button
                   type="button"
                   onClick={() => void handleStartOrder()}
                   disabled={isStartingOrder || billingLocked}
-                  className="w-full rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
+                  className="w-full rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
                 >
                   {startOrderButtonLabel}
                 </button>
               </div>
               {activeOrders.length > 0 ? (
-                <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {activeOrders.map((order) => {
                     const isActive = orderId === order._id;
                     const tagLabel = getOrderTagLabel(order.orderTag);
@@ -565,16 +565,16 @@ const POSPage: React.FC = () => {
               )}
             </div>
             {loading ? (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-2 sm:gap-2.5 md:grid-cols-2 xl:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, index) => (
-                  <div key={index} className="h-36 animate-pulse rounded-2xl bg-slate-200/70" />
+                  <div key={index} className="h-28 animate-pulse rounded-2xl bg-slate-200/70" />
                 ))}
               </div>
             ) : (
               <div
-                className={`grid gap-3 ${
+                className={`grid gap-2 sm:gap-2.5 ${
                   activeSection === 'products'
-                    ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
+                    ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
                     : 'grid-cols-1'
                 }`}
               >
