@@ -709,15 +709,6 @@ const POSPage: React.FC = () => {
         onSubmit={(value) => handleRedeemConfirm(value)}
         isProcessing={isRedeeming}
       />
-      {!isTablet ? (
-        <div className="fixed inset-x-0 bottom-20 z-40 bg-white">
-          <div className="flex items-center justify-around border-b border-slate-200 bg-white py-2">
-            <TabButton label="Товары" active={activeSection === 'products'} onClick={() => setActiveSection('products')} />
-            <TabButton label="Клиенты" active={activeSection === 'customers'} onClick={() => setActiveSection('customers')} />
-            <TabButton label="Отчёты" active={activeSection === 'reports'} onClick={() => setActiveSection('reports')} />
-          </div>
-        </div>
-      ) : null}
       <FloatingPanelOverlay open={isHistoryOpen} onClose={() => setHistoryOpen(false)}>
         <ReceiptHistoryCard
           shift={currentShift}
