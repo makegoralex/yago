@@ -112,7 +112,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
 
   return (
     <aside
-      className={`custom-scrollbar flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-xl bg-white shadow-soft transition-transform lg:w-[360px] ${
+      className={`custom-scrollbar flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-xl bg-white shadow-soft transition-transform ${
         visible ? 'translate-x-0' : 'translate-x-full'
       }`}
     >
