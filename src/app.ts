@@ -3,8 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import swaggerUi from 'swagger-ui-express';
 
-import { authMiddleware, requireRole } from './middleware/auth';
-import { enforceActiveSubscription } from './middleware/subscription';
+import { authMiddleware } from './middleware/auth';
 import { authRouter } from './routes/auth';
 import catalogRouter from './modules/catalog/catalog.router';
 import { buildSwaggerDocument } from './swagger';
@@ -20,8 +19,6 @@ import { appConfig } from './config/env';
 import shiftRouter from './modules/shifts/shift.router';
 import restaurantSettingsRouter from './modules/restaurant/restaurantSettings.router';
 import organizationsRouter from './routes/organizations';
-import kassaTestRouter from './routes/kassaTest';
-import fiscalTasksRouter from './routes/fiscalTasks';
 
 const app = express();
 
@@ -65,8 +62,6 @@ app.use('/api/inventory', inventoryRouter);
 app.use('/api/admin', adminManagementRouter);
 app.use('/api/shifts', shiftRouter);
 app.use('/api/restaurant', restaurantSettingsRouter);
-app.use('/api/kassa-test', authMiddleware, requireRole(['owner', 'superAdmin']), enforceActiveSubscription, kassaTestRouter);
-app.use('/api/fiscal-tasks', fiscalTasksRouter);
 
 app.get('/api/protected', authMiddleware, (req, res) => {
   res.json({
