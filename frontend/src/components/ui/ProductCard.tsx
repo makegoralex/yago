@@ -13,18 +13,18 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) => {
     <button
       type="button"
       onClick={() => onSelect(product)}
-      className="group flex min-h-[130px] flex-col justify-between rounded-xl bg-white p-2.5 text-left shadow-soft transition hover:-translate-y-1 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:min-h-[150px] sm:p-3 lg:min-h-[165px]"
+      className="group flex min-h-[110px] flex-col justify-between rounded-xl bg-white p-2 text-left shadow-soft transition hover:-translate-y-1 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:min-h-[130px] sm:p-2.5 lg:min-h-[150px]"
     >
       <div className="flex flex-col gap-2">
         {product.imageUrl ? (
-          <div className="flex h-16 items-center justify-center overflow-hidden rounded-lg bg-slate-100 sm:h-20 lg:h-24">
+          <div className="flex h-12 items-center justify-center overflow-hidden rounded-lg bg-slate-100 sm:h-16 lg:h-20">
             <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.02]" />
           </div>
         ) : null}
         <div>
-          <p className="text-sm font-semibold leading-snug text-slate-900 sm:text-base">{product.name}</p>
+          <p className="text-sm font-semibold leading-snug text-slate-900">{product.name}</p>
           {product.description ? (
-            <p className="mt-1 h-8 overflow-hidden text-xs text-slate-500 text-ellipsis sm:h-10">
+            <p className="mt-1 h-6 overflow-hidden text-[11px] text-slate-500 text-ellipsis sm:h-8">
               {product.description}
             </p>
           ) : null}
