@@ -437,6 +437,20 @@ const AdminPage: React.FC = () => {
     () => navItems.find((item) => item.id === activeTab)?.label ?? 'Раздел',
     [activeTab, navItems]
   );
+  const tabDescriptions = useMemo(
+    () => ({
+      dashboard: 'Сводные метрики, выручка и активность клиентов.',
+      menu: 'Управление блюдами, категориями и модификаторами.',
+      inventory: 'Склады, документы и текущие остатки.',
+      loyalty: 'Настройки бонусов и база гостей.',
+      staff: 'Сотрудники и доступ к системе.',
+      suppliers: 'Контакты поставщиков и история закупок.',
+      discounts: 'Скидки, автоакции и правила.',
+      branding: 'Брендинг и параметры ресторана.',
+    }),
+    []
+  );
+  const currentTabDescription = useMemo(() => tabDescriptions[activeTab], [activeTab, tabDescriptions]);
   const [inventoryTab, setInventoryTab] = useState<'warehouses' | 'documents' | 'audit' | 'stock'>(
     'warehouses'
   );
@@ -2959,76 +2973,75 @@ const AdminPage: React.FC = () => {
   return (
     <div className="admin-shell min-h-screen">
       <header className="admin-header border-b">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-soft">
-              YG
+        <div className="mx-auto flex flex-col gap-3 px-4 py-3 lg:px-8">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-soft">
+                YG
+              </div>
+              <div className="leading-tight">
+                <p className="text-xs uppercase tracking-wide text-slate-400">Админ-панель</p>
+                <p className="text-sm font-semibold text-slate-900">{restaurantName || 'Yago POS'}</p>
+              </div>
             </div>
-            <div className="leading-tight">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Админ-панель</p>
-              <p className="text-sm font-semibold text-slate-900">{restaurantName || 'Yago POS'}</p>
+            <div className="hidden flex-1 items-center justify-center md:flex">
+              <div className="flex flex-wrap justify-center gap-2 rounded-full border border-slate-200 bg-slate-50/80 px-3 py-1">
+                {navItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActiveTab(item.id)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                      activeTab === item.id
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="hidden items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 md:inline-flex"
-              aria-pressed={theme === 'dark'}
-            >
-              {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-gradient-to-r from-indigo-400 to-fuchsia-500" />
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/pos')}
-              className="hidden items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 sm:inline-flex"
-            >
-              Перейти в кассу
-            </button>
-            <div className="hidden h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700 md:flex">
-              {restaurantName ? restaurantName.charAt(0).toUpperCase() : 'Y'}
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsNavOpen((prev) => !prev)}
-              className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 md:hidden"
-              aria-label="Открыть меню админки"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition hover:border-slate-300 md:hidden"
-              aria-label="Сменить тему"
-            >
-              {theme === 'dark' ? '☀️' : '🌙'}
-            </button>
-          </div>
-        </div>
-      </header>
-      <nav className="admin-nav border-b">
-        <div className="mx-auto max-w-7xl px-4 lg:px-8">
-          <div className="hidden h-12 items-center gap-1 md:flex">
-            {navItems.map((item) => (
+            <div className="flex items-center gap-2">
               <button
-                key={item.id}
                 type="button"
-                onClick={() => setActiveTab(item.id)}
-                className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold transition ${
-                  activeTab === item.id
-                    ? 'border-slate-900 text-slate-900'
-                    : 'border-transparent text-slate-500 hover:border-slate-200 hover:text-slate-900'
-                }`}
+                onClick={toggleTheme}
+                className="hidden h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-sm font-semibold text-slate-700 transition hover:border-slate-300 md:inline-flex"
+                aria-pressed={theme === 'dark'}
               >
-                {item.label}
+                {theme === 'dark' ? '☀️' : '🌙'}
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => navigate('/pos')}
+                className="hidden items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 sm:inline-flex"
+              >
+                Перейти в кассу
+              </button>
+              <div className="hidden h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700 md:flex">
+                {restaurantName ? restaurantName.charAt(0).toUpperCase() : 'Y'}
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNavOpen((prev) => !prev)}
+                className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 md:hidden"
+                aria-label="Открыть меню админки"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition hover:border-slate-300 md:hidden"
+                aria-label="Сменить тему"
+              >
+                {theme === 'dark' ? '☀️' : '🌙'}
+              </button>
+            </div>
           </div>
-          <div className="flex h-12 items-center justify-between md:hidden">
+          <div className="flex items-center justify-between md:hidden">
             <p className="text-sm font-semibold text-slate-700">{currentTabLabel}</p>
             <button
               type="button"
@@ -3042,7 +3055,7 @@ const AdminPage: React.FC = () => {
             </button>
           </div>
           {isNavOpen ? (
-            <div className="grid gap-2 pb-3 md:hidden">
+            <div className="grid gap-2 pb-2 md:hidden">
               {navItems.map((item) => (
                 <button
                   key={item.id}
@@ -3061,28 +3074,19 @@ const AdminPage: React.FC = () => {
             </div>
           ) : null}
         </div>
-      </nav>
+      </header>
       <main className="mx-auto max-w-7xl px-4 pb-10 pt-6 lg:px-8">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-wide text-slate-400">Панель управления</p>
-            <h1 className="text-3xl font-bold text-slate-900">Админка Yago POS</h1>
-            <p className="text-sm text-slate-500">
-              Управление персоналом, меню, запасами, скидками и поставщиками {restaurantName || 'ресторанов'}
-            </p>
+            <h1 className="text-3xl font-bold text-slate-900">{currentTabLabel}</h1>
+            <p className="text-sm text-slate-500">{currentTabDescription}</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden h-10 items-center gap-2 rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700 lg:inline-flex">
+          <div className="hidden items-center gap-3 lg:flex">
+            <div className="flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700">
               <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
               <span>{currentTabLabel}</span>
             </div>
-            <button
-              type="button"
-              onClick={() => navigate('/pos')}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
-            >
-              Перейти в кассу
-            </button>
           </div>
         </div>
 
@@ -3496,9 +3500,10 @@ const AdminPage: React.FC = () => {
 
       {activeTab === 'menu' ? (
         <div className="lg:flex lg:items-start lg:gap-6">
-          <aside className="mb-4 w-full lg:mb-0 lg:w-64">
-            <Card title="Раздел меню">
-              <div className="mt-2 flex flex-col gap-2">
+          <aside className="mb-4 w-full lg:mb-0 lg:w-[240px]">
+            <div className="rounded-2xl bg-slate-50/70 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Меню</p>
+              <div className="mt-4 flex flex-col gap-2">
                 {[
                   { id: 'products', label: 'Позиции', description: 'Создание и настройка блюд' },
                   { id: 'categories', label: 'Категории', description: 'Группировка и порядок' },
@@ -3509,16 +3514,18 @@ const AdminPage: React.FC = () => {
                     key={item.id}
                     type="button"
                     onClick={() => setMenuSection(item.id as typeof menuSection)}
-                    className={`flex flex-col rounded-xl border px-3 py-2 text-left transition hover:border-emerald-300 ${
-                      menuSection === item.id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'
+                    className={`flex flex-col rounded-xl px-3 py-2 text-left transition ${
+                      menuSection === item.id
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'text-slate-500 hover:bg-slate-100'
                     }`}
                   >
-                    <span className="text-sm font-semibold text-slate-800">{item.label}</span>
-                    <span className="text-xs text-slate-500">{item.description}</span>
+                    <span className="text-sm font-semibold">{item.label}</span>
+                    <span className="text-xs">{item.description}</span>
                   </button>
                 ))}
               </div>
-            </Card>
+            </div>
           </aside>
           <div className="flex-1 space-y-6">
             {menuSection === 'categories' ? (
@@ -3590,41 +3597,27 @@ const AdminPage: React.FC = () => {
             {menuSection === 'products' ? (
               <>
                 <Card title="Новая позиция">
-                  <form onSubmit={handleCreateProduct} className="space-y-3 text-sm">
-                    <input
-                      type="text"
-                      placeholder="Название"
-                      value={newProduct.name}
-                      onChange={(event) => setNewProduct((prev) => ({ ...prev, name: event.target.value }))}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                    />
-                    <textarea
-                      placeholder="Описание"
-                      value={newProduct.description}
-                      onChange={(event) => setNewProduct((prev) => ({ ...prev, description: event.target.value }))}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                      rows={3}
-                    />
-                    <input
-                      type="url"
-                      placeholder="Ссылка на фото"
-                      value={newProduct.imageUrl}
-                      onChange={(event) => setNewProduct((prev) => ({ ...prev, imageUrl: event.target.value }))}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                    />
-                    <select
-                      value={newProduct.categoryId}
-                      onChange={(event) => setNewProduct((prev) => ({ ...prev, categoryId: event.target.value }))}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                    >
-                      <option value="">Категория</option>
-                      {categories.map((category) => (
-                        <option key={category._id} value={category._id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
+                  <form onSubmit={handleCreateProduct} className="space-y-4 text-sm">
                     <div className="grid gap-3 md:grid-cols-2">
+                      <input
+                        type="text"
+                        placeholder="Название"
+                        value={newProduct.name}
+                        onChange={(event) => setNewProduct((prev) => ({ ...prev, name: event.target.value }))}
+                        className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                      />
+                      <select
+                        value={newProduct.categoryId}
+                        onChange={(event) => setNewProduct((prev) => ({ ...prev, categoryId: event.target.value }))}
+                        className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                      >
+                        <option value="">Категория</option>
+                        {categories.map((category) => (
+                          <option key={category._id} value={category._id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
                       <input
                         type="number"
                         step="0.01"
@@ -3654,7 +3647,21 @@ const AdminPage: React.FC = () => {
                         onChange={(event) => setNewProduct((prev) => ({ ...prev, discountValue: event.target.value }))}
                         className="rounded-2xl border border-slate-200 px-4 py-2"
                       />
+                      <input
+                        type="url"
+                        placeholder="Ссылка на фото"
+                        value={newProduct.imageUrl}
+                        onChange={(event) => setNewProduct((prev) => ({ ...prev, imageUrl: event.target.value }))}
+                        className="rounded-2xl border border-slate-200 px-4 py-2"
+                      />
                     </div>
+                    <textarea
+                      placeholder="Описание"
+                      value={newProduct.description}
+                      onChange={(event) => setNewProduct((prev) => ({ ...prev, description: event.target.value }))}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                      rows={3}
+                    />
                     <div className="space-y-2">
                       <p className="text-xs font-semibold uppercase text-slate-500">Модификаторы</p>
                       {modifierGroups.length ? (

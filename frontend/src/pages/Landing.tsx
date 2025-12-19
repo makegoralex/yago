@@ -182,7 +182,7 @@ const LandingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#f8f9ff] via-[#f5f0ff] to-[#f7f9fb] text-slate-800">
+    <div className="landing-shell min-h-screen">
       <div className="relative overflow-hidden pb-6">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(124,58,237,0.18),transparent_32%),radial-gradient(circle_at_80%_5%,rgba(109,40,217,0.18),transparent_30%),linear-gradient(120deg,rgba(124,58,237,0.06),transparent_28%,rgba(109,40,217,0.08))]" />
         <header className="relative mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-6 sm:px-6">
@@ -208,6 +208,14 @@ const LandingPage: React.FC = () => {
             <Link to="/login" className="rounded-lg px-3 py-2 text-nav transition hover:text-navHover">
               Вход
             </Link>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-sm transition hover:border-slate-300"
+              aria-label="Сменить тему"
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             <button
               type="button"
               onClick={() => authSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}

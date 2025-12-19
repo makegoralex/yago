@@ -18,8 +18,6 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
   });
 
   useEffect(() => {
-    document.documentElement.classList.remove(theme === 'light' ? 'dark' : 'light');
-    document.documentElement.classList.add(theme);
     document.documentElement.classList.toggle('light', theme === 'light');
     localStorage.setItem('yago-theme', theme);
   }, [theme]);

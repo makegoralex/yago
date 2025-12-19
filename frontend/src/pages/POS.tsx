@@ -426,7 +426,7 @@ const POSPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen min-h-0 flex-col gap-3 overflow-hidden bg-slate-100 px-3 py-3 pb-28 lg:px-4 lg:pb-5">
+    <div className="pos-shell flex h-screen min-h-0 flex-col gap-3 overflow-hidden px-3 py-3 pb-28 lg:px-4 lg:pb-5">
       <HeaderBar
         onShowHistory={() => setHistoryOpen(true)}
         onShowShift={() => setShiftPanelOpen(true)}
