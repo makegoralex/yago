@@ -426,7 +426,7 @@ const POSPage: React.FC = () => {
   };
 
   return (
-    <div className="pos-shell flex h-screen min-h-0 flex-col gap-3 overflow-hidden px-3 py-3 pb-28 lg:px-4 lg:pb-5">
+    <div className="pos-shell flex h-screen min-h-0 flex-col gap-3 overflow-hidden px-3 py-3 pb-28 lg:px-3 lg:pb-5 xl:px-4">
       <HeaderBar
         onShowHistory={() => setHistoryOpen(true)}
         onShowShift={() => setShiftPanelOpen(true)}
@@ -661,7 +661,7 @@ const POSPage: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="hidden min-h-0 lg:flex lg:h-full lg:min-w-[260px] lg:w-[260px] lg:max-w-[300px] xl:min-w-[300px] xl:w-[300px] 2xl:w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
+        <div className="hidden min-h-0 lg:flex lg:h-full lg:flex-[0_0_240px] lg:min-w-[240px] lg:max-w-[240px] xl:flex-[0_0_280px] xl:min-w-[280px] xl:max-w-[280px] 2xl:flex-[0_0_320px] 2xl:min-w-[320px] 2xl:max-w-[320px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
           <OrderPanel
             items={items}
             subtotal={subtotal}
