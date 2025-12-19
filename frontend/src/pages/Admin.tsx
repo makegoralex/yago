@@ -3019,9 +3019,6 @@ const AdminPage: React.FC = () => {
               >
                 Перейти в кассу
               </button>
-              <div className="hidden h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700 md:flex">
-                {restaurantName ? restaurantName.charAt(0).toUpperCase() : 'Y'}
-              </div>
               <button
                 type="button"
                 onClick={() => setIsNavOpen((prev) => !prev)}

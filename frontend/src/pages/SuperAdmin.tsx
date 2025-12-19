@@ -323,7 +323,7 @@ const SuperAdminPage: React.FC = () => {
         subscriptionPlan: createForm.subscriptionPlan,
       });
 
-      setCreateMessage('Организация создана. Данные отправлены владельцу.');
+      setCreateMessage('Организация создана. Данные доступны в кабинете владельца.');
       setCreateForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', subscriptionPlan: '' });
       await fetchOrganizations();
       await fetchUsers();

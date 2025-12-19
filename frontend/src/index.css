@@ -250,6 +250,11 @@ textarea:focus {
   color: var(--text-primary);
 }
 
+.light .landing-shell,
+.light .admin-shell {
+  background: var(--bg-main);
+}
+
 .landing-shell .bg-white,
 .landing-shell .bg-slate-50,
 .landing-shell .bg-slate-100 {

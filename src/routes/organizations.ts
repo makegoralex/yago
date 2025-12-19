@@ -238,6 +238,7 @@ const createOrganizationWithOwner = async (
         $set: {
           organizationId: organization._id,
           singletonKey: String(organization._id),
+          name: organization.name,
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
