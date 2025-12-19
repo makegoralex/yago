@@ -20,7 +20,7 @@ type LandingHeaderProps = {
 const LandingHeader: React.FC<LandingHeaderProps> = ({
   onCtaClick,
   ctaLabel = 'Создать организацию',
-  ctaHref = '/#signup',
+  ctaHref = '/login',
 }) => {
   const [compact, setCompact] = useState(false);
 
@@ -42,8 +42,8 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
   }, []);
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-white/90 backdrop-blur">
-      <div className={`mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 sm:px-6 ${compact ? 'py-2' : 'py-4'}`}>
+    <header className="sticky top-0 z-50 w-full bg-white shadow-sm">
+      <div className={`mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 ${compact ? 'py-2' : 'py-4'}`}>
         <Link to="/" className="flex items-center gap-3">
           <div
             className={`flex items-center justify-center rounded-2xl bg-primary/10 text-lg font-bold text-primary ${
@@ -57,29 +57,31 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
             <div className="text-xs text-slate-500">Система для кофейни</div>
           </div>
         </Link>
-        <nav className="flex flex-1 flex-wrap items-center justify-end gap-2 text-sm font-medium sm:flex-none sm:gap-4">
-          {navItems.map((item) => (
-            <a key={item.label} href={item.href} className="rounded-lg px-3 py-2 text-nav transition hover:text-navHover">
-              {item.label}
-            </a>
-          ))}
+        <div className="flex items-center gap-3">
+          <nav className="hidden items-center gap-3 text-sm font-medium lg:flex">
+            {navItems.map((item) => (
+              <a key={item.label} href={item.href} className="rounded-lg px-3 py-2 text-nav transition hover:text-navHover">
+                {item.label}
+              </a>
+            ))}
+          </nav>
           {onCtaClick ? (
             <button
               type="button"
               onClick={onCtaClick}
-              className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark hover:shadow-md"
+              className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark"
             >
               {ctaLabel}
             </button>
           ) : (
             <a
               href={ctaHref}
-              className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark hover:shadow-md"
+              className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark"
             >
               {ctaLabel}
             </a>
           )}
-        </nav>
+        </div>
       </div>
     </header>
   );
