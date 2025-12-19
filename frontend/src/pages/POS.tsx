@@ -478,7 +478,7 @@ const POSPage: React.FC = () => {
           ) : null}
         </div>
       ) : null}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-2 xl:gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-4 xl:gap-5">
         <div className="custom-scrollbar hidden min-h-0 flex-shrink-0 lg:flex lg:h-full lg:w-auto lg:overflow-y-auto">
           <CategorySidebar
             categories={categories}
@@ -487,7 +487,7 @@ const POSPage: React.FC = () => {
             collapsed={false}
           />
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-w-0">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-w-0 lg:px-1.5">
           {shouldShowProductSearch ? (
             <div className="mb-3 flex flex-col gap-2">
               <ProductSearchBar

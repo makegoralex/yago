@@ -242,6 +242,10 @@ textarea:focus {
   color: var(--text-secondary) !important;
 }
 
+.light .pos-shell {
+  background: var(--bg-main);
+}
+
 .landing-shell {
   background:
     radial-gradient(900px circle at 15% 10%, color-mix(in srgb, var(--accent-primary) 30%, transparent), transparent 55%),
