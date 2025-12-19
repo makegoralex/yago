@@ -96,7 +96,6 @@ const POSPage: React.FC = () => {
 
     return false;
   }, [billingLocked, notify]);
-  const [isOrderDrawerOpen, setOrderDrawerOpen] = useState(false);
   const [isPaymentOpen, setPaymentOpen] = useState(false);
   const [isLoyaltyOpen, setLoyaltyOpen] = useState(false);
   const [isPaying, setPaying] = useState(false);
@@ -197,9 +196,6 @@ const POSPage: React.FC = () => {
     setStartingOrder(true);
     try {
       await createDraft({ forceNew: true });
-      if (!isTablet) {
-        setOrderDrawerOpen(true);
-      }
     } catch (error) {
       notify({
         title: 'Ошибка заказа',
@@ -230,9 +226,6 @@ const POSPage: React.FC = () => {
         type: 'success',
       });
       setPaymentOpen(false);
-      if (!isTablet) {
-        setOrderDrawerOpen(true);
-      }
     } catch (error) {
       notify({ title: 'Ошибка оплаты', description: 'Попробуйте снова', type: 'error' });
     } finally {
@@ -253,9 +246,6 @@ const POSPage: React.FC = () => {
     try {
       await completeOrder();
       notify({ title: 'Заказ завершён', description: 'Чек отправлен в историю', type: 'success' });
-      if (!isTablet) {
-        setOrderDrawerOpen(false);
-      }
       await fetchShiftHistory().catch(() => undefined);
     } catch (error) {
       const description = error instanceof Error ? error.message : 'Не удалось завершить заказ';
@@ -389,18 +379,12 @@ const POSPage: React.FC = () => {
 
     if (product.modifierGroups?.length) {
       setModifierProduct(product);
-      if (!isTablet) {
-        setOrderDrawerOpen(true);
-      }
       return;
     }
 
     void addProduct(product).catch(() => {
       notify({ title: 'Не удалось добавить товар', type: 'error' });
     });
-    if (!isTablet) {
-      setOrderDrawerOpen(true);
-    }
   };
 
   const handleModifierConfirm = (modifiers: SelectedModifier[]) => {
@@ -414,9 +398,6 @@ const POSPage: React.FC = () => {
       notify({ title: 'Не удалось добавить товар', type: 'error' });
     });
     setModifierProduct(null);
-    if (!isTablet) {
-      setOrderDrawerOpen(true);
-    }
   };
 
   const handleModifierClose = () => setModifierProduct(null);
@@ -427,7 +408,7 @@ const POSPage: React.FC = () => {
   };
 
   return (
-    <div className="pos-shell flex h-screen min-h-0 flex-col gap-3 overflow-hidden px-3 py-3 pb-28 lg:px-4 lg:pb-5 xl:px-5">
+    <div className="pos-shell flex h-screen min-h-0 flex-col gap-2 overflow-hidden px-2 py-2 pb-28 sm:gap-2.5 sm:px-2.5 sm:py-2.5 lg:px-4 lg:pb-5 xl:px-5">
       <HeaderBar
         onShowHistory={() => setHistoryOpen(true)}
         onShowShift={() => setShiftPanelOpen(true)}
@@ -478,247 +459,228 @@ const POSPage: React.FC = () => {
           ) : null}
         </div>
       ) : null}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-4 xl:gap-5">
-        <div className="custom-scrollbar hidden min-h-0 flex-shrink-0 lg:flex lg:h-full lg:w-auto lg:overflow-y-auto">
-          <CategorySidebar
-            categories={categories}
-            activeCategoryId={activeCategoryId}
-            onSelectCategory={(categoryId) => setActiveCategory(categoryId)}
-            collapsed={false}
-          />
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-w-0 lg:px-1.5">
-          {shouldShowProductSearch ? (
-            <div className="mb-3 flex flex-col gap-2">
-              <ProductSearchBar
-                query={searchQuery}
-                onQueryChange={setSearchQuery}
-                results={searchResults}
-                onSelect={handleProductSearchSelect}
-              />
-              {!isTablet ? (
-                <MobileQuickActions
-                  onShowOrder={() => setOrderDrawerOpen(true)}
-                  onResetCustomer={handleRemoveCustomer}
-                  itemCount={items.length}
-                />
-              ) : null}
-            </div>
-          ) : (
-            !isTablet && (
-              <div className="mb-4">
-                <MobileQuickActions
-                  onShowOrder={() => setOrderDrawerOpen(true)}
-                  onResetCustomer={handleRemoveCustomer}
-                  itemCount={items.length}
-                />
-              </div>
-            )
-          )}
-        <div className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-3 overflow-y-auto pr-1">
-            <div className="rounded-xl bg-white p-3 shadow-soft">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
-                <button
-                  type="button"
-                  onClick={() => void handleStartOrder()}
-                  disabled={isStartingOrder || billingLocked}
-                  className="w-full rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
-                >
-                  {startOrderButtonLabel}
-                </button>
-              </div>
-              {activeOrders.length > 0 ? (
-                <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                  {activeOrders.map((order) => {
-                    const isActive = orderId === order._id;
-                    const tagLabel = getOrderTagLabel(order.orderTag);
-                    return (
-                      <button
-                        type="button"
-                        key={order._id}
-                        onClick={() => void loadOrder(order._id)}
-                        className={`w-full rounded-lg border px-3 py-2.5 text-left text-sm transition ${
-                          isActive
-                            ? 'border-2 border-secondary/70 bg-secondary/10 text-secondary shadow-sm'
-                            : 'border-slate-100 bg-white text-slate-700 hover:border-secondary/50'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-semibold text-slate-900">#{order._id.slice(-5)}</p>
-                          {tagLabel ? (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
-                              {tagLabel}
-                            </span>
-                          ) : null}
-                        </div>
-                        {order.status === 'paid' ? (
-                          <p className="text-xs uppercase text-slate-400">оплачен</p>
-                        ) : null}
-                        <p className="mt-2 text-base font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="mt-2 text-sm text-slate-500">Нет активных заказов.</p>
-              )}
-            </div>
-            {loading ? (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <div key={index} className="h-36 animate-pulse rounded-2xl bg-slate-200/70" />
-                ))}
-              </div>
-            ) : (
-              <div
-                className={`grid gap-3 ${
-                  activeSection === 'products'
-                    ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
-                    : 'grid-cols-1'
-                }`}
-              >
-                {activeSection === 'products'
-                  ? filteredProducts.map((product) => (
-                      <ProductCard
-                        key={product._id}
-                        product={product}
-                        onSelect={(selectedProduct) => handleAddProduct(selectedProduct)}
-                      />
-                    ))
-                  : null}
-                {activeSection === 'customers' ? (
-                  <div className="col-span-full rounded-2xl bg-white p-6 shadow-soft">
-                    <p className="text-lg font-semibold text-slate-900">Быстрые действия</p>
-                    <div className="mt-4 flex flex-col gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setLoyaltyOpen(true)}
-                        className="min-h-[56px] rounded-2xl bg-secondary text-base font-semibold text-white shadow-soft transition hover:bg-secondary/80"
-                      >
-                        Найти или добавить клиента
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleRemoveCustomer}
-                        className="min-h-[56px] rounded-2xl border border-slate-200 text-base font-semibold text-slate-600"
-                      >
-                        Очистить клиента
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-                {activeSection === 'reports' ? (
-                  <div className="col-span-full rounded-2xl bg-white p-6 shadow-soft">
-                    <p className="text-lg font-semibold text-slate-900">Активные заказы</p>
-                    {activeOrders.length === 0 ? (
-                      <p className="mt-2 text-sm text-slate-500">Нет активных заказов кассира.</p>
-                    ) : (
-                      <ul className="mt-3 space-y-3">
-                        {activeOrders.map((order) => {
-                          const tagLabel = getOrderTagLabel(order.orderTag);
-                          return (
-                            <li
-                              key={order._id}
-                              className="flex items-center justify-between rounded-2xl border border-slate-100 p-3"
-                            >
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <p className="text-base font-semibold text-slate-900">Заказ #{order._id.slice(-5)}</p>
-                                  {tagLabel ? (
-                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
-                                      {tagLabel}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <p className="text-sm text-slate-500">
-                                  {new Date(order.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
-                                <p className="text-xs uppercase text-slate-400">{order.status === 'draft' ? 'В работе' : 'Оплачен'}</p>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                ) : null}
-                {activeSection !== 'products' && !isTablet ? (
-                  <button
-                    type="button"
-                    onClick={() => setActiveSection('products')}
-                    className="col-span-full rounded-2xl border border-slate-200 py-4 text-sm font-semibold text-slate-600"
-                  >
-                    Вернуться к товарам
-                  </button>
-                ) : null}
-                {filteredProducts.length === 0 && activeSection === 'products' ? (
-                  <div className="col-span-full rounded-2xl bg-white p-6 text-center text-slate-400 shadow-soft">
-                    Нет товаров в категории
-                  </div>
-                ) : null}
-              </div>
-            )}
+      {!isTablet ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <div className="w-full rounded-xl border border-slate-200 bg-white p-4 text-center text-sm text-slate-500">
+            Интерфейс кассира доступен на планшетах и ПК. На телефонах он скрыт.
           </div>
         </div>
-        <div className="hidden min-h-0 lg:flex lg:h-full lg:flex-[0_0_300px] lg:min-w-[300px] lg:max-w-[300px] xl:flex-[0_0_320px] xl:min-w-[320px] xl:max-w-[320px] 2xl:flex-[0_0_360px] 2xl:min-w-[360px] 2xl:max-w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
-          <OrderPanel
-            items={items}
-            subtotal={subtotal}
-            discount={discount}
-            total={total}
-            status={status}
-            isCompleting={isCompleting}
-            onIncrement={(lineId) =>
-              void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) + 1)
-            }
-            onDecrement={(lineId) =>
-              void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) - 1)
-            }
-            onRemove={(lineId) => void removeItem(lineId)}
-            onPay={(method) => openPaymentModal(method)}
-            onAddCustomer={() => setLoyaltyOpen(true)}
-            onClearCustomer={handleRemoveCustomer}
-            isProcessing={isPaying}
-            earnedPoints={earnedPoints}
-            customer={customer}
-            orderTagsEnabled={orderTagsEnabled}
-            orderTag={orderTag}
-            onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
-            onRedeemLoyalty={() => {
-              if (!customer || customer.points <= 0) {
-                notify({ title: 'Нет доступных баллов', type: 'info' });
-                return;
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-4 xl:gap-5">
+          <div className="custom-scrollbar hidden min-h-0 flex-shrink-0 lg:flex lg:h-full lg:w-auto lg:overflow-y-auto">
+            <CategorySidebar
+              categories={categories}
+              activeCategoryId={activeCategoryId}
+              onSelectCategory={(categoryId) => setActiveCategory(categoryId)}
+              collapsed={false}
+            />
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-w-0 lg:px-1.5">
+            {shouldShowProductSearch ? (
+              <div className="mb-3 flex flex-col gap-2">
+                <ProductSearchBar
+                  query={searchQuery}
+                  onQueryChange={setSearchQuery}
+                  results={searchResults}
+                  onSelect={handleProductSearchSelect}
+                />
+              </div>
+            ) : null}
+            <div className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto pr-1 sm:space-y-2.5">
+              <div className="rounded-xl bg-white p-2 shadow-soft sm:p-2.5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
+                  <button
+                    type="button"
+                    onClick={() => void handleStartOrder()}
+                    disabled={isStartingOrder || billingLocked}
+                    className="w-full rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
+                  >
+                    {startOrderButtonLabel}
+                  </button>
+                </div>
+                {activeOrders.length > 0 ? (
+                  <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {activeOrders.map((order) => {
+                      const isActive = orderId === order._id;
+                      const tagLabel = getOrderTagLabel(order.orderTag);
+                      return (
+                        <button
+                          type="button"
+                          key={order._id}
+                          onClick={() => void loadOrder(order._id)}
+                          className={`w-full rounded-lg border px-3 py-2.5 text-left text-sm transition ${
+                            isActive
+                              ? 'border-2 border-secondary/70 bg-secondary/10 text-secondary shadow-sm'
+                              : 'border-slate-100 bg-white text-slate-700 hover:border-secondary/50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-semibold text-slate-900">#{order._id.slice(-5)}</p>
+                            {tagLabel ? (
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
+                                {tagLabel}
+                              </span>
+                            ) : null}
+                          </div>
+                          {order.status === 'paid' ? (
+                            <p className="text-xs uppercase text-slate-400">оплачен</p>
+                          ) : null}
+                          <p className="mt-2 text-base font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">Нет активных заказов.</p>
+                )}
+              </div>
+              {loading ? (
+                <div className="grid gap-2 sm:gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <div key={index} className="h-28 animate-pulse rounded-2xl bg-slate-200/70" />
+                  ))}
+                </div>
+              ) : (
+                <div
+                  className={`grid gap-2 sm:gap-2.5 ${
+                    activeSection === 'products'
+                      ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
+                      : 'grid-cols-1'
+                  }`}
+                >
+                  {activeSection === 'products'
+                    ? filteredProducts.map((product) => (
+                        <ProductCard
+                          key={product._id}
+                          product={product}
+                          onSelect={(selectedProduct) => handleAddProduct(selectedProduct)}
+                        />
+                      ))
+                    : null}
+                  {activeSection === 'customers' ? (
+                    <div className="col-span-full rounded-2xl bg-white p-6 shadow-soft">
+                      <p className="text-lg font-semibold text-slate-900">Быстрые действия</p>
+                      <div className="mt-4 flex flex-col gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setLoyaltyOpen(true)}
+                          className="min-h-[56px] rounded-2xl bg-secondary text-base font-semibold text-white shadow-soft transition hover:bg-secondary/80"
+                        >
+                          Найти или добавить клиента
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRemoveCustomer}
+                          className="min-h-[56px] rounded-2xl border border-slate-200 text-base font-semibold text-slate-600"
+                        >
+                          Очистить клиента
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {activeSection === 'reports' ? (
+                    <div className="col-span-full rounded-2xl bg-white p-6 shadow-soft">
+                      <p className="text-lg font-semibold text-slate-900">Активные заказы</p>
+                      {activeOrders.length === 0 ? (
+                        <p className="mt-2 text-sm text-slate-500">Нет активных заказов кассира.</p>
+                      ) : (
+                        <ul className="mt-3 space-y-3">
+                          {activeOrders.map((order) => {
+                            const tagLabel = getOrderTagLabel(order.orderTag);
+                            return (
+                              <li
+                                key={order._id}
+                                className="flex items-center justify-between rounded-2xl border border-slate-100 p-3"
+                              >
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-base font-semibold text-slate-900">Заказ #{order._id.slice(-5)}</p>
+                                    {tagLabel ? (
+                                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
+                                        {tagLabel}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <p className="text-sm text-slate-500">
+                                    {new Date(order.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
+                                  <p className="text-xs uppercase text-slate-400">{order.status === 'draft' ? 'В работе' : 'Оплачен'}</p>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  ) : null}
+                  {filteredProducts.length === 0 && activeSection === 'products' ? (
+                    <div className="col-span-full rounded-2xl bg-white p-6 text-center text-slate-400 shadow-soft">
+                      Нет товаров в категории
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="hidden min-h-0 lg:flex lg:h-full lg:flex-[0_0_300px] lg:min-w-[300px] lg:max-w-[300px] xl:flex-[0_0_320px] xl:min-w-[320px] xl:max-w-[320px] 2xl:flex-[0_0_360px] 2xl:min-w-[360px] 2xl:max-w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
+            <OrderPanel
+              items={items}
+              subtotal={subtotal}
+              discount={discount}
+              total={total}
+              status={status}
+              isCompleting={isCompleting}
+              onIncrement={(lineId) =>
+                void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) + 1)
               }
-              setRedeemOpen(true);
-            }}
-            onClearDiscount={() =>
-              void clearDiscount().catch(() => notify({ title: 'Не удалось сбросить скидку', type: 'error' }))
-            }
-            onCancel={() =>
-              void cancelOrder()
-                .then(() => {
-                  setOrderDrawerOpen(false);
+              onDecrement={(lineId) =>
+                void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) - 1)
+              }
+              onRemove={(lineId) => void removeItem(lineId)}
+              onPay={(method) => openPaymentModal(method)}
+              onAddCustomer={() => setLoyaltyOpen(true)}
+              onClearCustomer={handleRemoveCustomer}
+              isProcessing={isPaying}
+              earnedPoints={earnedPoints}
+              customer={customer}
+              orderTagsEnabled={orderTagsEnabled}
+              orderTag={orderTag}
+              onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
+              onRedeemLoyalty={() => {
+                if (!customer || customer.points <= 0) {
+                  notify({ title: 'Нет доступных баллов', type: 'info' });
+                  return;
+                }
+                setRedeemOpen(true);
+              }}
+              onClearDiscount={() =>
+                void clearDiscount().catch(() => notify({ title: 'Не удалось сбросить скидку', type: 'error' }))
+              }
+              onCancel={() =>
+                void cancelOrder()
+                  .then(() => {
                   notify({ title: 'Заказ отменён', type: 'info' });
                 })
-                .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
-            }
-            onComplete={() => void handleCompleteCurrentOrder()}
-            availableDiscounts={availableDiscounts}
-            appliedDiscounts={appliedDiscounts}
-            selectedDiscountIds={selectedDiscountIds}
-            onToggleDiscount={(discountId) =>
-              void toggleDiscount(discountId).catch(() =>
-                notify({ title: 'Не удалось применить скидку', type: 'error' })
-              )
-            }
-            visible
-          />
+                  .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
+              }
+              onComplete={() => void handleCompleteCurrentOrder()}
+              availableDiscounts={availableDiscounts}
+              appliedDiscounts={appliedDiscounts}
+              selectedDiscountIds={selectedDiscountIds}
+              onToggleDiscount={(discountId) =>
+                void toggleDiscount(discountId).catch(() =>
+                  notify({ title: 'Не удалось применить скидку', type: 'error' })
+                )
+              }
+              visible
+            />
+          </div>
         </div>
-      </div>
+      )}
       <PaymentModal
         open={isPaymentOpen}
         total={total}
@@ -753,80 +715,6 @@ const POSPage: React.FC = () => {
             <TabButton label="Товары" active={activeSection === 'products'} onClick={() => setActiveSection('products')} />
             <TabButton label="Клиенты" active={activeSection === 'customers'} onClick={() => setActiveSection('customers')} />
             <TabButton label="Отчёты" active={activeSection === 'reports'} onClick={() => setActiveSection('reports')} />
-          </div>
-          <div
-            className={`border-t border-slate-200 bg-white p-4 transition ${
-              isOrderDrawerOpen ? 'shadow-2xl' : 'shadow-soft'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => setOrderDrawerOpen((prev) => !prev)}
-              className="flex h-14 w-full items-center justify-between rounded-2xl bg-primary px-4 text-base font-semibold text-white shadow-soft"
-            >
-              <span>Заказ ({items.length})</span>
-              <span>{total.toFixed(2)} ₽</span>
-            </button>
-            <div
-              className={`fixed inset-x-0 bottom-36 z-30 max-h-[65vh] transform overflow-hidden rounded-t-3xl bg-white shadow-2xl transition-transform ${
-                isOrderDrawerOpen ? 'translate-y-0' : 'translate-y-full'
-              }`}
-            >
-              <OrderPanel
-                items={items}
-                subtotal={subtotal}
-                discount={discount}
-                total={total}
-                status={status}
-                isCompleting={isCompleting}
-                onIncrement={(lineId) =>
-                  void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) + 1)
-                }
-                onDecrement={(lineId) =>
-                  void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) - 1)
-                }
-                onRemove={(lineId) => void removeItem(lineId)}
-                onPay={(method) => openPaymentModal(method)}
-                onAddCustomer={() => setLoyaltyOpen(true)}
-                onClearCustomer={handleRemoveCustomer}
-                isProcessing={isPaying}
-                earnedPoints={earnedPoints}
-                customer={customer}
-                orderTagsEnabled={orderTagsEnabled}
-                orderTag={orderTag}
-                onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
-                onRedeemLoyalty={() => {
-                  if (!customer || customer.points <= 0) {
-                    notify({ title: 'Нет доступных баллов', type: 'info' });
-                    return;
-                  }
-                  setRedeemOpen(true);
-                }}
-                onClearDiscount={() =>
-                  void clearDiscount().catch(() =>
-                    notify({ title: 'Не удалось сбросить скидку', type: 'error' })
-                  )
-                }
-                onCancel={() =>
-                  void cancelOrder()
-                    .then(() => {
-                      setOrderDrawerOpen(false);
-                      notify({ title: 'Заказ отменён', type: 'info' });
-                    })
-                    .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
-                }
-                onComplete={() => void handleCompleteCurrentOrder()}
-                availableDiscounts={availableDiscounts}
-                appliedDiscounts={appliedDiscounts}
-                selectedDiscountIds={selectedDiscountIds}
-                onToggleDiscount={(discountId) =>
-                  void toggleDiscount(discountId).catch(() =>
-                    notify({ title: 'Не удалось применить скидку', type: 'error' })
-                  )
-                }
-                visible={isOrderDrawerOpen}
-              />
-            </div>
           </div>
         </div>
       ) : null}
