@@ -290,7 +290,7 @@ export const renderLandingPage = (): string => `
         </div>
         <div class="cta-row">
           <a class="cta-button" href="#signup">Регистрация</a>
-          <a class="cta-button cta-secondary" href="mailto:hello@yagopos.com">Запросить демо</a>
+          <a class="cta-button cta-secondary" href="#signup">Создать организацию</a>
         </div>
       </header>
       <div class="cta-banner">
