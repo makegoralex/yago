@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import mongoose from 'mongoose';
 
+import { AppSettingsModel } from '../models/AppSettings';
 import {
   OrganizationModel,
   type SubscriptionPlan,
@@ -8,8 +9,19 @@ import {
 } from '../models/Organization';
 import { SubscriptionPlanModel } from '../models/SubscriptionPlan';
 import { UserModel, type UserRole } from '../models/User';
-import { CategoryModel } from '../modules/catalog/catalog.model';
+import { CategoryModel, ProductModel } from '../modules/catalog/catalog.model';
+import { IngredientModel } from '../modules/catalog/ingredient.model';
+import { ModifierGroupModel } from '../modules/catalog/modifierGroup.model';
+import { CustomerModel } from '../modules/customers/customer.model';
+import { DiscountModel } from '../modules/discounts/discount.model';
+import { InventoryAuditModel } from '../modules/inventory/inventoryAudit.model';
+import { InventoryItemModel } from '../modules/inventory/inventoryItem.model';
+import { StockReceiptModel } from '../modules/inventory/stockReceipt.model';
+import { WarehouseModel } from '../modules/inventory/warehouse.model';
+import { OrderModel } from '../modules/orders/order.model';
 import { RestaurantSettingsModel } from '../modules/restaurant/restaurantSettings.model';
+import { ShiftModel } from '../modules/shifts/shift.model';
+import { SupplierModel } from '../modules/suppliers/supplier.model';
 import { generateTokens, hashPassword } from '../services/authService';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import {
@@ -30,6 +42,16 @@ const ONE_DAY_MS = 1000 * 60 * 60 * 24;
 const addDays = (date: Date, days: number) => new Date(date.getTime() + days * ONE_DAY_MS);
 
 const isSubscriptionReadOnly = (status: string | null | undefined) => ['expired', 'paused'].includes(status ?? '');
+
+const getBillingConfig = async () => {
+  const settings = await AppSettingsModel.findOne().select('billingEnabled').lean();
+  if (settings) {
+    return { billingEnabled: Boolean(settings.billingEnabled) };
+  }
+
+  const created = await AppSettingsModel.create({ billingEnabled: false });
+  return { billingEnabled: created.billingEnabled };
+};
 
 const ensureOrganizationIsEditable = async (
   req: Request,
@@ -216,6 +238,7 @@ const createOrganizationWithOwner = async (
         $set: {
           organizationId: organization._id,
           singletonKey: String(organization._id),
+          name: organization.name,
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -303,6 +326,42 @@ organizationsRouter.post('/public/create', async (req: Request, res: Response) =
     res.status(status).json({ data: null, error: displayMessage });
   }
 });
+
+organizationsRouter.get(
+  '/billing/config',
+  authMiddleware,
+  requireRole('superAdmin'),
+  async (_req: Request, res: Response) => {
+    try {
+      const config = await getBillingConfig();
+      res.json({ data: config, error: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load billing config';
+      res.status(500).json({ data: null, error: message });
+    }
+  }
+);
+
+organizationsRouter.patch(
+  '/billing/config',
+  authMiddleware,
+  requireRole('superAdmin'),
+  async (req: Request, res: Response) => {
+    try {
+      const billingEnabled = Boolean(req.body?.billingEnabled);
+      const updated = await AppSettingsModel.findOneAndUpdate(
+        {},
+        { $set: { billingEnabled } },
+        { upsert: true, new: true }
+      ).select('billingEnabled');
+
+      res.json({ data: { billingEnabled: Boolean(updated?.billingEnabled) }, error: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to update billing config';
+      res.status(500).json({ data: null, error: message });
+    }
+  }
+);
 
 organizationsRouter.get(
   '/billing/summary',
@@ -563,7 +622,10 @@ organizationsRouter.get(
       return;
     }
 
-    const pricing = await loadPlanPricing([organization.subscriptionPlan]);
+    const [pricing, billingConfig] = await Promise.all([
+      loadPlanPricing([organization.subscriptionPlan]),
+      getBillingConfig(),
+    ]);
     const billing = await synchronizeOrganizationBilling(organization as any, pricing);
 
     res.json({
@@ -574,6 +636,7 @@ organizationsRouter.get(
         subscriptionStatus: billing.status,
         createdAt: organization.createdAt,
         settings: organization.settings ?? {},
+        billingEnabled: billingConfig.billingEnabled,
         billing: {
           ...billing,
           trialEndsAt: billing.trialEndsAt ?? null,
@@ -794,12 +857,33 @@ organizationsRouter.delete(
         return;
       }
 
-      const result = await OrganizationModel.findByIdAndDelete(organizationId);
+      const organizationObjectId = new mongoose.Types.ObjectId(organizationId);
+      const organization = await OrganizationModel.findById(organizationObjectId);
 
-      if (!result) {
+      if (!organization) {
         res.status(404).json({ data: null, error: 'Organization not found' });
         return;
       }
+
+      await Promise.all([
+        CategoryModel.deleteMany({ organizationId: organizationObjectId }),
+        ProductModel.deleteMany({ organizationId: organizationObjectId }),
+        IngredientModel.deleteMany({ organizationId: organizationObjectId }),
+        ModifierGroupModel.deleteMany({ organizationId: organizationObjectId }),
+        CustomerModel.deleteMany({ organizationId: organizationObjectId }),
+        DiscountModel.deleteMany({ organizationId: organizationObjectId }),
+        OrderModel.deleteMany({ organizationId: organizationObjectId }),
+        ShiftModel.deleteMany({ organizationId: organizationObjectId }),
+        SupplierModel.deleteMany({ organizationId: organizationObjectId }),
+        WarehouseModel.deleteMany({ organizationId: organizationObjectId }),
+        InventoryItemModel.deleteMany({ organizationId: organizationObjectId }),
+        InventoryAuditModel.deleteMany({ organizationId: organizationObjectId }),
+        StockReceiptModel.deleteMany({ organizationId: organizationObjectId }),
+        RestaurantSettingsModel.deleteMany({ organizationId: organizationObjectId }),
+        UserModel.deleteMany({ organizationId: organizationObjectId }),
+      ]);
+
+      await OrganizationModel.deleteOne({ _id: organizationObjectId });
 
       res.json({ data: { id: organizationId }, error: null });
     } catch (error) {
