@@ -1,5 +1,9 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import api from '../lib/api';
+import { useAuthStore } from '../store/auth';
+import type { AuthUser } from '../store/auth';
+import { useToast } from '../providers/ToastProvider';
 import LandingHeader from '../components/ui/LandingHeader';
 import { blogPosts, newsItems } from '../constants/content';
 
