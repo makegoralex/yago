@@ -244,6 +244,7 @@ textarea:focus {
 
 .light .pos-shell {
   background: var(--bg-main);
+  background-image: none;
 }
 
 .landing-shell {
