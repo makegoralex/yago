@@ -21,7 +21,7 @@ type LandingHeaderProps = {
 const LandingHeader: React.FC<LandingHeaderProps> = ({
   onCtaClick,
   ctaLabel = 'Создать организацию',
-  ctaHref = '/#signup',
+  ctaHref = '/login',
 }) => {
   const [compact, setCompact] = useState(false);
   const { setThemeForScope } = useTheme();

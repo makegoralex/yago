@@ -124,13 +124,9 @@ const LandingPage: React.FC = () => {
               <p>Сечас Yago POS доступен бесплатно.</p>
               <p>В будущем сервис станет платным — об этом мы предупредим заранее.</p>
             </div>
-            <button
-              type="button"
-              onClick={() => authSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
-              className={primaryButtonClass}
-            >
+            <a href="/login" className={primaryButtonClass}>
               Создать организацию
-            </button>
+            </a>
           </div>
           <div className="order-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="space-y-4">
