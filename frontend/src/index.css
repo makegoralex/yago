@@ -215,6 +215,7 @@ textarea:focus {
 
 .pos-shell {
   background: var(--bg-main);
+  background-image: none;
   color: var(--text-primary);
 }
 

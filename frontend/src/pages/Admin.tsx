@@ -3039,18 +3039,8 @@ const AdminPage: React.FC = () => {
               </button>
             </div>
           </div>
-          <div className="flex items-center justify-between md:hidden">
+          <div className="flex items-center md:hidden">
             <p className="text-sm font-semibold text-slate-700">{currentTabLabel}</p>
-            <button
-              type="button"
-              onClick={() => setIsNavOpen((prev) => !prev)}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
-            >
-              Разделы
-              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
           </div>
           {isNavOpen ? (
             <div className="grid gap-2 pb-2 md:hidden">
