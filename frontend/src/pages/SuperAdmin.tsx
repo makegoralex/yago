@@ -97,6 +97,10 @@ const SuperAdminPage: React.FC = () => {
   const [organizationsError, setOrganizationsError] = useState('');
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
   const [billingSummaryError, setBillingSummaryError] = useState('');
+  const [billingEnabled, setBillingEnabled] = useState<boolean | null>(null);
+  const [billingConfigLoading, setBillingConfigLoading] = useState(false);
+  const [billingConfigError, setBillingConfigError] = useState('');
+  const [billingConfigSaving, setBillingConfigSaving] = useState(false);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState('');
@@ -253,6 +257,20 @@ const SuperAdminPage: React.FC = () => {
     }
   }, []);
 
+  const fetchBillingConfig = useCallback(async () => {
+    setBillingConfigLoading(true);
+    setBillingConfigError('');
+
+    try {
+      const response = await api.get('/api/organizations/billing/config');
+      setBillingEnabled(Boolean(response.data?.data?.billingEnabled));
+    } catch (error) {
+      setBillingConfigError(extractErrorMessage(error, 'Не удалось загрузить настройки биллинга'));
+    } finally {
+      setBillingConfigLoading(false);
+    }
+  }, []);
+
   const fetchUsers = useCallback(async () => {
     setLoadingUsers(true);
     setUsersError('');
@@ -272,7 +290,21 @@ const SuperAdminPage: React.FC = () => {
     void fetchOrganizations();
     void fetchUsers();
     void fetchBillingSummary();
-  }, [fetchBillingSummary, fetchOrganizations, fetchUsers]);
+    void fetchBillingConfig();
+  }, [fetchBillingConfig, fetchBillingSummary, fetchOrganizations, fetchUsers]);
+
+  const handleToggleBilling = async (nextValue: boolean) => {
+    setBillingConfigSaving(true);
+    setBillingConfigError('');
+    try {
+      const response = await api.patch('/api/organizations/billing/config', { billingEnabled: nextValue });
+      setBillingEnabled(Boolean(response.data?.data?.billingEnabled));
+    } catch (error) {
+      setBillingConfigError(extractErrorMessage(error, 'Не удалось обновить настройки биллинга'));
+    } finally {
+      setBillingConfigSaving(false);
+    }
+  };
 
   const handleCreateOrganization = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -557,6 +589,28 @@ const SuperAdminPage: React.FC = () => {
             {billingSummaryError}
           </div>
         )}
+
+        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-semibold text-slate-900">Оплата и триал включены</p>
+            <p className="text-xs text-slate-500">
+              Выключено — доступ бесплатный. Включите, чтобы активировать триал и будущие платежи.
+            </p>
+            {billingConfigError ? (
+              <p className="mt-2 text-xs text-rose-600">{billingConfigError}</p>
+            ) : null}
+          </div>
+          <label className="flex items-center gap-3 text-sm font-semibold text-slate-700">
+            <span>{billingEnabled ? 'Включено' : 'Выключено'}</span>
+            <input
+              type="checkbox"
+              checked={Boolean(billingEnabled)}
+              disabled={billingConfigLoading || billingConfigSaving}
+              onChange={(event) => handleToggleBilling(event.target.checked)}
+              className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary"
+            />
+          </label>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
