@@ -3094,10 +3094,10 @@ const AdminPage: React.FC = () => {
           <div
             className={`flex flex-col gap-3 rounded-2xl border p-4 shadow-sm ${
               billingLocked
-                ? 'border-rose-200 bg-rose-50'
+                ? 'border-[color:color-mix(in_srgb,var(--accent-danger)_40%,var(--border-soft))] bg-[color:color-mix(in_srgb,var(--accent-danger)_18%,var(--bg-card))]'
                 : billing?.plan === 'trial'
-                  ? 'border-amber-200 bg-amber-50'
-                  : 'border-emerald-200 bg-emerald-50'
+                  ? 'border-[color:color-mix(in_srgb,var(--accent-warning)_40%,var(--border-soft))] bg-[color:color-mix(in_srgb,var(--accent-warning)_18%,var(--bg-card))]'
+                  : 'border-[color:color-mix(in_srgb,var(--accent-secondary)_40%,var(--border-soft))] bg-[color:color-mix(in_srgb,var(--accent-secondary)_12%,var(--bg-card))]'
             }`}
           >
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -3106,7 +3106,7 @@ const AdminPage: React.FC = () => {
                   Статус подписки: {billing?.status ?? '—'}
                   {billing?.plan ? ` (${billing.plan === 'trial' ? 'триал' : 'оплачено'})` : ''}
                 </p>
-                <p className="text-xs text-slate-700">
+                <p className="text-xs text-slate-600">
                   {billing?.plan === 'trial'
                     ? `Демо до ${formatBillingDate(billing?.trialEndsAt)}`
                     : `Следующий платёж: ${formatBillingDate(billing?.nextPaymentDueAt)}`}
@@ -3131,13 +3131,15 @@ const AdminPage: React.FC = () => {
               </div>
             </div>
             {billingLocked ? (
-              <p className="text-xs font-semibold text-rose-700">
+              <p className="text-xs font-semibold text-slate-600">
                 Подписка неактивна. Продлите её в настройках, чтобы снова редактировать данные.
               </p>
             ) : null}
           </div>
           {billingError ? (
-            <div className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs text-rose-800">{billingError}</div>
+            <div className="rounded-xl border border-[color:color-mix(in_srgb,var(--accent-danger)_40%,var(--border-soft))] bg-[color:color-mix(in_srgb,var(--accent-danger)_18%,var(--bg-card))] px-4 py-3 text-xs text-slate-600">
+              {billingError}
+            </div>
           ) : null}
         </div>
 

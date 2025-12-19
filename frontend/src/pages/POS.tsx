@@ -475,7 +475,7 @@ const POSPage: React.FC = () => {
           </p>
         ) : null}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-2 xl:gap-3">
         <div className="custom-scrollbar hidden min-h-0 flex-shrink-0 lg:flex lg:h-full lg:w-auto lg:overflow-y-auto">
           <CategorySidebar
             categories={categories}
@@ -484,7 +484,7 @@ const POSPage: React.FC = () => {
             collapsed={!isDesktop}
           />
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-w-0">
           {shouldShowProductSearch ? (
             <div className="mb-3 flex flex-col gap-2">
               <ProductSearchBar
@@ -661,7 +661,7 @@ const POSPage: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="hidden min-h-0 lg:flex lg:h-full lg:min-w-[280px] lg:w-[280px] lg:max-w-[320px] xl:min-w-[320px] xl:w-[320px] 2xl:w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
+        <div className="hidden min-h-0 lg:flex lg:h-full lg:min-w-[260px] lg:w-[260px] lg:max-w-[300px] xl:min-w-[300px] xl:w-[300px] 2xl:w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
           <OrderPanel
             items={items}
             subtotal={subtotal}
