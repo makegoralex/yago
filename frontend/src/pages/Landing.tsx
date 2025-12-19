@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import LandingHeader from '../components/ui/LandingHeader';
+import { blogPosts, newsItems } from '../constants/content';
 
 const featureGroups = [
   {
@@ -29,12 +30,78 @@ const featureGroups = [
 ];
 
 const LandingPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { setSession } = useAuthStore();
+  const { notify } = useToast();
+  const authSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const [organizationName, setOrganizationName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [signupLoading, setSignupLoading] = useState(false);
+
   const primaryButtonClass =
     'inline-flex items-center justify-center rounded-[12px] bg-primary px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark';
 
+  const extractTokens = (payload: any) => {
+    const accessToken = payload?.accessToken ?? payload?.tokens?.accessToken;
+    const refreshToken = payload?.refreshToken ?? payload?.tokens?.refreshToken;
+    if (!accessToken || !refreshToken) {
+      throw new Error('Tokens are missing in response');
+    }
+    return { accessToken, refreshToken };
+  };
+
+  const normalizeUser = (payloadUser: any): AuthUser => {
+    const identifier = payloadUser?.id ?? payloadUser?._id;
+    if (!identifier) {
+      throw new Error('User identifier is missing');
+    }
+
+    return {
+      _id: identifier,
+      id: identifier,
+      name: payloadUser?.name ?? 'Новый пользователь',
+      email: payloadUser?.email ?? email,
+      role: payloadUser?.role ?? 'owner',
+      organizationId: payloadUser?.organizationId ?? payloadUser?.organization?.id,
+    };
+  };
+
+  const handleSignup = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSignupLoading(true);
+    try {
+      const response = await api.post('/api/organizations/public/create', {
+        name: organizationName,
+        owner: { name: ownerName, email, password },
+      });
+
+      const rawPayload = response.data?.data ?? response.data;
+      const tokens = extractTokens(rawPayload);
+      const payloadUser = rawPayload?.owner ?? rawPayload?.user;
+      const user = normalizeUser(payloadUser);
+      user.organizationId = user.organizationId ?? rawPayload?.organization?.id;
+
+      setSession({ user, ...tokens, remember: true });
+      notify({
+        title: 'Организация создана',
+        description: 'Мы настроили базовые категории и подключили ваш кабинет.',
+        type: 'success',
+      });
+      navigate('/pos');
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error ?? 'Попробуйте еще раз';
+      notify({ title: 'Не удалось зарегистрироваться', description: errorMessage, type: 'error' });
+    } finally {
+      setSignupLoading(false);
+    }
+  };
+
   return (
-    <div className="landing-shell min-h-screen">
-      <LandingHeader />
+    <div className="landing-shell min-h-screen bg-white">
+      <LandingHeader onCtaClick={() => authSectionRef.current?.scrollIntoView({ behavior: 'smooth' })} />
 
       <main className="mx-auto flex max-w-6xl flex-col gap-10 px-4 pb-16 pt-10 sm:px-6 lg:gap-14">
         <section className="grid gap-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-10 lg:grid-cols-[1.1fr_0.9fr]">
@@ -60,19 +127,19 @@ const LandingPage: React.FC = () => {
           <div className="order-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div className="h-8 w-32 rounded-xl bg-[#EEF2F7]" />
+                <div className="h-8 w-32 rounded-xl bg-[#F3F4F6]" />
                 <div className="h-8 w-20 rounded-xl bg-[#EDE9FE]" />
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-2xl bg-[#EEF2F7]" />
-                  <div className="h-10 flex-1 rounded-2xl bg-[#F1F5F9]" />
+                  <div className="h-10 w-10 rounded-2xl bg-[#F3F4F6]" />
+                  <div className="h-10 flex-1 rounded-2xl bg-[#F3F4F6]" />
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="h-20 rounded-2xl bg-[#F8FAFC]" />
-                  <div className="h-20 rounded-2xl bg-[#F8FAFC]" />
-                  <div className="h-20 rounded-2xl bg-[#F8FAFC]" />
-                  <div className="h-20 rounded-2xl bg-[#F8FAFC]" />
+                  <div className="h-20 rounded-2xl bg-[#F5F5F5]" />
+                  <div className="h-20 rounded-2xl bg-[#F5F5F5]" />
+                  <div className="h-20 rounded-2xl bg-[#F5F5F5]" />
+                  <div className="h-20 rounded-2xl bg-[#F5F5F5]" />
                 </div>
                 <div className="mt-4 h-12 rounded-2xl bg-[#EDE9FE]" />
               </div>
@@ -111,12 +178,136 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
+        <section id="blog" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 className="heading-font text-3xl font-semibold text-slate-900">Блог кофейни</h2>
+            <Link to="/blog" className="text-sm font-semibold text-primary">
+              Все статьи
+            </Link>
+          </div>
+          <div className="mt-6 grid gap-4 lg:grid-cols-3">
+            {blogPosts.slice(0, 3).map((post) => (
+              <article key={post.slug} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{post.date}</div>
+                <h3 className="mt-2 text-lg font-semibold text-slate-900">{post.title}</h3>
+                <p className="mt-2 text-sm text-slate-600">{post.excerpt}</p>
+                <Link to={`/blog/${post.slug}`} className="mt-3 inline-flex text-sm font-semibold text-primary">
+                  Читать статью
+                </Link>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section id="news" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 className="heading-font text-3xl font-semibold text-slate-900">Что нового</h2>
+            <Link to="/news" className="text-sm font-semibold text-primary">
+              Все новости
+            </Link>
+          </div>
+          <div className="mt-6 grid gap-4 lg:grid-cols-3">
+            {newsItems.slice(0, 3).map((item) => (
+              <article key={item.slug} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{item.date}</div>
+                <h3 className="mt-2 text-lg font-semibold text-slate-900">{item.title}</h3>
+                <p className="mt-2 text-sm text-slate-600">{item.description}</p>
+                <Link to={`/news/${item.slug}`} className="mt-3 inline-flex text-sm font-semibold text-primary">
+                  Открыть новость
+                </Link>
+              </article>
+            ))}
+          </div>
+        </section>
+
         <section id="progress" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
           <h2 className="heading-font text-3xl font-semibold text-slate-900">Система постоянно развивается</h2>
           <div className="mt-4 space-y-3 text-base text-slate-600">
             <p>Мы регулярно улучшаем интерфейс и добавляем новые возможности.</p>
             <p>Приоритеты развития формируются на основе реального использования системы в кофейне.</p>
             <p>Без резких изменений и «ломающих» обновлений.</p>
+          </div>
+        </section>
+
+        <section
+          ref={authSectionRef}
+          id="signup"
+          className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8"
+        >
+          <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+            <div className="space-y-3">
+              <h2 className="heading-font text-3xl font-semibold text-slate-900">Создать организацию</h2>
+              <p className="text-base text-slate-600">
+                Заполните короткую форму — доступ владельца появится сразу после регистрации.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <form className="space-y-4" onSubmit={handleSignup}>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700" htmlFor="organizationName">
+                    Название кофейни
+                  </label>
+                  <input
+                    id="organizationName"
+                    required
+                    value={organizationName}
+                    onChange={(event) => setOrganizationName(event.target.value)}
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm transition focus:border-primary"
+                    placeholder="Например, Кофе на районе"
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700" htmlFor="ownerName">
+                      Имя владельца
+                    </label>
+                    <input
+                      id="ownerName"
+                      required
+                      value={ownerName}
+                      onChange={(event) => setOwnerName(event.target.value)}
+                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm transition focus:border-primary"
+                      placeholder="Александр"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700" htmlFor="ownerEmail">
+                      Email владельца
+                    </label>
+                    <input
+                      id="ownerEmail"
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm transition focus:border-primary"
+                      placeholder="owner@coffee.ru"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700" htmlFor="ownerPassword">
+                    Пароль
+                  </label>
+                  <input
+                    id="ownerPassword"
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm transition focus:border-primary"
+                    placeholder="Придумайте надёжный пароль"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={signupLoading}
+                  className="flex h-12 w-full items-center justify-center rounded-[12px] bg-primary text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark disabled:opacity-70"
+                >
+                  {signupLoading ? 'Создаем аккаунт...' : 'Создать организацию'}
+                </button>
+              </form>
+            </div>
           </div>
         </section>
 
