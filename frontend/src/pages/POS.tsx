@@ -426,7 +426,7 @@ const POSPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen min-h-0 flex-col gap-3 overflow-hidden bg-slate-100 px-3 py-3 pb-28 lg:px-4 lg:pb-5">
+    <div className="pos-shell flex h-screen min-h-0 flex-col gap-3 overflow-hidden px-3 py-3 pb-28 lg:px-4 lg:pb-5">
       <HeaderBar
         onShowHistory={() => setHistoryOpen(true)}
         onShowShift={() => setShiftPanelOpen(true)}
@@ -481,6 +481,7 @@ const POSPage: React.FC = () => {
             categories={categories}
             activeCategoryId={activeCategoryId}
             onSelectCategory={(categoryId) => setActiveCategory(categoryId)}
+            collapsed={!isDesktop}
           />
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -660,7 +661,7 @@ const POSPage: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="hidden min-h-0 lg:flex lg:h-full lg:min-w-[320px] lg:max-w-[360px] lg:w-[320px] xl:w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
+        <div className="hidden min-h-0 lg:flex lg:h-full lg:min-w-[280px] lg:w-[280px] lg:max-w-[320px] xl:min-w-[320px] xl:w-[320px] 2xl:w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
           <OrderPanel
             items={items}
             subtotal={subtotal}
