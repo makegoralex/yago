@@ -215,7 +215,13 @@ textarea:focus {
 
 .pos-shell {
   background: var(--bg-main);
+  background-image: none;
   color: var(--text-primary);
+}
+
+.pos-shell .shadow-soft,
+.pos-shell .shadow-2xl {
+  box-shadow: none !important;
 }
 
 .pos-shell .bg-white,
