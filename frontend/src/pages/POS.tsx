@@ -30,6 +30,7 @@ const POSPage: React.FC = () => {
   const isTablet = useMediaQuery('(min-width: 1024px)');
   const {
     billing,
+    billingEnabled,
     billingLocked,
     refreshBilling,
     loading: billingLoading,
@@ -432,49 +433,51 @@ const POSPage: React.FC = () => {
         onShowShift={() => setShiftPanelOpen(true)}
         shiftStatus={shiftStatus}
       />
-      <div
-        className={`rounded-xl border px-4 py-3 text-sm shadow-sm ${
-          billingLocked ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-white'
-        }`}
-      >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">
-              Подписка: {billing?.status ?? '—'}
-              {billing?.plan ? ` (${billing.plan === 'trial' ? 'триал' : 'оплачено'})` : ''}
-            </p>
-            <p className="text-xs text-slate-600">
-              {billing?.plan === 'trial'
-                ? `Демо до ${formatBillingDate(billing?.trialEndsAt)}`
-                : `Следующий платёж: ${formatBillingDate(billing?.nextPaymentDueAt)}`}
-            </p>
+      {billingEnabled ? (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm shadow-sm ${
+            billingLocked ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-white'
+          }`}
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                Подписка: {billing?.status ?? '—'}
+                {billing?.plan ? ` (${billing.plan === 'trial' ? 'триал' : 'оплачено'})` : ''}
+              </p>
+              <p className="text-xs text-slate-600">
+                {billing?.plan === 'trial'
+                  ? `Демо до ${formatBillingDate(billing?.trialEndsAt)}`
+                  : `Следующий платёж: ${formatBillingDate(billing?.nextPaymentDueAt)}`}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/settings')}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white shadow-soft transition hover:bg-primary-dark"
+              >
+                Перейти к продлению
+              </button>
+              <button
+                type="button"
+                onClick={() => void refreshBilling()}
+                disabled={billingLoading}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 disabled:opacity-60"
+              >
+                {billingLoading ? 'Обновляем…' : 'Обновить статус'}
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => navigate('/settings')}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white shadow-soft transition hover:bg-primary-dark"
-            >
-              Перейти к продлению
-            </button>
-            <button
-              type="button"
-              onClick={() => void refreshBilling()}
-              disabled={billingLoading}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 disabled:opacity-60"
-            >
-              {billingLoading ? 'Обновляем…' : 'Обновить статус'}
-            </button>
-          </div>
+          {billingError ? (
+            <p className="mt-2 text-xs text-rose-700">{billingError}</p>
+          ) : billingLocked ? (
+            <p className="mt-2 text-xs text-rose-700">
+              Подписка неактивна. Продлите её в настройках, чтобы пробивать чеки и изменять данные.
+            </p>
+          ) : null}
         </div>
-        {billingError ? (
-          <p className="mt-2 text-xs text-rose-700">{billingError}</p>
-        ) : billingLocked ? (
-          <p className="mt-2 text-xs text-rose-700">
-            Подписка неактивна. Продлите её в настройках, чтобы пробивать чеки и изменять данные.
-          </p>
-        ) : null}
-      </div>
+      ) : null}
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-2 xl:gap-3">
         <div className="custom-scrollbar hidden min-h-0 flex-shrink-0 lg:flex lg:h-full lg:w-auto lg:overflow-y-auto">
           <CategorySidebar

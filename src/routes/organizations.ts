@@ -621,7 +621,10 @@ organizationsRouter.get(
       return;
     }
 
-    const pricing = await loadPlanPricing([organization.subscriptionPlan]);
+    const [pricing, billingConfig] = await Promise.all([
+      loadPlanPricing([organization.subscriptionPlan]),
+      getBillingConfig(),
+    ]);
     const billing = await synchronizeOrganizationBilling(organization as any, pricing);
 
     res.json({
@@ -632,6 +635,7 @@ organizationsRouter.get(
         subscriptionStatus: billing.status,
         createdAt: organization.createdAt,
         settings: organization.settings ?? {},
+        billingEnabled: billingConfig.billingEnabled,
         billing: {
           ...billing,
           trialEndsAt: billing.trialEndsAt ?? null,

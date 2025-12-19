@@ -411,6 +411,7 @@ const AdminPage: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const {
     billing,
+    billingEnabled,
     billingLocked,
     refreshBilling,
     loading: billingLoading,
@@ -3090,6 +3091,7 @@ const AdminPage: React.FC = () => {
           </div>
         </div>
 
+        {billingEnabled ? (
         <div className="mb-6 space-y-2">
           <div
             className={`flex flex-col gap-3 rounded-2xl border p-4 shadow-sm ${
@@ -3142,6 +3144,7 @@ const AdminPage: React.FC = () => {
             </div>
           ) : null}
         </div>
+        ) : null}
 
         {activeTab === 'dashboard' ? (
         loadingDashboard ? (

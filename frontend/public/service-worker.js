@@ -1,7 +1,5 @@
-const CACHE_NAME = 'yago-pos-cache-v1';
+const CACHE_NAME = 'yago-pos-cache-v2';
 const APP_SHELL = [
-  '/',
-  '/index.html',
   '/manifest.json',
 ];
 
@@ -43,20 +41,40 @@ self.addEventListener('fetch', (event) => {
         }
       })
     );
-  } else {
+  }
+
+  if (request.mode === 'navigate' || request.url.endsWith('/index.html')) {
     event.respondWith(
       (async () => {
-        const cached = await caches.match(request);
-        if (cached) {
-          return cached;
-        }
-
         try {
-          return await fetch(request);
+          const response = await fetch(request);
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(request, response.clone());
+          return response;
         } catch (error) {
+          const cached = await caches.match(request);
+          if (cached) {
+            return cached;
+          }
           return new Response('Offline', { status: 503 });
         }
       })()
     );
+    return;
   }
+
+  event.respondWith(
+    (async () => {
+      const cached = await caches.match(request);
+      if (cached) {
+        return cached;
+      }
+
+      try {
+        return await fetch(request);
+      } catch (error) {
+        return new Response('Offline', { status: 503 });
+      }
+    })()
+  );
 });
