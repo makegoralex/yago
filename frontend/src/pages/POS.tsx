@@ -30,6 +30,7 @@ const POSPage: React.FC = () => {
   const isTablet = useMediaQuery('(min-width: 1024px)');
   const {
     billing,
+    billingEnabled,
     billingLocked,
     refreshBilling,
     loading: billingLoading,
@@ -426,64 +427,67 @@ const POSPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen min-h-0 flex-col gap-3 overflow-hidden bg-slate-100 px-3 py-3 pb-28 lg:px-4 lg:pb-5">
+    <div className="pos-shell flex h-screen min-h-0 flex-col gap-3 overflow-hidden px-3 py-3 pb-28 lg:px-4 lg:pb-5 xl:px-5">
       <HeaderBar
         onShowHistory={() => setHistoryOpen(true)}
         onShowShift={() => setShiftPanelOpen(true)}
         shiftStatus={shiftStatus}
       />
-      <div
-        className={`rounded-xl border px-4 py-3 text-sm shadow-sm ${
-          billingLocked ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-white'
-        }`}
-      >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">
-              Подписка: {billing?.status ?? '—'}
-              {billing?.plan ? ` (${billing.plan === 'trial' ? 'триал' : 'оплачено'})` : ''}
-            </p>
-            <p className="text-xs text-slate-600">
-              {billing?.plan === 'trial'
-                ? `Демо до ${formatBillingDate(billing?.trialEndsAt)}`
-                : `Следующий платёж: ${formatBillingDate(billing?.nextPaymentDueAt)}`}
-            </p>
+      {billingEnabled ? (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm shadow-sm ${
+            billingLocked ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-white'
+          }`}
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                Подписка: {billing?.status ?? '—'}
+                {billing?.plan ? ` (${billing.plan === 'trial' ? 'триал' : 'оплачено'})` : ''}
+              </p>
+              <p className="text-xs text-slate-600">
+                {billing?.plan === 'trial'
+                  ? `Демо до ${formatBillingDate(billing?.trialEndsAt)}`
+                  : `Следующий платёж: ${formatBillingDate(billing?.nextPaymentDueAt)}`}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/settings')}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white shadow-soft transition hover:bg-primary-dark"
+              >
+                Перейти к продлению
+              </button>
+              <button
+                type="button"
+                onClick={() => void refreshBilling()}
+                disabled={billingLoading}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 disabled:opacity-60"
+              >
+                {billingLoading ? 'Обновляем…' : 'Обновить статус'}
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => navigate('/settings')}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white shadow-soft transition hover:bg-primary-dark"
-            >
-              Перейти к продлению
-            </button>
-            <button
-              type="button"
-              onClick={() => void refreshBilling()}
-              disabled={billingLoading}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 disabled:opacity-60"
-            >
-              {billingLoading ? 'Обновляем…' : 'Обновить статус'}
-            </button>
-          </div>
+          {billingError ? (
+            <p className="mt-2 text-xs text-rose-700">{billingError}</p>
+          ) : billingLocked ? (
+            <p className="mt-2 text-xs text-rose-700">
+              Подписка неактивна. Продлите её в настройках, чтобы пробивать чеки и изменять данные.
+            </p>
+          ) : null}
         </div>
-        {billingError ? (
-          <p className="mt-2 text-xs text-rose-700">{billingError}</p>
-        ) : billingLocked ? (
-          <p className="mt-2 text-xs text-rose-700">
-            Подписка неактивна. Продлите её в настройках, чтобы пробивать чеки и изменять данные.
-          </p>
-        ) : null}
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
+      ) : null}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-2 xl:gap-3">
         <div className="custom-scrollbar hidden min-h-0 flex-shrink-0 lg:flex lg:h-full lg:w-auto lg:overflow-y-auto">
           <CategorySidebar
             categories={categories}
             activeCategoryId={activeCategoryId}
             onSelectCategory={(categoryId) => setActiveCategory(categoryId)}
+            collapsed={false}
           />
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-w-0">
           {shouldShowProductSearch ? (
             <div className="mb-3 flex flex-col gap-2">
               <ProductSearchBar
@@ -660,7 +664,7 @@ const POSPage: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="hidden min-h-0 lg:flex lg:h-full lg:min-w-[320px] lg:max-w-[360px] lg:w-[320px] xl:w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
+        <div className="hidden min-h-0 lg:flex lg:h-full lg:flex-[0_0_300px] lg:min-w-[300px] lg:max-w-[300px] xl:flex-[0_0_320px] xl:min-w-[320px] xl:max-w-[320px] 2xl:flex-[0_0_360px] 2xl:min-w-[360px] 2xl:max-w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
           <OrderPanel
             items={items}
             subtotal={subtotal}

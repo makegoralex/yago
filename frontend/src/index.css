@@ -7,33 +7,59 @@
 :root {
   color-scheme: dark;
 
-  --color-bg: #f6f7fb;
-  --color-bg-card: #ffffff;
-  --color-border: #e2e8f0;
-  --color-text: #0f172a;
-  --color-accent: #7c3aed;
+  --bg-main: #0b1020;
+  --bg-secondary: #11162a;
+  --bg-card: #151b34;
+
+  --accent-primary: #7c3aed;
+  --accent-secondary: #22c55e;
+  --accent-danger: #ef4444;
+  --accent-warning: #f59e0b;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --border-soft: rgba(255, 255, 255, 0.06);
+  --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.35);
+
+  --color-bg: var(--bg-main);
+  --color-bg-card: var(--bg-card);
+  --color-border: var(--border-soft);
+  --color-text: var(--text-primary);
+  --color-accent: var(--accent-primary);
   --color-accent-hover: #6d28d9;
-  --color-danger: #ef4444;
-  --color-info: #475569;
+  --color-danger: var(--accent-danger);
+  --color-info: var(--text-secondary);
 
   --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: 'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   --radius-base: 12px;
-  --shadow-card: 0 25px 70px rgba(0, 0, 0, 0.35);
 }
 
-.dark {
-  color-scheme: dark;
+.light {
+  color-scheme: light;
 
-  --color-bg: #111827;
-  --color-bg-card: #0f172a;
-  --color-border: #1f2937;
-  --color-text: #f3f4f6;
-  --color-accent: #7c3aed;
+  --bg-main: #f8fafc;
+  --bg-secondary: #eef2ff;
+  --bg-card: #ffffff;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  --border-soft: rgba(15, 23, 42, 0.08);
+  --shadow-card: 0 10px 30px rgba(15, 23, 42, 0.12);
+
+  --color-bg: var(--bg-main);
+  --color-bg-card: var(--bg-card);
+  --color-border: var(--border-soft);
+  --color-text: var(--text-primary);
+  --color-accent: var(--accent-primary);
   --color-accent-hover: #6d28d9;
-  --color-danger: #ef4444;
-  --color-info: #94a3b8;
+  --color-danger: var(--accent-danger);
+  --color-info: var(--text-secondary);
 }
 
 body {
@@ -108,4 +134,147 @@ textarea:focus {
 
 .heading-font {
   font-family: var(--font-display);
+}
+
+.admin-shell {
+  background:
+    radial-gradient(900px circle at 10% 0%, color-mix(in srgb, var(--accent-primary) 35%, transparent), transparent 60%),
+    radial-gradient(600px circle at 90% 10%, color-mix(in srgb, var(--accent-primary) 22%, transparent), transparent 55%),
+    var(--bg-main);
+  color: var(--color-text);
+}
+
+.admin-header,
+.admin-nav {
+  background: color-mix(in srgb, var(--bg-card) 85%, transparent);
+  border-color: color-mix(in srgb, var(--border-soft) 70%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.admin-shell .bg-white,
+.admin-shell .bg-white\/70,
+.admin-shell .bg-white\/80,
+.admin-shell .bg-white\/90,
+.admin-shell .bg-slate-50,
+.admin-shell .bg-slate-50\/70,
+.admin-shell .bg-slate-50\/80,
+.admin-shell .bg-slate-100 {
+  background-color: var(--bg-card) !important;
+}
+
+.admin-shell .bg-slate-200\/60,
+.admin-shell .bg-slate-200\/70 {
+  background-color: color-mix(in srgb, var(--border-soft) 55%, transparent) !important;
+}
+
+.admin-shell .border-slate-100,
+.admin-shell .border-slate-200,
+.admin-shell .border-slate-300 {
+  border-color: var(--border-soft) !important;
+}
+
+.admin-shell .border-slate-900 {
+  border-color: var(--accent-primary) !important;
+}
+
+.admin-shell .text-slate-600,
+.admin-shell .text-slate-500,
+.admin-shell .text-slate-400 {
+  color: var(--text-secondary) !important;
+}
+
+.admin-shell .bg-slate-900 {
+  background-color: var(--accent-primary) !important;
+}
+
+.admin-shell .text-slate-900,
+.admin-shell .text-slate-800,
+.admin-shell .text-slate-700,
+.admin-shell .text-emerald-700,
+.admin-shell .text-emerald-600 {
+  color: var(--text-primary) !important;
+}
+
+.admin-shell .bg-emerald-50,
+.admin-shell .bg-emerald-100 {
+  background-color: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-card)) !important;
+}
+
+.admin-shell .bg-emerald-500 {
+  background-color: var(--accent-primary) !important;
+}
+
+.admin-shell .border-emerald-200,
+.admin-shell .border-emerald-400 {
+  border-color: color-mix(in srgb, var(--accent-primary) 55%, var(--border-soft)) !important;
+}
+
+.admin-shell .hover\\:bg-slate-800:hover {
+  background-color: var(--color-accent-hover) !important;
+}
+
+.pos-shell {
+  background: var(--bg-main);
+  color: var(--text-primary);
+}
+
+.pos-shell .bg-white,
+.pos-shell .bg-slate-50,
+.pos-shell .bg-slate-100 {
+  background-color: var(--bg-card) !important;
+}
+
+.pos-shell .border-slate-100,
+.pos-shell .border-slate-200,
+.pos-shell .border-slate-300 {
+  border-color: var(--border-soft) !important;
+}
+
+.pos-shell .text-slate-900,
+.pos-shell .text-slate-800,
+.pos-shell .text-slate-700 {
+  color: var(--text-primary) !important;
+}
+
+.pos-shell .text-slate-600,
+.pos-shell .text-slate-500,
+.pos-shell .text-slate-400 {
+  color: var(--text-secondary) !important;
+}
+
+.landing-shell {
+  background:
+    radial-gradient(900px circle at 15% 10%, color-mix(in srgb, var(--accent-primary) 30%, transparent), transparent 55%),
+    radial-gradient(700px circle at 85% 5%, color-mix(in srgb, var(--accent-primary) 18%, transparent), transparent 50%),
+    var(--bg-main);
+  color: var(--text-primary);
+}
+
+.light .landing-shell,
+.light .admin-shell {
+  background: var(--bg-main);
+}
+
+.landing-shell .bg-white,
+.landing-shell .bg-slate-50,
+.landing-shell .bg-slate-100 {
+  background-color: var(--bg-card) !important;
+}
+
+.landing-shell .border-slate-100,
+.landing-shell .border-slate-200,
+.landing-shell .border-slate-300 {
+  border-color: var(--border-soft) !important;
+}
+
+.landing-shell .text-slate-900,
+.landing-shell .text-slate-800,
+.landing-shell .text-slate-700 {
+  color: var(--text-primary) !important;
+}
+
+.landing-shell .text-slate-600,
+.landing-shell .text-slate-500,
+.landing-shell .text-slate-400 {
+  color: var(--text-secondary) !important;
 }

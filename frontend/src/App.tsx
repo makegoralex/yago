@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import LoginPage from './pages/Login';
 import POSPage from './pages/POS';
 import AdminPage from './pages/Admin';
@@ -16,6 +16,7 @@ import ProtectedRoute from './components/layout/ProtectedRoute';
 import { type AuthUser, type UserRole, useAuthStore } from './store/auth';
 import MobileNav from './components/ui/MobileNav';
 import { useRestaurantStore } from './store/restaurant';
+import { useTheme } from './providers/ThemeProvider';
 
 const OWNER_ROLES: UserRole[] = ['owner'];
 
@@ -29,6 +30,23 @@ const getLandingRoute = (user: AuthUser | null): string => {
   }
 
   return OWNER_ROLES.includes(user.role) ? '/admin' : '/pos';
+};
+
+const ThemeScopeSync: React.FC = () => {
+  const location = useLocation();
+  const { setScope } = useTheme();
+
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.startsWith('/pos') || path.startsWith('/settings')) {
+      setScope('pos');
+      return;
+    }
+
+    setScope('admin');
+  }, [location.pathname, setScope]);
+
+  return null;
 };
 
 const App: React.FC = () => {
@@ -45,6 +63,7 @@ const App: React.FC = () => {
 
   return (
     <>
+      <ThemeScopeSync />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/blog" element={<BlogPage />} />
