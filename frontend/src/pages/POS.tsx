@@ -481,7 +481,7 @@ const POSPage: React.FC = () => {
             categories={categories}
             activeCategoryId={activeCategoryId}
             onSelectCategory={(categoryId) => setActiveCategory(categoryId)}
-            collapsed={!isDesktop}
+            collapsed={false}
           />
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-w-0">
@@ -661,7 +661,7 @@ const POSPage: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="hidden min-h-0 lg:flex lg:h-full lg:flex-[0_0_240px] lg:min-w-[240px] lg:max-w-[240px] xl:flex-[0_0_280px] xl:min-w-[280px] xl:max-w-[280px] 2xl:flex-[0_0_320px] 2xl:min-w-[320px] 2xl:max-w-[320px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
+        <div className="hidden min-h-0 lg:flex lg:h-full lg:flex-[0_0_300px] lg:min-w-[300px] lg:max-w-[300px] xl:flex-[0_0_320px] xl:min-w-[320px] xl:max-w-[320px] 2xl:flex-[0_0_360px] 2xl:min-w-[360px] 2xl:max-w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
           <OrderPanel
             items={items}
             subtotal={subtotal}
