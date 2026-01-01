@@ -195,7 +195,9 @@ const mapDiscountResponse = async (
   for (const discount of discounts) {
     const discountCategoryIds =
       Array.isArray(discount.categoryIds) && discount.categoryIds.length > 0
-        ? discount.categoryIds.map((entry) => toValidStringId(entry)).filter(Boolean)
+        ? discount.categoryIds
+            .map((entry) => toValidStringId(entry))
+            .filter((entry): entry is string => Boolean(entry))
         : [];
     const legacyCategoryId = toValidStringId(discount.categoryId);
     const combinedCategoryIds = new Set<string>(
@@ -242,7 +244,9 @@ const mapDiscountResponse = async (
   return discounts.map((discount) => {
     const rawCategoryIds =
       Array.isArray(discount.categoryIds) && discount.categoryIds.length > 0
-        ? discount.categoryIds.map((entry) => toValidStringId(entry)).filter(Boolean)
+        ? discount.categoryIds
+            .map((entry) => toValidStringId(entry))
+            .filter((entry): entry is string => Boolean(entry))
         : [];
     const fallbackCategoryId = toValidStringId(discount.categoryId);
     const categoryIds = Array.from(

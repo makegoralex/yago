@@ -2839,6 +2839,27 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const handleDeleteCustomer = async () => {
+    if (!selectedCustomer) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Удалить гостя "${selectedCustomer.name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await api.delete(`/api/customers/${selectedCustomer._id}`);
+      setCustomers((prev) => prev.filter((item) => item._id !== selectedCustomer._id));
+      setSelectedCustomer(null);
+      notify({ title: 'Гость удалён', type: 'success' });
+    } catch (error) {
+      console.error('Не удалось удалить гостя', error);
+      notify({ title: extractErrorMessage(error, 'Не удалось удалить гостя'), type: 'error' });
+    }
+  };
+
   const handleCreateSupplier = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!newSupplier.name.trim()) {
@@ -5413,6 +5434,13 @@ const AdminPage: React.FC = () => {
                               className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
                             >
                               Сохранить гостя
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleDeleteCustomer}
+                              className="w-full rounded-2xl border border-red-200 bg-red-50 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                            >
+                              Удалить гостя
                             </button>
                           </form>
                         ) : (

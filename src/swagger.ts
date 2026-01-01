@@ -2552,6 +2552,45 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
         },
       },
     },
+    '/api/customers/{id}': {
+      delete: {
+        summary: 'Delete customer',
+        tags: ['Customers'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Customer id',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Customer deleted',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        deleted: { type: 'boolean', example: true },
+                      },
+                    },
+                    error: { type: 'string', nullable: true, example: null },
+                  },
+                },
+              },
+            },
+          },
+          '404': { description: 'Customer not found' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
+        },
+      },
+    },
     '/api/customers/import': {
       post: {
         summary: 'Import customers',
