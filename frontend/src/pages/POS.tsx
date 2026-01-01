@@ -118,7 +118,7 @@ const POSPage: React.FC = () => {
   }, [fetchCatalog, fetchActiveOrders, fetchAvailableDiscounts]);
 
   useEffect(() => {
-    if (orderId || activeOrders.length === 0) {
+    if (isStartingOrder || orderId || activeOrders.length === 0) {
       return;
     }
 
@@ -128,7 +128,7 @@ const POSPage: React.FC = () => {
     }
 
     void loadOrder(draftOrder._id);
-  }, [orderId, activeOrders, loadOrder]);
+  }, [isStartingOrder, orderId, activeOrders, loadOrder]);
 
   useEffect(() => {
     if (activeSection === 'reports') {
