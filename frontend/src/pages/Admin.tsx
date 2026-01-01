@@ -2986,13 +2986,13 @@ const AdminPage: React.FC = () => {
               </div>
             </div>
             <div className="hidden flex-1 items-center justify-center md:flex">
-              <div className="flex flex-wrap justify-center gap-2 rounded-full border border-slate-200 bg-slate-50/80 px-3 py-1">
+              <div className="flex flex-wrap items-center justify-center gap-2 rounded-full border border-slate-200 bg-slate-50/80 p-1">
                 {navItems.map((item) => (
                   <button
                     key={item.id}
                     type="button"
                     onClick={() => setActiveTab(item.id)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    className={`inline-flex h-8 items-center justify-center rounded-full px-3 text-xs font-semibold transition ${
                       activeTab === item.id
                         ? 'bg-slate-900 text-white shadow-sm'
                         : 'text-slate-500 hover:text-slate-900'
