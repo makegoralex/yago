@@ -331,6 +331,21 @@ type ReceiptHistoryOrder = {
 const formatHistoryTime = (value: string): string =>
   new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
+const escapeCsvValue = (value: string | number | null | undefined): string => {
+  const normalized = value === null || value === undefined ? '' : String(value);
+  return `"${normalized.replace(/"/g, '""')}"`;
+};
+
+const escapeHtml = (value: string | number | null | undefined): string => {
+  const normalized = value === null || value === undefined ? '' : String(value);
+  return normalized
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 const mapReceiptHistoryOrder = (payload: any): ReceiptHistoryOrder => {
   const id = payload?._id ?? payload?.id ?? `${Date.now()}-${Math.random()}`;
   const createdAt =
@@ -1355,6 +1370,61 @@ const AdminPage: React.FC = () => {
     } finally {
       setSavingLoyaltyRate(false);
     }
+  };
+
+  const downloadExportFile = (content: string, filename: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const handleExportCustomersCsv = () => {
+    if (!customers.length) {
+      notify({ title: 'Нет гостей для выгрузки', type: 'info' });
+      return;
+    }
+
+    const header = ['Имя', 'Телефон', 'Email', 'Баллы', 'Выручка'];
+    const rows = customers.map((customer) => [
+      escapeCsvValue(customer.name),
+      escapeCsvValue(customer.phone ?? ''),
+      escapeCsvValue(customer.email ?? ''),
+      escapeCsvValue(customer.points),
+      escapeCsvValue(customer.totalSpent.toFixed(2)),
+    ]);
+    const csvContent = [header.map(escapeCsvValue).join(','), ...rows.map((row) => row.join(','))].join('\n');
+    downloadExportFile(csvContent, 'guests.csv', 'text/csv;charset=utf-8;');
+  };
+
+  const handleExportCustomersExcel = () => {
+    if (!customers.length) {
+      notify({ title: 'Нет гостей для выгрузки', type: 'info' });
+      return;
+    }
+
+    const header = ['Имя', 'Телефон', 'Email', 'Баллы', 'Выручка'];
+    const rows = customers
+      .map(
+        (customer) =>
+          `<tr><td>${escapeHtml(customer.name)}</td><td>${escapeHtml(customer.phone ?? '')}</td><td>${escapeHtml(
+            customer.email ?? ''
+          )}</td><td>${escapeHtml(customer.points)}</td><td>${escapeHtml(customer.totalSpent.toFixed(2))}</td></tr>`
+      )
+      .join('');
+    const table = `<table><thead><tr>${header
+      .map((label) => `<th>${escapeHtml(label)}</th>`)
+      .join('')}</tr></thead><tbody>${rows}</tbody></table>`;
+    downloadExportFile(
+      `\ufeff${table}`,
+      'guests.xls',
+      'application/vnd.ms-excel;charset=utf-8;'
+    );
   };
 
   useEffect(() => {
@@ -5219,7 +5289,29 @@ const AdminPage: React.FC = () => {
 
             {loyaltySection === 'guests' ? (
               <section className="grid gap-6 lg:grid-cols-2">
-                <Card title="Гости">
+                <Card
+                  title="Гости"
+                  actions={
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleExportCustomersCsv}
+                        disabled={customersLoading || customers.length === 0}
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-emerald-300 disabled:opacity-60"
+                      >
+                        CSV
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExportCustomersExcel}
+                        disabled={customersLoading || customers.length === 0}
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-emerald-300 disabled:opacity-60"
+                      >
+                        Excel
+                      </button>
+                    </div>
+                  }
+                >
                   {customersLoading ? (
                     <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
                   ) : (
