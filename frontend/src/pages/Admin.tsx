@@ -308,6 +308,7 @@ type AdminDiscount = {
   scope: 'order' | 'category' | 'product';
   value: number;
   categoryId?: string;
+  categoryIds?: string[];
   productId?: string;
   targetName?: string;
   autoApply: boolean;
@@ -638,6 +639,7 @@ const AdminPage: React.FC = () => {
   const [discountsError, setDiscountsError] = useState<string | null>(null);
   const [discountActionId, setDiscountActionId] = useState<string | null>(null);
   const [creatingDiscount, setCreatingDiscount] = useState(false);
+  const [editingDiscount, setEditingDiscount] = useState<AdminDiscount | null>(null);
   const restaurantName = useRestaurantStore((state) => state.name);
   const restaurantLogo = useRestaurantStore((state) => state.logoUrl);
   const enableOrderTags = useRestaurantStore((state) => state.enableOrderTags);
@@ -659,7 +661,7 @@ const AdminPage: React.FC = () => {
     type: 'percentage' as 'percentage' | 'fixed',
     scope: 'order' as 'order' | 'category' | 'product',
     value: '',
-    categoryId: '',
+    categoryIds: [] as string[],
     productId: '',
     autoApply: false,
     autoApplyDays: [] as number[],
@@ -2787,7 +2789,60 @@ const AdminPage: React.FC = () => {
     });
   };
 
-  const handleCreateDiscount = async (event: React.FormEvent<HTMLFormElement>) => {
+  const resetDiscountForm = () => {
+    setDiscountForm({
+      name: '',
+      description: '',
+      type: 'percentage',
+      scope: 'order',
+      value: '',
+      categoryIds: [],
+      productId: '',
+      autoApply: false,
+      autoApplyDays: [],
+      autoApplyStart: '',
+      autoApplyEnd: '',
+    });
+    setEditingDiscount(null);
+  };
+
+  const resolveDiscountCategoryIds = (discount: AdminDiscount): string[] => {
+    if (Array.isArray(discount.categoryIds) && discount.categoryIds.length > 0) {
+      return discount.categoryIds;
+    }
+
+    return discount.categoryId ? [discount.categoryId] : [];
+  };
+
+  const handleEditDiscount = (discount: AdminDiscount) => {
+    const categoryIds = resolveDiscountCategoryIds(discount);
+    setEditingDiscount(discount);
+    setDiscountForm({
+      name: discount.name,
+      description: discount.description ?? '',
+      type: discount.type,
+      scope: discount.scope,
+      value: discount.value.toString(),
+      categoryIds,
+      productId: discount.productId ?? '',
+      autoApply: discount.autoApply,
+      autoApplyDays: discount.autoApplyDays ?? [],
+      autoApplyStart: discount.autoApplyStart ?? '',
+      autoApplyEnd: discount.autoApplyEnd ?? '',
+    });
+  };
+
+  const toggleDiscountCategory = (categoryId: string) => {
+    setDiscountForm((prev) => {
+      const exists = prev.categoryIds.includes(categoryId);
+      const nextCategoryIds = exists
+        ? prev.categoryIds.filter((id) => id !== categoryId)
+        : [...prev.categoryIds, categoryId];
+      return { ...prev, categoryIds: nextCategoryIds };
+    });
+  };
+
+  const handleSubmitDiscount = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedName = discountForm.name.trim();
     if (!trimmedName) {
@@ -2806,7 +2861,7 @@ const AdminPage: React.FC = () => {
       return;
     }
 
-    if (discountForm.scope === 'category' && !discountForm.categoryId) {
+    if (discountForm.scope === 'category' && discountForm.categoryIds.length === 0) {
       notify({ title: 'Выберите категорию для скидки', type: 'info' });
       return;
     }
@@ -2838,8 +2893,8 @@ const AdminPage: React.FC = () => {
       autoApply: discountForm.scope === 'category' ? discountForm.autoApply : false,
     };
 
-    if (discountForm.scope === 'category' && discountForm.categoryId) {
-      payload.categoryId = discountForm.categoryId;
+    if (discountForm.scope === 'category') {
+      payload.categoryIds = discountForm.categoryIds;
     }
 
     if (discountForm.scope === 'product' && discountForm.productId) {
@@ -2854,28 +2909,20 @@ const AdminPage: React.FC = () => {
 
     try {
       setCreatingDiscount(true);
-      const response = await api.post('/api/admin/discounts', payload);
-      const created = getResponseData<AdminDiscount>(response);
-      if (created) {
-        setDiscounts((prev) => [created, ...prev]);
-        notify({ title: 'Скидка создана', type: 'success' });
-        setDiscountForm({
-          name: '',
-          description: '',
-          type: 'percentage',
-          scope: 'order',
-          value: '',
-          categoryId: '',
-          productId: '',
-          autoApply: false,
-          autoApplyDays: [],
-          autoApplyStart: '',
-          autoApplyEnd: '',
-        });
+      const response = editingDiscount
+        ? await api.patch(`/api/admin/discounts/${editingDiscount._id}`, payload)
+        : await api.post('/api/admin/discounts', payload);
+      const saved = getResponseData<AdminDiscount>(response);
+      if (saved) {
+        setDiscounts((prev) =>
+          editingDiscount ? prev.map((item) => (item._id === saved._id ? saved : item)) : [saved, ...prev]
+        );
+        notify({ title: editingDiscount ? 'Скидка обновлена' : 'Скидка создана', type: 'success' });
+        resetDiscountForm();
       }
     } catch (error) {
-      console.error('Не удалось создать скидку', error);
-      notify({ title: 'Не удалось создать скидку', type: 'error' });
+      console.error('Не удалось сохранить скидку', error);
+      notify({ title: 'Не удалось сохранить скидку', type: 'error' });
     } finally {
       setCreatingDiscount(false);
     }
@@ -5564,8 +5611,8 @@ const AdminPage: React.FC = () => {
 
       {activeTab === 'discounts' ? (
         <div className="space-y-6">
-          <Card title="Новая скидка">
-            <form onSubmit={handleCreateDiscount} className="grid gap-4 text-sm md:grid-cols-2">
+          <Card title={editingDiscount ? 'Редактирование скидки' : 'Новая скидка'}>
+            <form onSubmit={handleSubmitDiscount} className="grid gap-4 text-sm md:grid-cols-2">
               <div className="space-y-3">
                 <label className="block text-slate-600">
                   <span className="mb-1 block text-xs uppercase">Название</span>
@@ -5596,7 +5643,7 @@ const AdminPage: React.FC = () => {
                       setDiscountForm((prev) => ({
                         ...prev,
                         scope,
-                        categoryId: scope === 'category' ? prev.categoryId : '',
+                        categoryIds: scope === 'category' ? prev.categoryIds : [],
                         productId: scope === 'product' ? prev.productId : '',
                         autoApply: scope === 'category' ? prev.autoApply : false,
                         autoApplyDays: scope === 'category' ? prev.autoApplyDays : [],
@@ -5612,21 +5659,29 @@ const AdminPage: React.FC = () => {
                   </select>
                 </label>
                 {discountForm.scope === 'category' ? (
-                  <label className="block text-slate-600">
-                    <span className="mb-1 block text-xs uppercase">Категория</span>
-                    <select
-                      value={discountForm.categoryId}
-                      onChange={(event) => setDiscountForm((prev) => ({ ...prev, categoryId: event.target.value }))}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                    >
-                      <option value="">Выберите категорию</option>
-                      {categories.map((category) => (
-                        <option key={category._id} value={category._id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <p className="mb-2 text-xs uppercase text-slate-500">Категории</p>
+                    {categories.length === 0 ? (
+                      <p className="text-xs text-slate-400">Категории ещё не созданы.</p>
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {categories.map((category) => {
+                          const checked = discountForm.categoryIds.includes(category._id);
+                          return (
+                            <label key={category._id} className="flex items-center gap-2 text-sm text-slate-600">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleDiscountCategory(category._id)}
+                                className="h-4 w-4 rounded border-slate-300"
+                              />
+                              <span>{category.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 ) : null}
                 {discountForm.scope === 'product' ? (
                   <label className="block text-slate-600">
@@ -5754,8 +5809,17 @@ const AdminPage: React.FC = () => {
                   disabled={creatingDiscount}
                   className="rounded-2xl bg-slate-900 px-6 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {creatingDiscount ? 'Создание…' : 'Создать скидку'}
+                  {creatingDiscount ? 'Сохранение…' : editingDiscount ? 'Сохранить изменения' : 'Создать скидку'}
                 </button>
+                {editingDiscount ? (
+                  <button
+                    type="button"
+                    onClick={resetDiscountForm}
+                    className="ml-3 rounded-2xl border border-slate-200 px-6 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+                  >
+                    Отменить
+                  </button>
+                ) : null}
               </div>
             </form>
           </Card>
@@ -5842,6 +5906,14 @@ const AdminPage: React.FC = () => {
                           </td>
                           <td className="px-3 py-2 text-right">
                             <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEditDiscount(discount)}
+                                disabled={discountActionId === discount._id}
+                                className="rounded-2xl border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 disabled:opacity-60"
+                              >
+                                Редактировать
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleToggleDiscountActive(discount)}
