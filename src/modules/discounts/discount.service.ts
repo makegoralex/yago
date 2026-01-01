@@ -53,6 +53,20 @@ const parseMinutes = (time: string | undefined): number | null => {
 
 type DiscountRecord = Discount & { _id: Types.ObjectId };
 
+const getDiscountCategoryIds = (discount: Discount): Types.ObjectId[] => {
+  if (Array.isArray(discount.categoryIds) && discount.categoryIds.length > 0) {
+    return Array.from(new Set(discount.categoryIds.map((entry) => entry.toString()))).map(
+      (entry) => new Types.ObjectId(entry)
+    );
+  }
+
+  if (discount.categoryId) {
+    return [discount.categoryId];
+  }
+
+  return [];
+};
+
 const isWithinTimeWindow = (discount: Discount, now: Date): boolean => {
   if (!discount.autoApply) {
     return true;
@@ -301,26 +315,29 @@ export const calculateOrderTotals = async (
     }
 
     if (discount.scope === 'category') {
-      if (!discount.categoryId) {
+      const categoryIds = getDiscountCategoryIds(discount);
+      if (!categoryIds.length) {
         continue;
       }
 
-      const key = discount.categoryId.toString();
-      const categoryEntry = categoryTotals.get(key);
-      if (!categoryEntry || categoryEntry.total <= 0) {
-        continue;
-      }
+      for (const categoryId of categoryIds) {
+        const key = categoryId.toString();
+        const categoryEntry = categoryTotals.get(key);
+        if (!categoryEntry || categoryEntry.total <= 0) {
+          continue;
+        }
 
-      const base = categoryEntry.total;
-      const appliedAmount = applyDiscountAmount(
-        discount,
-        application,
-        base,
-        discount.categoryId,
-        categoryEntry.name
-      );
-      if (appliedAmount > 0) {
-        categoryEntry.total = roundCurrency(Math.max(categoryEntry.total - appliedAmount, 0));
+        const base = categoryEntry.total;
+        const appliedAmount = applyDiscountAmount(
+          discount,
+          application,
+          base,
+          categoryId,
+          categoryEntry.name
+        );
+        if (appliedAmount > 0) {
+          categoryEntry.total = roundCurrency(Math.max(categoryEntry.total - appliedAmount, 0));
+        }
       }
       continue;
     }
