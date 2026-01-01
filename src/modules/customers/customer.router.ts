@@ -137,6 +137,89 @@ router.post(
   })
 );
 
+router.post(
+  '/import',
+  asyncHandler(async (req, res) => {
+    const { customers } = req.body ?? {};
+    if (!Array.isArray(customers)) {
+      res.status(400).json({ data: null, error: 'customers must be an array' });
+      return;
+    }
+
+    const organizationId = req.organization!.id;
+    const operations = [];
+    let skipped = 0;
+
+    for (const entry of customers) {
+      if (!entry || typeof entry !== 'object') {
+        skipped += 1;
+        continue;
+      }
+
+      const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+      const phone = typeof entry.phone === 'string' ? entry.phone.trim() : '';
+      if (!name || !phone) {
+        skipped += 1;
+        continue;
+      }
+
+      const update: Record<string, unknown> = {
+        name,
+        phone,
+      };
+
+      if (entry.email !== undefined && entry.email !== null) {
+        if (typeof entry.email !== 'string') {
+          skipped += 1;
+          continue;
+        }
+        const email = entry.email.trim();
+        if (email) {
+          update.email = email;
+        }
+      }
+
+      if (entry.points !== undefined && entry.points !== null && entry.points !== '') {
+        const points = Number(entry.points);
+        if (!Number.isNaN(points) && points >= 0) {
+          update.points = points;
+        }
+      }
+
+      if (entry.totalSpent !== undefined && entry.totalSpent !== null && entry.totalSpent !== '') {
+        const totalSpent = Number(entry.totalSpent);
+        if (!Number.isNaN(totalSpent) && totalSpent >= 0) {
+          update.totalSpent = totalSpent;
+        }
+      }
+
+      operations.push({
+        updateOne: {
+          filter: { organizationId, phone },
+          update: { $set: update },
+          upsert: true,
+        },
+      });
+    }
+
+    if (!operations.length) {
+      res.status(400).json({ data: null, error: 'No valid customers to import' });
+      return;
+    }
+
+    const result = await CustomerModel.bulkWrite(operations, { ordered: false });
+
+    res.json({
+      data: {
+        created: result.upsertedCount ?? 0,
+        updated: result.modifiedCount ?? 0,
+        skipped,
+      },
+      error: null,
+    });
+  })
+);
+
 router.put(
   '/:id',
   asyncHandler(async (req, res) => {

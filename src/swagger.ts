@@ -657,6 +657,26 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           email: { type: 'string', example: 'jane@yago.coffee' },
         },
       },
+      CustomerImportInput: {
+        type: 'object',
+        required: ['customers'],
+        properties: {
+          customers: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['name', 'phone'],
+              properties: {
+                name: { type: 'string', example: 'Jane Patron' },
+                phone: { type: 'string', example: '+15551234567' },
+                email: { type: 'string', example: 'jane@yago.coffee' },
+                points: { type: 'number', example: 120 },
+                totalSpent: { type: 'number', example: 512.25 },
+              },
+            },
+          },
+        },
+      },
       LoyaltyEarnRequest: {
         type: 'object',
         required: ['customerId', 'orderId', 'amount'],
@@ -2529,6 +2549,46 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
           '400': { description: 'Invalid payload' },
           '403': { description: 'Forbidden — admin or cashier role required' },
           '409': { description: 'Customer with phone already exists' },
+        },
+      },
+    },
+    '/api/customers/import': {
+      post: {
+        summary: 'Import customers',
+        tags: ['Customers'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CustomerImportInput' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Import completed',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        created: { type: 'integer', example: 10 },
+                        updated: { type: 'integer', example: 5 },
+                        skipped: { type: 'integer', example: 2 },
+                      },
+                    },
+                    error: { type: 'string', nullable: true, example: null },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid payload' },
+          '403': { description: 'Forbidden — admin or cashier role required' },
         },
       },
     },

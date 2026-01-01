@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isAxiosError } from 'axios';
+import * as XLSX from 'xlsx';
 import {
   Bar,
   BarChart,
@@ -331,20 +332,8 @@ type ReceiptHistoryOrder = {
 const formatHistoryTime = (value: string): string =>
   new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
-const escapeCsvValue = (value: string | number | null | undefined): string => {
-  const normalized = value === null || value === undefined ? '' : String(value);
-  return `"${normalized.replace(/"/g, '""')}"`;
-};
-
-const escapeHtml = (value: string | number | null | undefined): string => {
-  const normalized = value === null || value === undefined ? '' : String(value);
-  return normalized
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-};
+const normalizeCustomerHeader = (value: unknown): string =>
+  typeof value === 'string' ? value.trim().toLowerCase() : '';
 
 const mapReceiptHistoryOrder = (payload: any): ReceiptHistoryOrder => {
   const id = payload?._id ?? payload?.id ?? `${Date.now()}-${Math.random()}`;
@@ -1372,36 +1361,6 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const downloadExportFile = (content: string, filename: string, mime: string) => {
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
-  const handleExportCustomersCsv = () => {
-    if (!customers.length) {
-      notify({ title: 'Нет гостей для выгрузки', type: 'info' });
-      return;
-    }
-
-    const header = ['Имя', 'Телефон', 'Email', 'Баллы', 'Выручка'];
-    const rows = customers.map((customer) => [
-      escapeCsvValue(customer.name),
-      escapeCsvValue(customer.phone ?? ''),
-      escapeCsvValue(customer.email ?? ''),
-      escapeCsvValue(customer.points),
-      escapeCsvValue(customer.totalSpent.toFixed(2)),
-    ]);
-    const csvContent = [header.map(escapeCsvValue).join(','), ...rows.map((row) => row.join(','))].join('\n');
-    downloadExportFile(csvContent, 'guests.csv', 'text/csv;charset=utf-8;');
-  };
-
   const handleExportCustomersExcel = () => {
     if (!customers.length) {
       notify({ title: 'Нет гостей для выгрузки', type: 'info' });
@@ -1409,22 +1368,79 @@ const AdminPage: React.FC = () => {
     }
 
     const header = ['Имя', 'Телефон', 'Email', 'Баллы', 'Выручка'];
-    const rows = customers
-      .map(
-        (customer) =>
-          `<tr><td>${escapeHtml(customer.name)}</td><td>${escapeHtml(customer.phone ?? '')}</td><td>${escapeHtml(
-            customer.email ?? ''
-          )}</td><td>${escapeHtml(customer.points)}</td><td>${escapeHtml(customer.totalSpent.toFixed(2))}</td></tr>`
-      )
-      .join('');
-    const table = `<table><thead><tr>${header
-      .map((label) => `<th>${escapeHtml(label)}</th>`)
-      .join('')}</tr></thead><tbody>${rows}</tbody></table>`;
-    downloadExportFile(
-      `\ufeff${table}`,
-      'guests.xls',
-      'application/vnd.ms-excel;charset=utf-8;'
-    );
+    const data = customers.map((customer) => ({
+      Имя: customer.name,
+      Телефон: customer.phone ?? '',
+      Email: customer.email ?? '',
+      Баллы: customer.points,
+      Выручка: Number(customer.totalSpent.toFixed(2)),
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(data, { header });
+    XLSX.utils.sheet_add_aoa(worksheet, [header], { origin: 'A1' });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Гости');
+    XLSX.writeFile(workbook, 'guests.xlsx', { bookType: 'xlsx' });
+  };
+
+  const handleImportCustomers = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    event.target.value = '';
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        notify({ title: 'Файл пустой', type: 'info' });
+        return;
+      }
+      const worksheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
+      if (!rows.length) {
+        notify({ title: 'Файл пустой', type: 'info' });
+        return;
+      }
+
+      const normalizedRows = rows.map((row) => {
+        const normalized: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(row)) {
+          normalized[normalizeCustomerHeader(key)] = value;
+        }
+        return normalized;
+      });
+
+      const mappedCustomers = normalizedRows.map((row) => ({
+        name: String(row['имя'] ?? '').trim(),
+        phone: String(row['телефон'] ?? '').trim(),
+        email: String(row['email'] ?? '').trim() || undefined,
+        points: row['баллы'] !== '' ? Number(row['баллы']) : undefined,
+        totalSpent: row['выручка'] !== '' ? Number(row['выручка']) : undefined,
+      }));
+
+      const validCustomers = mappedCustomers.filter((customer) => customer.name && customer.phone);
+      if (!validCustomers.length) {
+        notify({ title: 'Не удалось найти данные гостей', type: 'info' });
+        return;
+      }
+
+      const response = await api.post('/api/customers/import', { customers: validCustomers });
+      const payload = getResponseData<{ created: number; updated: number; skipped: number }>(response);
+      notify({
+        title: 'Импорт завершён',
+        description: payload
+          ? `Добавлено: ${payload.created}, обновлено: ${payload.updated}, пропущено: ${payload.skipped}`
+          : undefined,
+        type: 'success',
+      });
+      void loadCustomers();
+    } catch (error) {
+      console.error('Не удалось импортировать гостей', error);
+      notify({ title: extractErrorMessage(error, 'Не удалось импортировать гостей'), type: 'error' });
+    }
   };
 
   useEffect(() => {
@@ -5292,23 +5308,19 @@ const AdminPage: React.FC = () => {
                 <Card
                   title="Гости"
                   actions={
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={handleExportCustomersCsv}
-                        disabled={customersLoading || customers.length === 0}
-                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-emerald-300 disabled:opacity-60"
-                      >
-                        CSV
-                      </button>
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={handleExportCustomersExcel}
                         disabled={customersLoading || customers.length === 0}
                         className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-emerald-300 disabled:opacity-60"
                       >
-                        Excel
+                        Экспорт XLSX
                       </button>
+                      <label className="cursor-pointer rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-emerald-300">
+                        Импорт XLSX
+                        <input type="file" accept=".xlsx" onChange={handleImportCustomers} className="sr-only" />
+                      </label>
                     </div>
                   }
                 >
@@ -5316,6 +5328,9 @@ const AdminPage: React.FC = () => {
                     <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
                   ) : (
                     <div className="grid gap-4 md:grid-cols-2">
+                      <div className="md:col-span-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+                        Формат импорта XLSX: «Имя», «Телефон», «Email», «Баллы», «Выручка».
+                      </div>
                       <ul className="space-y-3 text-sm">
                         {customers.map((customer) => (
                           <li
