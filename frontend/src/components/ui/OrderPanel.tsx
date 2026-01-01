@@ -80,7 +80,6 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   const canComplete = status === 'paid';
   const customerPoints = Number(customer?.points ?? 0);
   const selectableDiscounts = availableDiscounts.filter((discount) => !discount.autoApply);
-  const autoAppliedDiscounts = availableDiscounts.filter((discount) => discount.autoApply);
   const hasManualDiscount = appliedDiscounts.some((discount) => discount.application === 'manual');
   const hasResettableDiscounts = hasManualDiscount || selectedDiscountIds.length > 0;
   const tagOptions: Array<{ value: OrderTag | null; label: string }> = [
@@ -222,9 +221,8 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
       ) : null}
       {selectableDiscounts.length > 0 ? (
         <div className="mx-4 mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-amber-800">Доступные скидки</p>
-            {onClearDiscount && hasResettableDiscounts ? (
+          {onClearDiscount && hasResettableDiscounts ? (
+            <div className="flex items-center justify-end">
               <button
                 type="button"
                 onClick={onClearDiscount}
@@ -232,9 +230,9 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
               >
                 Сбросить все
               </button>
-            ) : null}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+            </div>
+          ) : null}
+          <div className={`flex flex-wrap gap-2 ${onClearDiscount && hasResettableDiscounts ? 'mt-3' : ''}`}>
             {selectableDiscounts.map((discountOption) => {
               const isSelected = selectedDiscountIds.includes(discountOption._id);
               return (
@@ -256,12 +254,6 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
               );
             })}
           </div>
-          {autoAppliedDiscounts.length > 0 ? (
-            <p className="mt-3 text-xs text-amber-700">
-              Автоматические скидки активны для категорий:{' '}
-              {autoAppliedDiscounts.map((discount) => discount.targetName ?? discount.name).join(', ')}
-            </p>
-          ) : null}
         </div>
       ) : null}
       <div className="flex-1 px-4">
