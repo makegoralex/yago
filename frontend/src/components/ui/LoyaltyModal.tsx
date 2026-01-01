@@ -11,10 +11,12 @@ export type LoyaltyModalProps = {
 };
 
 const normalizePhone = (value: string): string => value.replace(/\D/g, '');
+const MIN_PHONE_SEARCH_LENGTH = 6;
+const defaultPhoneValue = '+7';
 
 const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) => {
   const { notify } = useToast();
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(defaultPhoneValue);
   const [name, setName] = useState('');
   const [results, setResults] = useState<CustomerSummary[]>([]);
   const [customers, setCustomers] = useState<CustomerSummary[]>([]);
@@ -51,6 +53,11 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
         }
       });
 
+    setPhone(defaultPhoneValue);
+    setName('');
+    setResults([]);
+    setSuggestions([]);
+
     return () => {
       isMounted = false;
       setResults([]);
@@ -66,15 +73,21 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
 
     const searchValue = normalizePhone(phone);
 
-    if (searchValue.length < 3) {
+    const trimmedQuery = phone.trim();
+    const hasLetters = /[a-zа-яё]/i.test(trimmedQuery);
+    const isPhoneQueryReady = searchValue.length >= MIN_PHONE_SEARCH_LENGTH;
+
+    if (!isPhoneQueryReady && !hasLetters) {
       setSuggestions([]);
       return;
     }
 
     const filtered = customers.filter((customer) => {
       const customerPhone = normalizePhone(customer.phone ?? '');
-      const matchesPhone = customerPhone.includes(searchValue);
-      const matchesName = customer.name.toLowerCase().includes(phone.trim().toLowerCase());
+      const matchesPhone = isPhoneQueryReady ? customerPhone.includes(searchValue) : false;
+      const matchesName = hasLetters
+        ? customer.name.toLowerCase().includes(trimmedQuery.toLowerCase())
+        : false;
       return matchesPhone || matchesName;
     });
 
@@ -120,6 +133,15 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
     }
   };
 
+  const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    if (!value.trim()) {
+      setPhone(defaultPhoneValue);
+      return;
+    }
+    setPhone(value);
+  };
+
   const handleCreate = async () => {
     setLoading(true);
     try {
@@ -158,7 +180,7 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
             <label className="mt-3 block text-sm text-slate-500">Телефон</label>
             <input
               value={phone}
-              onChange={(event) => setPhone(event.target.value)}
+              onChange={handlePhoneChange}
               placeholder="+7 (999) 000-00-00"
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
             />
@@ -184,7 +206,7 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
             <button
               type="button"
               onClick={handleSearch}
-              disabled={loading || !phone}
+              disabled={loading || normalizePhone(phone).length < MIN_PHONE_SEARCH_LENGTH}
               className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-secondary text-base font-semibold text-white shadow-soft transition hover:bg-secondary/80 disabled:opacity-70"
             >
               {loading ? 'Поиск...' : 'Найти'}
@@ -201,13 +223,13 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
             <label className="mt-3 block text-sm text-slate-500">Телефон</label>
             <input
               value={phone}
-              onChange={(event) => setPhone(event.target.value)}
+              onChange={handlePhoneChange}
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
             />
             <button
               type="button"
               onClick={handleCreate}
-              disabled={loading || !phone || !name}
+              disabled={loading || normalizePhone(phone).length < MIN_PHONE_SEARCH_LENGTH || !name}
               className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-primary text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-70"
             >
               {loading ? 'Создание...' : 'Создать'}
