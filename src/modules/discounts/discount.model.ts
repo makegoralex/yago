@@ -17,6 +17,7 @@ export interface Discount {
   scope: DiscountScope;
   value: number;
   categoryId?: Types.ObjectId;
+  categoryIds?: Types.ObjectId[];
   productId?: Types.ObjectId;
   autoApply: boolean;
   autoApplyDays?: number[];
@@ -67,6 +68,12 @@ const discountSchema = new Schema<DiscountDocument>(
       ref: 'Category',
       required: false,
     },
+    categoryIds: {
+      type: [Schema.Types.ObjectId],
+      ref: 'Category',
+      required: false,
+      default: undefined,
+    },
     productId: {
       type: Schema.Types.ObjectId,
       ref: 'Product',
@@ -102,7 +109,7 @@ const discountSchema = new Schema<DiscountDocument>(
 );
 
 discountSchema.index({ isActive: 1, autoApply: 1 });
-discountSchema.index({ scope: 1, categoryId: 1, productId: 1 });
+discountSchema.index({ scope: 1, categoryId: 1, categoryIds: 1, productId: 1 });
 discountSchema.index({ organizationId: 1, name: 1 });
 
 export const DiscountModel = model<DiscountDocument>('Discount', discountSchema);

@@ -29,6 +29,7 @@ type DiscountPayload = {
   scope?: unknown;
   value?: unknown;
   categoryId?: unknown;
+  categoryIds?: unknown;
   productId?: unknown;
   autoApply?: unknown;
   autoApplyDays?: unknown;
@@ -95,6 +96,23 @@ const ensureCategoryExists = async (
 ): Promise<void> => {
   const exists = await CategoryModel.exists({ _id: categoryId, organizationId });
   if (!exists) {
+    throw new Error('Категория не найдена');
+  }
+};
+
+const ensureCategoriesExist = async (
+  categoryIds: Types.ObjectId[],
+  organizationId: Types.ObjectId
+): Promise<void> => {
+  if (!categoryIds.length) {
+    return;
+  }
+
+  const found = await CategoryModel.countDocuments({
+    _id: { $in: categoryIds },
+    organizationId,
+  });
+  if (found !== categoryIds.length) {
     throw new Error('Категория не найдена');
   }
 };
@@ -175,11 +193,22 @@ const mapDiscountResponse = async (
   const productIds = new Set<string>();
 
   for (const discount of discounts) {
-    const categoryId = toValidStringId(discount.categoryId);
-    const productId = toValidStringId(discount.productId);
-    if (categoryId) {
-      categoryIds.add(categoryId);
+    const discountCategoryIds =
+      Array.isArray(discount.categoryIds) && discount.categoryIds.length > 0
+        ? discount.categoryIds
+            .map((entry) => toValidStringId(entry))
+            .filter((entry): entry is string => Boolean(entry))
+        : [];
+    const legacyCategoryId = toValidStringId(discount.categoryId);
+    const combinedCategoryIds = new Set<string>(
+      legacyCategoryId ? [...discountCategoryIds, legacyCategoryId] : discountCategoryIds
+    );
+    for (const categoryId of combinedCategoryIds) {
+      if (categoryId) {
+        categoryIds.add(categoryId);
+      }
     }
+    const productId = toValidStringId(discount.productId);
     if (productId) {
       productIds.add(productId);
     }
@@ -213,9 +242,22 @@ const mapDiscountResponse = async (
   }
 
   return discounts.map((discount) => {
-    const categoryId = toValidStringId(discount.categoryId);
+    const rawCategoryIds =
+      Array.isArray(discount.categoryIds) && discount.categoryIds.length > 0
+        ? discount.categoryIds
+            .map((entry) => toValidStringId(entry))
+            .filter((entry): entry is string => Boolean(entry))
+        : [];
+    const fallbackCategoryId = toValidStringId(discount.categoryId);
+    const categoryIds = Array.from(
+      new Set<string>(fallbackCategoryId ? [...rawCategoryIds, fallbackCategoryId] : rawCategoryIds)
+    );
+    const categoryId = categoryIds[0];
     const productId = toValidStringId(discount.productId);
     const discountId = toValidStringId(discount._id) ?? discount._id.toString();
+    const categoryNames = categoryIds
+      .map((id) => categoryMap.get(id))
+      .filter((name): name is string => Boolean(name && name.trim()));
 
     return {
       _id: discountId,
@@ -225,11 +267,12 @@ const mapDiscountResponse = async (
       scope: discount.scope,
       value: discount.value,
       categoryId,
+      categoryIds,
       productId,
       targetName:
         discount.scope === 'category'
-          ? categoryId
-            ? categoryMap.get(categoryId)
+          ? categoryNames.length
+            ? categoryNames.join(', ')
             : undefined
           : discount.scope === 'product'
           ? productId
@@ -322,6 +365,25 @@ const parseDiscountPayload = async (
   }
 
   let categoryId: Types.ObjectId | undefined;
+  let categoryIds: Types.ObjectId[] | undefined;
+  if (payload.categoryIds !== undefined) {
+    if (!Array.isArray(payload.categoryIds)) {
+      throw new Error('Некорректный идентификатор категории');
+    }
+    const parsedCategoryIds: Types.ObjectId[] = [];
+    for (const entry of payload.categoryIds) {
+      if (typeof entry !== 'string') {
+        throw new Error('Некорректный идентификатор категории');
+      }
+      const trimmed = entry.trim();
+      if (!trimmed || !isValidObjectId(trimmed)) {
+        throw new Error('Некорректный идентификатор категории');
+      }
+      parsedCategoryIds.push(new Types.ObjectId(trimmed));
+    }
+    categoryIds = parsedCategoryIds.length ? parsedCategoryIds : [];
+    await ensureCategoriesExist(categoryIds, organizationId);
+  }
   if (payload.categoryId) {
     if (typeof payload.categoryId !== 'string' || !isValidObjectId(payload.categoryId)) {
       throw new Error('Некорректный идентификатор категории');
@@ -363,7 +425,9 @@ const parseDiscountPayload = async (
   }
 
   if (!partial) {
-    if (scope === 'category' && !categoryId) {
+    const hasCategories =
+      (Array.isArray(categoryIds) && categoryIds.length > 0) || Boolean(categoryId);
+    if (scope === 'category' && !hasCategories) {
       throw new Error('Укажите категорию для скидки по категории');
     }
 
@@ -387,6 +451,7 @@ const parseDiscountPayload = async (
     scope,
     value,
     categoryId,
+    categoryIds,
     productId,
     autoApply,
     autoApplyDays,
@@ -406,7 +471,14 @@ const buildDiscountUpdate = (parsed: ParsedDiscountPayload): Record<string, unkn
   if (parsed.type !== undefined) update.type = parsed.type;
   if (parsed.scope !== undefined) update.scope = parsed.scope;
   if (parsed.value !== undefined) update.value = parsed.value;
-  if (parsed.categoryId !== undefined) update.categoryId = parsed.categoryId;
+  if (parsed.categoryId !== undefined) {
+    update.categoryId = parsed.categoryId;
+    update.categoryIds = parsed.categoryId ? [parsed.categoryId] : [];
+  }
+  if (parsed.categoryIds !== undefined) {
+    update.categoryIds = parsed.categoryIds;
+    update.categoryId = parsed.categoryIds.length > 0 ? parsed.categoryIds[0] : undefined;
+  }
   if (parsed.productId !== undefined) update.productId = parsed.productId;
   if (parsed.autoApply !== undefined) update.autoApply = parsed.autoApply;
   if (parsed.autoApplyDays !== undefined) update.autoApplyDays = parsed.autoApplyDays;
@@ -418,6 +490,11 @@ const buildDiscountUpdate = (parsed: ParsedDiscountPayload): Record<string, unkn
     update.autoApplyDays = undefined;
     update.autoApplyStart = undefined;
     update.autoApplyEnd = undefined;
+  }
+
+  if (parsed.scope && parsed.scope !== 'category') {
+    update.categoryId = undefined;
+    update.categoryIds = undefined;
   }
 
   return update;
@@ -435,13 +512,20 @@ export const handleCreateDiscount = async (
   }
 
   const parsed = await parseDiscountPayload(req.body ?? {}, organizationId, false);
+  const resolvedCategoryIds =
+    parsed.categoryIds !== undefined
+      ? parsed.categoryIds
+      : parsed.categoryId
+        ? [parsed.categoryId]
+        : undefined;
   const created = await DiscountModel.create({
     name: parsed.name!,
     description: parsed.description,
     type: parsed.type!,
     scope: parsed.scope!,
     value: parsed.value!,
-    categoryId: parsed.categoryId,
+    categoryId: resolvedCategoryIds?.[0],
+    categoryIds: resolvedCategoryIds,
     productId: parsed.productId,
     autoApply: parsed.autoApply,
     autoApplyDays: parsed.autoApply ? parsed.autoApplyDays : undefined,
