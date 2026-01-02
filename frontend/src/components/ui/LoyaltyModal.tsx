@@ -250,31 +250,6 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
             </button>
           </div>
         </div>
-        <div className="mt-6">
-          <h3 className="text-base font-semibold text-slate-900">Результаты</h3>
-          {displayResults.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">Нет выбранных клиентов.</p>
-          ) : (
-            <div className="mt-3 max-h-[40vh] overflow-y-auto overscroll-contain pr-1">
-              <ul className="grid gap-3 md:grid-cols-2">
-                {displayResults.map((customer) => (
-                  <li key={customer._id} className="rounded-2xl border border-slate-100 p-4 shadow-sm">
-                    <p className="text-base font-semibold text-slate-900">{customer.name}</p>
-                    <p className="text-sm text-slate-500">{customer.phone}</p>
-                    <p className="mt-1 text-sm text-emerald-600">{customer.points} баллов</p>
-                    <button
-                      type="button"
-                      onClick={() => attachAndClose(customer)}
-                      className="mt-4 flex h-12 w-full items-center justify-center rounded-2xl bg-secondary text-sm font-semibold text-white transition hover:bg-secondary/80"
-                    >
-                      Привязать
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
