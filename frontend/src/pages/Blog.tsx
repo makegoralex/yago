@@ -1,11 +1,14 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import LandingHeader from '../components/ui/LandingHeader';
-import { loadContent } from '../lib/contentStore';
+import { loadContent, subscribeContentUpdates } from '../lib/contentStore';
 import { applySeo } from '../lib/seo';
 
 const BlogPage: React.FC = () => {
-  const { blogPosts } = useMemo(() => loadContent(), []);
+  const [content, setContent] = useState(loadContent());
+  const { blogPosts } = content;
+
+  useEffect(() => subscribeContentUpdates(setContent), []);
 
   useEffect(() => {
     applySeo({

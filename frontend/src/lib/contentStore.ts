@@ -54,4 +54,28 @@ export const saveContent = (nextContent: ContentCollection) => {
   const storage = getStorage();
   if (!storage) return;
   storage.setItem(STORAGE_KEY, JSON.stringify(nextContent));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('yago-content-updated'));
+  }
+};
+
+export const subscribeContentUpdates = (callback: (content: ContentCollection) => void) => {
+  if (typeof window === 'undefined') return () => undefined;
+
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key !== STORAGE_KEY) return;
+    callback(loadContent());
+  };
+
+  const handleCustomEvent = () => {
+    callback(loadContent());
+  };
+
+  window.addEventListener('storage', handleStorage);
+  window.addEventListener('yago-content-updated', handleCustomEvent);
+
+  return () => {
+    window.removeEventListener('storage', handleStorage);
+    window.removeEventListener('yago-content-updated', handleCustomEvent);
+  };
 };

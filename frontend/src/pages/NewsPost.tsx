@@ -1,13 +1,16 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import LandingHeader from '../components/ui/LandingHeader';
-import { loadContent } from '../lib/contentStore';
+import { loadContent, subscribeContentUpdates } from '../lib/contentStore';
 import { applySeo } from '../lib/seo';
 
 const NewsPostPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
-  const { newsItems } = useMemo(() => loadContent(), []);
+  const [content, setContent] = useState(loadContent());
+  const { newsItems } = content;
   const item = newsItems.find((entry) => entry.slug === slug);
+
+  useEffect(() => subscribeContentUpdates(setContent), []);
 
   useEffect(() => {
     if (!item) {
