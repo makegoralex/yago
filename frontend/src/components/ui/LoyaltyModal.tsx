@@ -89,8 +89,6 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
       setSuggestions([]);
       return;
     }
-  }, [open, searchQuery, results.length, suggestions.length]);
-
     const filtered = filterCustomers(searchQuery);
     setSuggestions(filtered.slice(0, 5));
   }, [filterCustomers, open, searchQuery]);
