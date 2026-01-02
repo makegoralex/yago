@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import HeaderBar from '../components/ui/HeaderBar';
@@ -38,6 +38,7 @@ const POSPage: React.FC = () => {
   } = useBillingInfo();
   const categories = useCatalogStore((state) => state.categories);
   const products = useCatalogStore((state) => state.products);
+  const productListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     document.documentElement.classList.add('pos-locked');
@@ -46,6 +47,45 @@ const POSPage: React.FC = () => {
     return () => {
       document.documentElement.classList.remove('pos-locked');
       document.body.classList.remove('pos-locked');
+    };
+  }, []);
+
+  useEffect(() => {
+    const container = productListRef.current;
+    if (!container) {
+      return;
+    }
+
+    let startY = 0;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      startY = event.touches[0]?.clientY ?? 0;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const currentY = event.touches[0]?.clientY ?? 0;
+      const deltaY = currentY - startY;
+      const { scrollTop, scrollHeight, clientHeight } = container;
+
+      if (scrollHeight <= clientHeight) {
+        event.preventDefault();
+        return;
+      }
+
+      const isAtTop = scrollTop <= 0;
+      const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1;
+
+      if ((isAtTop && deltaY > 0) || (isAtBottom && deltaY < 0)) {
+        event.preventDefault();
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
     };
   }, []);
   const activeCategoryId = useCatalogStore((state) => state.activeCategoryId);
@@ -496,7 +536,10 @@ const POSPage: React.FC = () => {
                 />
               </div>
             ) : null}
-            <div className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto overflow-x-hidden overscroll-x-none overscroll-y-none pr-1 touch-pan-y sm:space-y-2.5">
+            <div
+              ref={productListRef}
+              className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto overflow-x-hidden overscroll-x-none overscroll-y-none pr-1 touch-pan-y sm:space-y-2.5"
+            >
               <div className="rounded-xl bg-white p-2 shadow-soft sm:p-2.5">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
