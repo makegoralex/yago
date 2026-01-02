@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import api from '../../lib/api';
 import { useToast } from '../../providers/ToastProvider';
@@ -11,17 +11,19 @@ export type LoyaltyModalProps = {
 };
 
 const normalizePhone = (value: string): string => value.replace(/\D/g, '');
-const MIN_PHONE_SEARCH_LENGTH = 6;
+const MIN_PHONE_SEARCH_LENGTH = 4;
 const defaultPhoneValue = '+7';
 
 const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) => {
   const { notify } = useToast();
-  const [phone, setPhone] = useState(defaultPhoneValue);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [createPhone, setCreatePhone] = useState(defaultPhoneValue);
   const [name, setName] = useState('');
   const [results, setResults] = useState<CustomerSummary[]>([]);
   const [customers, setCustomers] = useState<CustomerSummary[]>([]);
   const [suggestions, setSuggestions] = useState<CustomerSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const modalScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -53,7 +55,8 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
         }
       });
 
-    setPhone(defaultPhoneValue);
+    setSearchQuery('');
+    setCreatePhone(defaultPhoneValue);
     setName('');
     setResults([]);
     setSuggestions([]);
@@ -65,34 +68,50 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
     };
   }, [open, notify]);
 
+  const filterCustomers = useCallback(
+    (query: string) => {
+      const trimmedQuery = query.trim();
+      const hasLetters = /[a-zа-яё]/i.test(trimmedQuery);
+      const searchValue = normalizePhone(trimmedQuery);
+      const isPhoneQueryReady = searchValue.length >= MIN_PHONE_SEARCH_LENGTH;
+
+      if (!isPhoneQueryReady && !hasLetters) {
+        return [];
+      }
+
+      return customers.filter((customer) => {
+        const customerPhone = normalizePhone(customer.phone ?? '');
+        const matchesPhone = isPhoneQueryReady ? customerPhone.includes(searchValue) : false;
+        const matchesName = hasLetters
+          ? customer.name.toLowerCase().includes(trimmedQuery.toLowerCase())
+          : false;
+        return matchesPhone || matchesName;
+      });
+    },
+    [customers]
+  );
+
   useEffect(() => {
     if (!open) {
       setSuggestions([]);
       return;
     }
 
-    const searchValue = normalizePhone(phone);
-
-    const trimmedQuery = phone.trim();
-    const hasLetters = /[a-zа-яё]/i.test(trimmedQuery);
-    const isPhoneQueryReady = searchValue.length >= MIN_PHONE_SEARCH_LENGTH;
-
-    if (!isPhoneQueryReady && !hasLetters) {
-      setSuggestions([]);
-      return;
-    }
-
-    const filtered = customers.filter((customer) => {
-      const customerPhone = normalizePhone(customer.phone ?? '');
-      const matchesPhone = isPhoneQueryReady ? customerPhone.includes(searchValue) : false;
-      const matchesName = hasLetters
-        ? customer.name.toLowerCase().includes(trimmedQuery.toLowerCase())
-        : false;
-      return matchesPhone || matchesName;
-    });
-
+    const filtered = filterCustomers(searchQuery);
     setSuggestions(filtered.slice(0, 5));
-  }, [customers, phone, open]);
+  }, [filterCustomers, searchQuery, open]);
+
+  useEffect(() => {
+    if (open) {
+      modalScrollRef.current?.scrollTo({ top: 0 });
+    }
+  }, [open, searchQuery, results.length, suggestions.length]);
+
+  const trimmedQuery = searchQuery.trim();
+  const hasLetters = /[a-zа-яё]/i.test(trimmedQuery);
+  const searchDigits = normalizePhone(trimmedQuery);
+  const isPhoneQueryReady = searchDigits.length >= MIN_PHONE_SEARCH_LENGTH;
+  const isSearchReady = isPhoneQueryReady || (hasLetters && trimmedQuery.length >= 2);
 
   const displayResults = useMemo(() => {
     if (results.length > 0) {
@@ -111,45 +130,36 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
   if (!open) return null;
 
   const handleSearch = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get('/api/customers/search', { params: { phone } });
-      const customer = response.data.data
-        ? ({
-            _id: String(response.data.data._id),
-            name: response.data.data.name ?? 'Гость',
-            phone: response.data.data.phone ?? phone,
-            points: typeof response.data.data.points === 'number' ? response.data.data.points : 0,
-          } as CustomerSummary)
-        : undefined;
-      setResults(customer ? [customer] : []);
-      if (!customer) {
-        notify({ title: 'Клиент не найден', description: 'Можно создать нового клиента ниже.' });
-      }
-    } catch (error) {
-      notify({ title: 'Ошибка поиска', type: 'error' });
-    } finally {
-      setLoading(false);
+    const filtered = filterCustomers(searchQuery);
+    setResults(filtered);
+    if (filtered.length === 0) {
+      notify({ title: 'Клиент не найден', description: 'Можно создать нового клиента ниже.' });
     }
   };
 
-  const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSearchQueryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setSearchQuery(value);
+    setResults([]);
+  };
+
+  const handleCreatePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     if (!value.trim()) {
-      setPhone(defaultPhoneValue);
+      setCreatePhone(defaultPhoneValue);
       return;
     }
-    setPhone(value);
+    setCreatePhone(value);
   };
 
   const handleCreate = async () => {
     setLoading(true);
     try {
-      const response = await api.post('/api/customers', { name, phone });
+      const response = await api.post('/api/customers', { name, phone: createPhone });
       const created: CustomerSummary = {
         _id: String(response.data.data._id),
         name: response.data.data.name ?? name,
-        phone: response.data.data.phone ?? phone,
+        phone: response.data.data.phone ?? createPhone,
         points: typeof response.data.data.points === 'number' ? response.data.data.points : 0,
       };
       setResults([created]);
@@ -163,8 +173,11 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
-      <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-soft">
+    <div
+      ref={modalScrollRef}
+      className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/50 px-4 py-6"
+    >
+      <div className="mx-auto w-full max-w-2xl rounded-3xl bg-white p-6 shadow-soft">
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Программа лояльности</h2>
@@ -179,9 +192,9 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
             <h3 className="text-base font-semibold text-slate-900">Поиск клиента</h3>
             <label className="mt-3 block text-sm text-slate-500">Телефон</label>
             <input
-              value={phone}
-              onChange={handlePhoneChange}
-              placeholder="+7 (999) 000-00-00"
+              value={searchQuery}
+              onChange={handleSearchQueryChange}
+              placeholder="Телефон или имя"
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
             />
             {suggestions.length > 0 ? (
@@ -203,14 +216,6 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
                 </ul>
               </div>
             ) : null}
-            <button
-              type="button"
-              onClick={handleSearch}
-              disabled={loading || normalizePhone(phone).length < MIN_PHONE_SEARCH_LENGTH}
-              className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-secondary text-base font-semibold text-white shadow-soft transition hover:bg-secondary/80 disabled:opacity-70"
-            >
-              {loading ? 'Поиск...' : 'Найти'}
-            </button>
           </div>
           <div className="rounded-2xl border border-slate-100 p-4">
             <h3 className="text-base font-semibold text-slate-900">Новый клиент</h3>
@@ -222,42 +227,20 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
             />
             <label className="mt-3 block text-sm text-slate-500">Телефон</label>
             <input
-              value={phone}
-              onChange={handlePhoneChange}
+              value={createPhone}
+              onChange={handleCreatePhoneChange}
+              placeholder="+7 (999) 000-00-00"
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
             />
             <button
               type="button"
               onClick={handleCreate}
-              disabled={loading || normalizePhone(phone).length < MIN_PHONE_SEARCH_LENGTH || !name}
+              disabled={loading || normalizePhone(createPhone).length < MIN_PHONE_SEARCH_LENGTH || !name}
               className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-primary text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-70"
             >
               {loading ? 'Создание...' : 'Создать'}
             </button>
           </div>
-        </div>
-        <div className="mt-6">
-          <h3 className="text-base font-semibold text-slate-900">Результаты</h3>
-          {displayResults.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">Нет выбранных клиентов.</p>
-          ) : (
-            <ul className="mt-3 grid gap-3 md:grid-cols-2">
-              {displayResults.map((customer) => (
-                <li key={customer._id} className="rounded-2xl border border-slate-100 p-4 shadow-sm">
-                  <p className="text-base font-semibold text-slate-900">{customer.name}</p>
-                  <p className="text-sm text-slate-500">{customer.phone}</p>
-                  <p className="mt-1 text-sm text-emerald-600">{customer.points} баллов</p>
-                  <button
-                    type="button"
-                    onClick={() => attachAndClose(customer)}
-                    className="mt-4 flex h-12 w-full items-center justify-center rounded-2xl bg-secondary text-sm font-semibold text-white transition hover:bg-secondary/80"
-                  >
-                    Привязать
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       </div>
     </div>
