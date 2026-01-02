@@ -1,11 +1,12 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuthStore } from '../store/auth';
 import type { AuthUser } from '../store/auth';
 import { useToast } from '../providers/ToastProvider';
 import LandingHeader from '../components/ui/LandingHeader';
-import { blogPosts, newsItems } from '../constants/content';
+import { loadContent } from '../lib/contentStore';
+import { applySeo } from '../lib/seo';
 
 const featureGroups = [
   {
@@ -38,6 +39,7 @@ const LandingPage: React.FC = () => {
   const { setSession } = useAuthStore();
   const { notify } = useToast();
   const authSectionRef = useRef<HTMLDivElement | null>(null);
+  const { blogPosts, newsItems } = useMemo(() => loadContent(), []);
 
   const [organizationName, setOrganizationName] = useState('');
   const [ownerName, setOwnerName] = useState('');
@@ -102,6 +104,15 @@ const LandingPage: React.FC = () => {
       setSignupLoading(false);
     }
   };
+
+  useEffect(() => {
+    applySeo({
+      title: 'Yago POS — система кассы и админ-панели для кофейни',
+      description:
+        'Yago POS — касса и админ-панель в браузере: меню, склад, себестоимость, статистика и лояльность для кофейни.',
+      keywords: 'Yago POS, касса, POS, кофейня, учет, меню, склад',
+    });
+  }, []);
 
   return (
     <div className="landing-shell min-h-screen bg-white">

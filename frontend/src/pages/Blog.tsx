@@ -1,9 +1,20 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import LandingHeader from '../components/ui/LandingHeader';
-import { blogPosts } from '../constants/content';
+import { loadContent } from '../lib/contentStore';
+import { applySeo } from '../lib/seo';
 
 const BlogPage: React.FC = () => {
+  const { blogPosts } = useMemo(() => loadContent(), []);
+
+  useEffect(() => {
+    applySeo({
+      title: 'Блог Yago POS',
+      description: 'Статьи и советы для владельцев кофеен: учет, маркетинг, развитие бизнеса.',
+      keywords: 'Yago POS, блог, кофейня, статьи, бизнес, учет',
+    });
+  }, []);
+
   return (
     <div className="landing-shell min-h-screen">
       <LandingHeader />
