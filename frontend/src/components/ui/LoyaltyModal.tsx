@@ -101,7 +101,6 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
     }
   }, [open, searchQuery, suggestions.length]);
 
-
   const attachAndClose = (customer: CustomerSummary) => {
     onAttach(customer);
     onClose();
