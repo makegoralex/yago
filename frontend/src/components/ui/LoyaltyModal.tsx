@@ -216,14 +216,6 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
                 </ul>
               </div>
             ) : null}
-            <button
-              type="button"
-              onClick={handleSearch}
-              disabled={loading || !isSearchReady}
-              className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-secondary text-base font-semibold text-white shadow-soft transition hover:bg-secondary/80 disabled:opacity-70"
-            >
-              {loading ? 'Поиск...' : 'Найти'}
-            </button>
           </div>
           <div className="rounded-2xl border border-slate-100 p-4">
             <h3 className="text-base font-semibold text-slate-900">Новый клиент</h3>
