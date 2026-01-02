@@ -496,7 +496,7 @@ const POSPage: React.FC = () => {
                 />
               </div>
             ) : null}
-            <div className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto overflow-x-hidden overscroll-x-none pr-1 touch-pan-y sm:space-y-2.5">
+            <div className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto overflow-x-hidden overscroll-x-none overscroll-y-none pr-1 touch-pan-y sm:space-y-2.5">
               <div className="rounded-xl bg-white p-2 shadow-soft sm:p-2.5">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
