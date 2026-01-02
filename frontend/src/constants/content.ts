@@ -4,6 +4,9 @@ export type NewsItem = {
   title: string;
   description: string;
   content: string[];
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string;
 };
 
 export type InstructionLink = {
@@ -61,6 +64,9 @@ export type BlogPost = {
   date: string;
   excerpt: string;
   content: string[];
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string;
 };
 
 export const blogPosts: BlogPost[] = [
