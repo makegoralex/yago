@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import HeaderBar from '../components/ui/HeaderBar';
@@ -19,7 +19,6 @@ import {
   type SelectedModifier,
 } from '../store/order';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-import { useToast } from '../providers/ToastProvider';
 import { useShiftStore, type ShiftSummary } from '../store/shift';
 import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
@@ -38,6 +37,56 @@ const POSPage: React.FC = () => {
   } = useBillingInfo();
   const categories = useCatalogStore((state) => state.categories);
   const products = useCatalogStore((state) => state.products);
+  const productListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    document.documentElement.classList.add('pos-locked');
+    document.body.classList.add('pos-locked');
+
+    return () => {
+      document.documentElement.classList.remove('pos-locked');
+      document.body.classList.remove('pos-locked');
+    };
+  }, []);
+
+  useEffect(() => {
+    const container = productListRef.current;
+    if (!container) {
+      return;
+    }
+
+    let startY = 0;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      startY = event.touches[0]?.clientY ?? 0;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const currentY = event.touches[0]?.clientY ?? 0;
+      const deltaY = currentY - startY;
+      const { scrollTop, scrollHeight, clientHeight } = container;
+
+      if (scrollHeight <= clientHeight) {
+        event.preventDefault();
+        return;
+      }
+
+      const isAtTop = scrollTop <= 0;
+      const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1;
+
+      if ((isAtTop && deltaY > 0) || (isAtBottom && deltaY < 0)) {
+        event.preventDefault();
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, []);
   const activeCategoryId = useCatalogStore((state) => state.activeCategoryId);
   const setActiveCategory = useCatalogStore((state) => state.setActiveCategory);
   const fetchCatalog = useCatalogStore((state) => state.fetchCatalog);
@@ -82,20 +131,11 @@ const POSPage: React.FC = () => {
   const isOpeningShift = useShiftStore((state) => state.opening);
   const isClosingShift = useShiftStore((state) => state.closing);
 
-  const { notify } = useToast();
   const formatBillingDate = (value?: string | null) =>
     value ? new Date(value).toLocaleDateString('ru-RU') : '—';
   const requireActiveSubscription = useCallback(() => {
-    if (!billingLocked) return true;
-
-    notify({
-      title: 'Подписка неактивна',
-      description: 'Продлите подписку в настройках, чтобы продолжить оформлять заказы.',
-      type: 'error',
-    });
-
-    return false;
-  }, [billingLocked, notify]);
+    return !billingLocked;
+  }, [billingLocked]);
   const [isPaymentOpen, setPaymentOpen] = useState(false);
   const [isLoyaltyOpen, setLoyaltyOpen] = useState(false);
   const [isPaying, setPaying] = useState(false);
@@ -137,10 +177,8 @@ const POSPage: React.FC = () => {
   }, [activeSection, fetchActiveOrders]);
 
   useEffect(() => {
-    void fetchCurrentShift().catch(() =>
-      notify({ title: 'Смена', description: 'Не удалось загрузить состояние смены', type: 'error' })
-    );
-  }, [fetchCurrentShift, notify]);
+    void fetchCurrentShift().catch(() => undefined);
+  }, [fetchCurrentShift]);
 
   const currentShiftId = currentShift?._id;
 
@@ -150,10 +188,8 @@ const POSPage: React.FC = () => {
       return;
     }
 
-    void fetchShiftHistory().catch(() =>
-      notify({ title: 'История чеков', description: 'Не удалось обновить историю смены', type: 'error' })
-    );
-  }, [currentShiftId, fetchShiftHistory, resetShiftHistory, notify]);
+    void fetchShiftHistory().catch(() => undefined);
+  }, [currentShiftId, fetchShiftHistory, resetShiftHistory]);
 
   const filteredProducts = useMemo(() => {
     if (!activeCategoryId) {
@@ -185,11 +221,6 @@ const POSPage: React.FC = () => {
     }
 
     if (!currentShift) {
-      notify({
-        title: 'Смена закрыта',
-        description: 'Откройте смену, чтобы начать продажи',
-        type: 'info',
-      });
       return;
     }
 
@@ -197,11 +228,7 @@ const POSPage: React.FC = () => {
     try {
       await createDraft({ forceNew: true });
     } catch (error) {
-      notify({
-        title: 'Ошибка заказа',
-        description: 'Не удалось создать черновик заказа',
-        type: 'error',
-      });
+      // ignore
     } finally {
       setStartingOrder(false);
     }
@@ -220,14 +247,9 @@ const POSPage: React.FC = () => {
     setPaying(true);
     try {
       await payOrder(payload);
-      notify({
-        title: 'Оплата проведена',
-        description: 'Завершите заказ, чтобы отправить его в историю',
-        type: 'success',
-      });
       setPaymentOpen(false);
     } catch (error) {
-      notify({ title: 'Ошибка оплаты', description: 'Попробуйте снова', type: 'error' });
+      // ignore
     } finally {
       setPaying(false);
     }
@@ -245,11 +267,9 @@ const POSPage: React.FC = () => {
     setCompleting(true);
     try {
       await completeOrder();
-      notify({ title: 'Заказ завершён', description: 'Чек отправлен в историю', type: 'success' });
       await fetchShiftHistory().catch(() => undefined);
     } catch (error) {
-      const description = error instanceof Error ? error.message : 'Не удалось завершить заказ';
-      notify({ title: 'Ошибка завершения', description, type: 'error' });
+      // ignore
     } finally {
       setCompleting(false);
     }
@@ -263,7 +283,7 @@ const POSPage: React.FC = () => {
     try {
       await attachCustomer(customerToAttach);
     } catch (error) {
-      notify({ title: 'Не удалось привязать клиента', type: 'error' });
+      // ignore
     } finally {
       setLoyaltyOpen(false);
     }
@@ -277,11 +297,11 @@ const POSPage: React.FC = () => {
     try {
       await clearDiscount();
       await attachCustomer(null);
-      notify({ title: 'Клиент отвязан', type: 'info' });
     } catch (error) {
-      notify({ title: 'Не удалось отвязать клиента', type: 'error' });
+      // ignore
+    } finally {
+      setLoyaltyOpen(false);
     }
-    setLoyaltyOpen(false);
   };
 
   const handleOrderTagChange = async (nextTag: OrderTag | null) => {
@@ -292,8 +312,7 @@ const POSPage: React.FC = () => {
     try {
       await setOrderTag(nextTag);
     } catch (error) {
-      const description = error instanceof Error ? error.message : 'Не удалось изменить тип заказа';
-      notify({ title: 'Ошибка метки заказа', description, type: 'error' });
+      // ignore
     }
   };
 
@@ -310,11 +329,9 @@ const POSPage: React.FC = () => {
         return;
       }
       await redeemPoints(pointsValue);
-      notify({ title: 'Баллы списаны', type: 'success' });
       setRedeemOpen(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось списать баллы';
-      notify({ title: 'Ошибка списания', description: message, type: 'error' });
+      // ignore
     } finally {
       setRedeeming(false);
     }
@@ -327,12 +344,10 @@ const POSPage: React.FC = () => {
 
     try {
       await openShift();
-      notify({ title: 'Смена открыта', type: 'success' });
       await fetchShiftHistory().catch(() => undefined);
       setShiftPanelOpen(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось открыть смену';
-      notify({ title: 'Не удалось открыть смену', description: message, type: 'error' });
+      // ignore
     }
   };
 
@@ -353,23 +368,18 @@ const POSPage: React.FC = () => {
     try {
       await closeShift();
       resetShiftHistory();
-      notify({ title: 'Смена закрыта', type: 'info' });
       setShiftPanelOpen(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось закрыть смену';
-      notify({ title: 'Не удалось закрыть смену', description: message, type: 'error' });
+      // ignore
     }
   };
 
   const handleRefreshHistory = () => {
     if (!currentShift) {
-      notify({ title: 'Смена закрыта', description: 'Откройте смену, чтобы просматривать чеки', type: 'info' });
       return;
     }
 
-    void fetchShiftHistory().catch(() =>
-      notify({ title: 'История чеков', description: 'Не удалось обновить историю', type: 'error' })
-    );
+    void fetchShiftHistory().catch(() => undefined);
   };
 
   const handleAddProduct = (product: typeof products[number]) => {
@@ -382,9 +392,7 @@ const POSPage: React.FC = () => {
       return;
     }
 
-    void addProduct(product).catch(() => {
-      notify({ title: 'Не удалось добавить товар', type: 'error' });
-    });
+    void addProduct(product).catch(() => undefined);
   };
 
   const handleModifierConfirm = (modifiers: SelectedModifier[]) => {
@@ -394,9 +402,7 @@ const POSPage: React.FC = () => {
 
     if (!modifierProduct) return;
 
-    void addProduct(modifierProduct, modifiers).catch(() => {
-      notify({ title: 'Не удалось добавить товар', type: 'error' });
-    });
+    void addProduct(modifierProduct, modifiers).catch(() => undefined);
     setModifierProduct(null);
   };
 
@@ -475,7 +481,7 @@ const POSPage: React.FC = () => {
               collapsed={false}
             />
           </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-w-0 lg:px-1.5">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-w-0">
             {shouldShowProductSearch ? (
               <div className="mb-3 flex flex-col gap-2">
                 <ProductSearchBar
@@ -486,7 +492,10 @@ const POSPage: React.FC = () => {
                 />
               </div>
             ) : null}
-            <div className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto pr-1 sm:space-y-2.5">
+            <div
+              ref={productListRef}
+              className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto overflow-x-hidden overscroll-x-none overscroll-y-none pr-1 touch-pan-y sm:space-y-2.5"
+            >
               <div className="rounded-xl bg-white p-2 shadow-soft sm:p-2.5">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-sm font-semibold text-slate-900">Текущие заказы</h3>
@@ -626,7 +635,7 @@ const POSPage: React.FC = () => {
               )}
             </div>
           </div>
-          <div className="hidden min-h-0 lg:flex lg:h-full lg:flex-[0_0_300px] lg:min-w-[300px] lg:max-w-[300px] xl:flex-[0_0_320px] xl:min-w-[320px] xl:max-w-[320px] 2xl:flex-[0_0_360px] 2xl:min-w-[360px] 2xl:max-w-[360px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
+          <div className="hidden min-h-0 lg:flex lg:h-full lg:flex-[0_0_280px] lg:min-w-[280px] lg:max-w-[280px] xl:flex-[0_0_300px] xl:min-w-[300px] xl:max-w-[300px] 2xl:flex-[0_0_340px] 2xl:min-w-[340px] 2xl:max-w-[340px] lg:flex-shrink-0 lg:flex-col lg:pr-1">
             <OrderPanel
               items={items}
               subtotal={subtotal}
@@ -652,30 +661,17 @@ const POSPage: React.FC = () => {
               onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
               onRedeemLoyalty={() => {
                 if (!customer || customer.points <= 0) {
-                  notify({ title: 'Нет доступных баллов', type: 'info' });
                   return;
                 }
                 setRedeemOpen(true);
               }}
-              onClearDiscount={() =>
-                void clearDiscount().catch(() => notify({ title: 'Не удалось сбросить скидку', type: 'error' }))
-              }
-              onCancel={() =>
-                void cancelOrder()
-                  .then(() => {
-                  notify({ title: 'Заказ отменён', type: 'info' });
-                })
-                  .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
-              }
+              onClearDiscount={() => void clearDiscount().catch(() => undefined)}
+              onCancel={() => void cancelOrder().catch(() => undefined)}
               onComplete={() => void handleCompleteCurrentOrder()}
               availableDiscounts={availableDiscounts}
               appliedDiscounts={appliedDiscounts}
               selectedDiscountIds={selectedDiscountIds}
-              onToggleDiscount={(discountId) =>
-                void toggleDiscount(discountId).catch(() =>
-                  notify({ title: 'Не удалось применить скидку', type: 'error' })
-                )
-              }
+              onToggleDiscount={(discountId) => void toggleDiscount(discountId).catch(() => undefined)}
               visible
             />
           </div>
