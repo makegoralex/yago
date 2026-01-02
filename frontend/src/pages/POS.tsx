@@ -38,6 +38,16 @@ const POSPage: React.FC = () => {
   } = useBillingInfo();
   const categories = useCatalogStore((state) => state.categories);
   const products = useCatalogStore((state) => state.products);
+
+  useEffect(() => {
+    document.documentElement.classList.add('pos-locked');
+    document.body.classList.add('pos-locked');
+
+    return () => {
+      document.documentElement.classList.remove('pos-locked');
+      document.body.classList.remove('pos-locked');
+    };
+  }, []);
   const activeCategoryId = useCatalogStore((state) => state.activeCategoryId);
   const setActiveCategory = useCatalogStore((state) => state.setActiveCategory);
   const fetchCatalog = useCatalogStore((state) => state.fetchCatalog);
