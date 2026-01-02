@@ -35,8 +35,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) => {
           ) : null}
         </div>
       </div>
-      <div className="mt-2 flex items-baseline gap-2">
-        <p className="text-base font-bold text-slate-900 sm:text-lg">{product.price.toFixed(2)} ₽</p>
+      <div className="mt-1 flex items-baseline gap-2">
+        <p className="text-sm font-normal text-slate-900 sm:text-base">{product.price.toFixed(2)} ₽</p>
         {hasDiscount ? (
           <span className="text-xs font-medium text-slate-400 line-through">
             {product.basePrice?.toFixed(2)} ₽
