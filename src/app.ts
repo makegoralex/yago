@@ -19,6 +19,7 @@ import { appConfig } from './config/env';
 import shiftRouter from './modules/shifts/shift.router';
 import restaurantSettingsRouter from './modules/restaurant/restaurantSettings.router';
 import organizationsRouter from './routes/organizations';
+import contentRouter from './routes/content';
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.get('/healthz', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api/content', contentRouter);
 app.use('/api/organizations', organizationsRouter);
 app.use('/api/catalog', catalogRouter);
 app.use('/api/orders/discounts', posDiscountRouter);

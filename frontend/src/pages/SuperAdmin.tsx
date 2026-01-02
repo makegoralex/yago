@@ -2,17 +2,9 @@ import { isAxiosError } from 'axios';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import { fetchContent, loadContent, saveContent } from '../lib/contentStore';
 import { useAuthStore } from '../store/auth';
-import {
-  blogPosts as initialBlogPosts,
-  instructionLinks as initialInstructionLinks,
-  newsItems as initialNewsItems,
-  screenshotGallery as initialScreenshots,
-  type BlogPost,
-  type InstructionLink,
-  type NewsItem,
-  type ScreenshotItem,
-} from '../constants/content';
+import type { BlogPost, InstructionLink, NewsItem, ScreenshotItem } from '../constants/content';
 
 type BillingInfo = {
   plan: 'trial' | 'paid' | string;
@@ -130,14 +122,38 @@ const SuperAdminPage: React.FC = () => {
   const [userUpdateLoading, setUserUpdateLoading] = useState(false);
   const [userUpdateError, setUserUpdateError] = useState('');
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
-  const [newsDrafts, setNewsDrafts] = useState<NewsItem[]>(initialNewsItems);
-  const [newsForm, setNewsForm] = useState({ title: '', date: '', description: '', content: '' });
-  const [instructionDrafts, setInstructionDrafts] = useState<InstructionLink[]>(initialInstructionLinks);
+  const initialContent = useMemo(() => loadContent(), []);
+  const [contentTab, setContentTab] = useState<'news' | 'blog' | 'instructions' | 'screenshots'>('news');
+  const [newsDrafts, setNewsDrafts] = useState<NewsItem[]>(initialContent.newsItems);
+  const [newsForm, setNewsForm] = useState({
+    title: '',
+    date: '',
+    description: '',
+    content: '',
+    slug: '',
+    seoTitle: '',
+    seoDescription: '',
+    seoKeywords: '',
+  });
+  const [editingNewsSlug, setEditingNewsSlug] = useState<string | null>(null);
+  const [instructionDrafts, setInstructionDrafts] = useState<InstructionLink[]>(initialContent.instructionLinks);
   const [instructionForm, setInstructionForm] = useState({ title: '', href: '' });
-  const [blogDrafts, setBlogDrafts] = useState<BlogPost[]>(initialBlogPosts);
-  const [blogForm, setBlogForm] = useState({ title: '', date: '', excerpt: '', content: '' });
-  const [screenshotDrafts, setScreenshotDrafts] = useState<ScreenshotItem[]>(initialScreenshots);
+  const [editingInstructionIndex, setEditingInstructionIndex] = useState<number | null>(null);
+  const [blogDrafts, setBlogDrafts] = useState<BlogPost[]>(initialContent.blogPosts);
+  const [blogForm, setBlogForm] = useState({
+    title: '',
+    date: '',
+    excerpt: '',
+    content: '',
+    slug: '',
+    seoTitle: '',
+    seoDescription: '',
+    seoKeywords: '',
+  });
+  const [editingBlogSlug, setEditingBlogSlug] = useState<string | null>(null);
+  const [screenshotDrafts, setScreenshotDrafts] = useState<ScreenshotItem[]>(initialContent.screenshotGallery);
   const [screenshotForm, setScreenshotForm] = useState({ title: '', description: '' });
+  const [editingScreenshotIndex, setEditingScreenshotIndex] = useState<number | null>(null);
 
   const greeting = useMemo(() => {
     const name = user?.name?.trim();
@@ -151,6 +167,18 @@ const SuperAdminPage: React.FC = () => {
       .replace(/[^\p{L}\p{N}]+/gu, '-')
       .replace(/^-+|-+$/g, '')
       .replace(/-{2,}/g, '-') || `entry-${Date.now()}`;
+
+  const buildUniqueSlug = (value: string, existing: string[], currentSlug?: string) => {
+    const base = slugify(value || 'entry');
+    const used = new Set(existing.filter((slug) => slug !== currentSlug));
+    let slug = base;
+    let counter = 2;
+    while (!slug || used.has(slug)) {
+      slug = `${base}-${counter}`;
+      counter += 1;
+    }
+    return slug;
+  };
 
   const contentFromText = (text: string) =>
     text
@@ -181,26 +209,56 @@ const SuperAdminPage: React.FC = () => {
     event.preventDefault();
     const content = contentFromText(newsForm.content);
     const date = newsForm.date || new Intl.DateTimeFormat('ru-RU').format(new Date());
-    setNewsDrafts((items) => [
-      {
-        slug: slugify(newsForm.title || date),
-        date,
-        title: newsForm.title || 'Без названия',
-        description: newsForm.description || 'Описание обновления появится позже.',
-        content: content.length ? content : ['Описание обновления появится позже.'],
-      },
-      ...items,
-    ]);
-    setNewsForm({ title: '', date: '', description: '', content: '' });
+    const title = newsForm.title.trim() || 'Без названия';
+    const description = newsForm.description.trim() || 'Описание обновления появится позже.';
+    const slugSource = newsForm.slug.trim() || newsForm.title || date;
+    const nextSlug = buildUniqueSlug(
+      slugSource,
+      newsDrafts.map((item) => item.slug),
+      editingNewsSlug ?? undefined
+    );
+    const nextItem: NewsItem = {
+      slug: nextSlug,
+      date,
+      title,
+      description,
+      content: content.length ? content : ['Описание обновления появится позже.'],
+      seoTitle: newsForm.seoTitle.trim() || title,
+      seoDescription: newsForm.seoDescription.trim() || description,
+      seoKeywords: newsForm.seoKeywords.trim(),
+    };
+
+    setNewsDrafts((items) => {
+      if (editingNewsSlug) {
+        return items.map((item) => (item.slug === editingNewsSlug ? nextItem : item));
+      }
+      return [nextItem, ...items];
+    });
+    setEditingNewsSlug(null);
+    setNewsForm({
+      title: '',
+      date: '',
+      description: '',
+      content: '',
+      slug: '',
+      seoTitle: '',
+      seoDescription: '',
+      seoKeywords: '',
+    });
   };
 
   const handleAddInstruction = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!instructionForm.title.trim() || !instructionForm.href.trim()) return;
-    setInstructionDrafts((items) => [
-      { title: instructionForm.title.trim(), href: instructionForm.href.trim() },
-      ...items,
-    ]);
+    const title = instructionForm.title.trim();
+    const href = instructionForm.href.trim();
+    if (!title || !href) return;
+    setInstructionDrafts((items) => {
+      if (editingInstructionIndex !== null) {
+        return items.map((item, index) => (index === editingInstructionIndex ? { title, href } : item));
+      }
+      return [{ title, href }, ...items];
+    });
+    setEditingInstructionIndex(null);
     setInstructionForm({ title: '', href: '' });
   };
 
@@ -208,27 +266,156 @@ const SuperAdminPage: React.FC = () => {
     event.preventDefault();
     const content = contentFromText(blogForm.content);
     const date = blogForm.date || new Intl.DateTimeFormat('ru-RU').format(new Date());
-    setBlogDrafts((posts) => [
-      {
-        slug: slugify(blogForm.title || date),
-        title: blogForm.title || 'Черновик поста',
-        date,
-        excerpt: blogForm.excerpt || 'Добавьте превью статьи.',
-        content: content.length ? content : ['Содержимое статьи появится позже.'],
-      },
-      ...posts,
-    ]);
-    setBlogForm({ title: '', date: '', excerpt: '', content: '' });
+    const title = blogForm.title.trim() || 'Черновик поста';
+    const excerpt = blogForm.excerpt.trim() || 'Добавьте превью статьи.';
+    const slugSource = blogForm.slug.trim() || blogForm.title || date;
+    const nextSlug = buildUniqueSlug(
+      slugSource,
+      blogDrafts.map((post) => post.slug),
+      editingBlogSlug ?? undefined
+    );
+    const nextPost: BlogPost = {
+      slug: nextSlug,
+      title,
+      date,
+      excerpt,
+      content: content.length ? content : ['Содержимое статьи появится позже.'],
+      seoTitle: blogForm.seoTitle.trim() || title,
+      seoDescription: blogForm.seoDescription.trim() || excerpt,
+      seoKeywords: blogForm.seoKeywords.trim(),
+    };
+    setBlogDrafts((posts) => {
+      if (editingBlogSlug) {
+        return posts.map((post) => (post.slug === editingBlogSlug ? nextPost : post));
+      }
+      return [nextPost, ...posts];
+    });
+    setEditingBlogSlug(null);
+    setBlogForm({
+      title: '',
+      date: '',
+      excerpt: '',
+      content: '',
+      slug: '',
+      seoTitle: '',
+      seoDescription: '',
+      seoKeywords: '',
+    });
   };
 
   const handleAddScreenshot = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!screenshotForm.title.trim() || !screenshotForm.description.trim()) return;
-    setScreenshotDrafts((items) => [
-      { title: screenshotForm.title.trim(), description: screenshotForm.description.trim() },
-      ...items,
-    ]);
+    const title = screenshotForm.title.trim();
+    const description = screenshotForm.description.trim();
+    if (!title || !description) return;
+    setScreenshotDrafts((items) => {
+      if (editingScreenshotIndex !== null) {
+        return items.map((item, index) => (index === editingScreenshotIndex ? { title, description } : item));
+      }
+      return [{ title, description }, ...items];
+    });
+    setEditingScreenshotIndex(null);
     setScreenshotForm({ title: '', description: '' });
+  };
+
+  const handleEditNews = (item: NewsItem) => {
+    setEditingNewsSlug(item.slug);
+    setNewsForm({
+      title: item.title,
+      date: item.date,
+      description: item.description,
+      content: item.content.join('\n'),
+      slug: item.slug,
+      seoTitle: item.seoTitle ?? '',
+      seoDescription: item.seoDescription ?? '',
+      seoKeywords: item.seoKeywords ?? '',
+    });
+  };
+
+  const handleDeleteNews = (slug: string) => {
+    const confirmed = window.confirm('Удалить новость?');
+    if (!confirmed) return;
+    setNewsDrafts((items) => items.filter((item) => item.slug !== slug));
+    if (editingNewsSlug === slug) {
+      setEditingNewsSlug(null);
+      setNewsForm({
+        title: '',
+        date: '',
+        description: '',
+        content: '',
+        slug: '',
+        seoTitle: '',
+        seoDescription: '',
+        seoKeywords: '',
+      });
+    }
+  };
+
+  const handleEditBlogPost = (post: BlogPost) => {
+    setEditingBlogSlug(post.slug);
+    setBlogForm({
+      title: post.title,
+      date: post.date,
+      excerpt: post.excerpt,
+      content: post.content.join('\n'),
+      slug: post.slug,
+      seoTitle: post.seoTitle ?? '',
+      seoDescription: post.seoDescription ?? '',
+      seoKeywords: post.seoKeywords ?? '',
+    });
+  };
+
+  const handleDeleteBlogPost = (slug: string) => {
+    const confirmed = window.confirm('Удалить статью блога?');
+    if (!confirmed) return;
+    setBlogDrafts((posts) => posts.filter((post) => post.slug !== slug));
+    if (editingBlogSlug === slug) {
+      setEditingBlogSlug(null);
+      setBlogForm({
+        title: '',
+        date: '',
+        excerpt: '',
+        content: '',
+        slug: '',
+        seoTitle: '',
+        seoDescription: '',
+        seoKeywords: '',
+      });
+    }
+  };
+
+  const handleEditInstruction = (index: number) => {
+    const target = instructionDrafts[index];
+    if (!target) return;
+    setEditingInstructionIndex(index);
+    setInstructionForm({ title: target.title, href: target.href });
+  };
+
+  const handleDeleteInstruction = (index: number) => {
+    const confirmed = window.confirm('Удалить инструкцию?');
+    if (!confirmed) return;
+    setInstructionDrafts((items) => items.filter((_, itemIndex) => itemIndex !== index));
+    if (editingInstructionIndex === index) {
+      setEditingInstructionIndex(null);
+      setInstructionForm({ title: '', href: '' });
+    }
+  };
+
+  const handleEditScreenshot = (index: number) => {
+    const target = screenshotDrafts[index];
+    if (!target) return;
+    setEditingScreenshotIndex(index);
+    setScreenshotForm({ title: target.title, description: target.description });
+  };
+
+  const handleDeleteScreenshot = (index: number) => {
+    const confirmed = window.confirm('Удалить скриншот?');
+    if (!confirmed) return;
+    setScreenshotDrafts((items) => items.filter((_, itemIndex) => itemIndex !== index));
+    if (editingScreenshotIndex === index) {
+      setEditingScreenshotIndex(null);
+      setScreenshotForm({ title: '', description: '' });
+    }
   };
 
   const fetchOrganizations = useCallback(async () => {
@@ -292,6 +479,29 @@ const SuperAdminPage: React.FC = () => {
     void fetchBillingSummary();
     void fetchBillingConfig();
   }, [fetchBillingConfig, fetchBillingSummary, fetchOrganizations, fetchUsers]);
+
+  useEffect(() => {
+    let isActive = true;
+    fetchContent().then((nextContent) => {
+      if (!isActive) return;
+      setNewsDrafts(nextContent.newsItems);
+      setBlogDrafts(nextContent.blogPosts);
+      setInstructionDrafts(nextContent.instructionLinks);
+      setScreenshotDrafts(nextContent.screenshotGallery);
+    });
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    void saveContent({
+      newsItems: newsDrafts,
+      blogPosts: blogDrafts,
+      instructionLinks: instructionDrafts,
+      screenshotGallery: screenshotDrafts,
+    });
+  }, [blogDrafts, instructionDrafts, newsDrafts, screenshotDrafts]);
 
   const handleToggleBilling = async (nextValue: boolean) => {
     setBillingConfigSaving(true);
@@ -477,6 +687,13 @@ const SuperAdminPage: React.FC = () => {
       </span>
     );
   };
+
+  const contentTabs = [
+    { id: 'news', label: 'Новости', description: 'Changelog и обновления' },
+    { id: 'blog', label: 'Блог', description: 'Статьи для владельцев' },
+    { id: 'instructions', label: 'Инструкции', description: 'Ссылки /help' },
+    { id: 'screenshots', label: 'Скриншоты', description: 'Галерея лендинга' },
+  ] as const;
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 pb-12 pt-10 text-slate-900 lg:px-12">
@@ -1165,84 +1382,368 @@ const SuperAdminPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Новости / changelog</p>
-                <h3 className="text-lg font-semibold text-slate-900">Что нового</h3>
-              </div>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-secondary shadow-inner">CMS-ready</span>
-            </div>
-            <form className="grid gap-3" onSubmit={handleAddNews}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-sm text-slate-700">
-                  Название
-                  <input
-                    type="text"
-                    value={newsForm.title}
-                    onChange={(event) => setNewsForm((form) => ({ ...form, title: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                    placeholder="Добавлен блог"
-                  />
-                </label>
-                <label className="text-sm text-slate-700">
-                  Дата
-                  <input
-                    type="text"
-                    value={newsForm.date}
-                    onChange={(event) => setNewsForm((form) => ({ ...form, date: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                    placeholder="05.12.2025"
-                  />
-                </label>
-              </div>
-              <label className="text-sm text-slate-700">
-                Превью
-                <input
-                  type="text"
-                  value={newsForm.description}
-                  onChange={(event) => setNewsForm((form) => ({ ...form, description: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                  placeholder="Описание на лендинге"
-                />
-              </label>
-              <label className="text-sm text-slate-700">
-                Полный текст (каждый абзац с новой строки)
-                <textarea
-                  value={newsForm.content}
-                  onChange={(event) => setNewsForm((form) => ({ ...form, content: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                  rows={3}
-                  placeholder="Расскажите, что обновили"
-                />
-              </label>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {contentTabs.map((tab) => {
+            const isActive = contentTab === tab.id;
+            return (
               <button
-                type="submit"
-                className="inline-flex w-full items-center justify-center rounded-xl bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary/90"
+                key={tab.id}
+                type="button"
+                onClick={() => setContentTab(tab.id)}
+                className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                  isActive
+                    ? 'border-primary bg-primary text-white shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-primary/50 hover:text-primary'
+                }`}
               >
-                Сохранить запись в драфты
+                {tab.label}
+                <span className="ml-2 text-xs font-normal opacity-70">{tab.description}</span>
               </button>
-            </form>
-            <div className="space-y-2 text-sm text-slate-700">
-              {newsDrafts.slice(0, 4).map((item) => (
-                <div key={item.slug} className="rounded-lg bg-white px-3 py-2 shadow-inner shadow-slate-100">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-secondary">{item.date}</div>
-                  <div className="font-semibold text-slate-900">{item.title}</div>
-                  <div className="text-slate-600">{item.description}</div>
-                </div>
-              ))}
-            </div>
+            );
+          })}
+        </div>
 
-            <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+        <div className="mt-6 space-y-4">
+          {contentTab === 'news' && (
+            <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Новости / changelog</p>
+                  <h3 className="text-lg font-semibold text-slate-900">Что нового</h3>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-secondary shadow-inner">
+                  {newsDrafts.length} записей
+                </span>
+              </div>
+              <form className="grid gap-3" onSubmit={handleAddNews}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-slate-700">
+                    Название
+                    <input
+                      type="text"
+                      value={newsForm.title}
+                      onChange={(event) => setNewsForm((form) => ({ ...form, title: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="Добавлен блог"
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    Дата
+                    <input
+                      type="text"
+                      value={newsForm.date}
+                      onChange={(event) => setNewsForm((form) => ({ ...form, date: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="05.12.2025"
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-slate-700">
+                    Slug (URL)
+                    <input
+                      type="text"
+                      value={newsForm.slug}
+                      onChange={(event) => setNewsForm((form) => ({ ...form, slug: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="novosti-obnovlenie"
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    SEO заголовок
+                    <input
+                      type="text"
+                      value={newsForm.seoTitle}
+                      onChange={(event) => setNewsForm((form) => ({ ...form, seoTitle: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="Yago POS обновления"
+                    />
+                  </label>
+                </div>
+                <label className="text-sm text-slate-700">
+                  Превью
+                  <input
+                    type="text"
+                    value={newsForm.description}
+                    onChange={(event) => setNewsForm((form) => ({ ...form, description: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    placeholder="Описание на лендинге"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  SEO описание
+                  <input
+                    type="text"
+                    value={newsForm.seoDescription}
+                    onChange={(event) => setNewsForm((form) => ({ ...form, seoDescription: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    placeholder="Описание для Яндекса и Google"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  SEO ключевые слова
+                  <input
+                    type="text"
+                    value={newsForm.seoKeywords}
+                    onChange={(event) => setNewsForm((form) => ({ ...form, seoKeywords: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    placeholder="Yago POS, новости, касса"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  Полный текст (каждый абзац с новой строки)
+                  <textarea
+                    value={newsForm.content}
+                    onChange={(event) => setNewsForm((form) => ({ ...form, content: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    rows={4}
+                    placeholder="Расскажите, что обновили"
+                  />
+                </label>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  {editingNewsSlug && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingNewsSlug(null);
+                        setNewsForm({
+                          title: '',
+                          date: '',
+                          description: '',
+                          content: '',
+                          slug: '',
+                          seoTitle: '',
+                          seoDescription: '',
+                          seoKeywords: '',
+                        });
+                      }}
+                      className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                    >
+                      Отменить
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="inline-flex items-center justify-center rounded-xl bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary/90"
+                  >
+                    {editingNewsSlug ? 'Сохранить изменения' : 'Сохранить запись'}
+                  </button>
+                </div>
+              </form>
+              <div className="space-y-3 text-sm text-slate-700">
+                {newsDrafts.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-3 text-slate-500">
+                    Пока нет новостей. Добавьте первую запись выше.
+                  </p>
+                ) : (
+                  newsDrafts.map((item) => (
+                    <div key={item.slug} className="rounded-lg bg-white px-3 py-3 shadow-inner shadow-slate-100">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-wide text-secondary">{item.date}</div>
+                          <div className="font-semibold text-slate-900">{item.title}</div>
+                          <div className="text-slate-600">{item.description}</div>
+                          <div className="mt-1 text-xs text-slate-400">Slug: {item.slug}</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEditNews(item)}
+                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary/40 hover:text-primary"
+                          >
+                            Редактировать
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteNews(item.slug)}
+                            className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {contentTab === 'blog' && (
+            <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Блог</p>
+                  <h3 className="text-lg font-semibold text-slate-900">Статьи для владельцев</h3>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-secondary shadow-inner">
+                  {blogDrafts.length} статей
+                </span>
+              </div>
+              <form className="grid gap-3" onSubmit={handleAddBlogPost}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-slate-700">
+                    Заголовок
+                    <input
+                      type="text"
+                      value={blogForm.title}
+                      onChange={(event) => setBlogForm((form) => ({ ...form, title: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="Новый пост"
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    Дата
+                    <input
+                      type="text"
+                      value={blogForm.date}
+                      onChange={(event) => setBlogForm((form) => ({ ...form, date: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="07.12.2025"
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-slate-700">
+                    Slug (URL)
+                    <input
+                      type="text"
+                      value={blogForm.slug}
+                      onChange={(event) => setBlogForm((form) => ({ ...form, slug: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="kak-uvelichit-vyruchku"
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    SEO заголовок
+                    <input
+                      type="text"
+                      value={blogForm.seoTitle}
+                      onChange={(event) => setBlogForm((form) => ({ ...form, seoTitle: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="Статья для владельцев кофеен"
+                    />
+                  </label>
+                </div>
+                <label className="text-sm text-slate-700">
+                  Превью
+                  <input
+                    type="text"
+                    value={blogForm.excerpt}
+                    onChange={(event) => setBlogForm((form) => ({ ...form, excerpt: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    placeholder="Короткое описание"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  SEO описание
+                  <input
+                    type="text"
+                    value={blogForm.seoDescription}
+                    onChange={(event) => setBlogForm((form) => ({ ...form, seoDescription: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    placeholder="Описание статьи для поисковых систем"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  SEO ключевые слова
+                  <input
+                    type="text"
+                    value={blogForm.seoKeywords}
+                    onChange={(event) => setBlogForm((form) => ({ ...form, seoKeywords: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    placeholder="кофейня, учет, yago"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  Текст статьи (абзацы через новую строку)
+                  <textarea
+                    value={blogForm.content}
+                    onChange={(event) => setBlogForm((form) => ({ ...form, content: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    rows={4}
+                    placeholder="Контент для /blog/:slug"
+                  />
+                </label>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  {editingBlogSlug && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingBlogSlug(null);
+                        setBlogForm({
+                          title: '',
+                          date: '',
+                          excerpt: '',
+                          content: '',
+                          slug: '',
+                          seoTitle: '',
+                          seoDescription: '',
+                          seoKeywords: '',
+                        });
+                      }}
+                      className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                    >
+                      Отменить
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+                  >
+                    {editingBlogSlug ? 'Сохранить изменения' : 'Сохранить статью'}
+                  </button>
+                </div>
+              </form>
+              <div className="space-y-3 text-sm text-slate-700">
+                {blogDrafts.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-3 text-slate-500">
+                    Пока нет статей. Добавьте первую запись выше.
+                  </p>
+                ) : (
+                  blogDrafts.map((post) => (
+                    <div key={post.slug} className="rounded-lg bg-white px-3 py-3 shadow-inner shadow-slate-100">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-wide text-secondary">{post.date}</div>
+                          <div className="font-semibold text-slate-900">{post.title}</div>
+                          <div className="text-slate-600">{post.excerpt}</div>
+                          <div className="mt-1 text-xs text-slate-400">Slug: {post.slug}</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEditBlogPost(post)}
+                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary/40 hover:text-primary"
+                          >
+                            Редактировать
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBlogPost(post.slug)}
+                            className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {contentTab === 'instructions' && (
+            <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Инструкции /help</p>
-                  <h4 className="text-base font-semibold text-slate-900">Ссылки для планшетов</h4>
+                  <h3 className="text-lg font-semibold text-slate-900">Ссылки для планшетов</h3>
                 </div>
                 <span className="text-xs font-semibold text-slate-500">{instructionDrafts.length} шт.</span>
               </div>
-              <form className="grid gap-3 sm:grid-cols-[1.3fr_1fr]" onSubmit={handleAddInstruction}>
+              <form className="grid gap-3 sm:grid-cols-[1.3fr_1fr_auto]" onSubmit={handleAddInstruction}>
                 <input
                   type="text"
                   required
@@ -1251,110 +1752,76 @@ const SuperAdminPage: React.FC = () => {
                   className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
                   placeholder="Как подключить кассу"
                 />
+                <input
+                  type="text"
+                  required
+                  value={instructionForm.href}
+                  onChange={(event) => setInstructionForm((form) => ({ ...form, href: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                  placeholder="/help"
+                />
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    required
-                    value={instructionForm.href}
-                    onChange={(event) => setInstructionForm((form) => ({ ...form, href: event.target.value }))}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
-                    placeholder="/help"
-                  />
+                  {editingInstructionIndex !== null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingInstructionIndex(null);
+                        setInstructionForm({ title: '', href: '' });
+                      }}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                    >
+                      Отменить
+                    </button>
+                  )}
                   <button
                     type="submit"
-                    className="shrink-0 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+                    className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
                   >
-                    Добавить
+                    {editingInstructionIndex !== null ? 'Сохранить' : 'Добавить'}
                   </button>
                 </div>
               </form>
               <div className="space-y-2 text-sm text-slate-700">
-                {instructionDrafts.slice(0, 4).map((item) => (
-                  <div key={`${item.title}-${item.href}`} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
-                    <div>
-                      <div className="font-semibold text-slate-900">{item.title}</div>
-                      <div className="text-xs text-slate-500">{item.href}</div>
+                {instructionDrafts.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-3 text-slate-500">
+                    Пока нет инструкций. Добавьте первую ссылку.
+                  </p>
+                ) : (
+                  instructionDrafts.map((item, index) => (
+                    <div key={`${item.title}-${item.href}`} className="flex items-center justify-between rounded-md bg-white px-3 py-2">
+                      <div>
+                        <div className="font-semibold text-slate-900">{item.title}</div>
+                        <div className="text-xs text-slate-500">{item.href}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEditInstruction(index)}
+                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary/40 hover:text-primary"
+                        >
+                          Редактировать
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteInstruction(index)}
+                          className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                        >
+                          Удалить
+                        </button>
+                      </div>
                     </div>
-                    <span className="text-xs font-semibold text-secondary">/help</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Блог</p>
-                <h3 className="text-lg font-semibold text-slate-900">Статьи для владельцев</h3>
-              </div>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-secondary shadow-inner">/blog</span>
-            </div>
-            <form className="grid gap-3" onSubmit={handleAddBlogPost}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-sm text-slate-700">
-                  Заголовок
-                  <input
-                    type="text"
-                    value={blogForm.title}
-                    onChange={(event) => setBlogForm((form) => ({ ...form, title: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                    placeholder="Новый пост"
-                  />
-                </label>
-                <label className="text-sm text-slate-700">
-                  Дата
-                  <input
-                    type="text"
-                    value={blogForm.date}
-                    onChange={(event) => setBlogForm((form) => ({ ...form, date: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                    placeholder="07.12.2025"
-                  />
-                </label>
-              </div>
-              <label className="text-sm text-slate-700">
-                Превью
-                <input
-                  type="text"
-                  value={blogForm.excerpt}
-                  onChange={(event) => setBlogForm((form) => ({ ...form, excerpt: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                  placeholder="Короткое описание"
-                />
-              </label>
-              <label className="text-sm text-slate-700">
-                Текст статьи (абзацы через новую строку)
-                <textarea
-                  value={blogForm.content}
-                  onChange={(event) => setBlogForm((form) => ({ ...form, content: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                  rows={3}
-                  placeholder="Контент для /blog/:slug"
-                />
-              </label>
-              <button
-                type="submit"
-                className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
-              >
-                Сохранить пост
-              </button>
-            </form>
-            <div className="space-y-2 text-sm text-slate-700">
-              {blogDrafts.slice(0, 4).map((post) => (
-                <div key={post.slug} className="rounded-lg bg-white px-3 py-2 shadow-inner shadow-slate-100">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-secondary">{post.date}</div>
-                  <div className="font-semibold text-slate-900">{post.title}</div>
-                  <div className="text-slate-600">{post.excerpt}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+          {contentTab === 'screenshots' && (
+            <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Скриншоты лендинга</p>
-                  <h4 className="text-base font-semibold text-slate-900">Галерея / примеры</h4>
+                  <h3 className="text-lg font-semibold text-slate-900">Галерея / примеры</h3>
                 </div>
                 <span className="text-xs font-semibold text-slate-500">{screenshotDrafts.length} шт.</span>
               </div>
@@ -1375,23 +1842,61 @@ const SuperAdminPage: React.FC = () => {
                   className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
                   placeholder="Описание для подписи"
                 />
-                <button
-                  type="submit"
-                  className="mt-2 h-[38px] shrink-0 rounded-lg border border-secondary/40 px-3 text-xs font-semibold text-secondary transition hover:bg-secondary/10 sm:mt-0"
-                >
-                  Добавить
-                </button>
+                <div className="flex gap-2">
+                  {editingScreenshotIndex !== null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingScreenshotIndex(null);
+                        setScreenshotForm({ title: '', description: '' });
+                      }}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                    >
+                      Отменить
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-secondary/40 px-3 py-2 text-xs font-semibold text-secondary transition hover:bg-secondary/10"
+                  >
+                    {editingScreenshotIndex !== null ? 'Сохранить' : 'Добавить'}
+                  </button>
+                </div>
               </form>
               <div className="space-y-2 text-sm text-slate-700">
-                {screenshotDrafts.slice(0, 4).map((item) => (
-                  <div key={`${item.title}-${item.description}`} className="rounded-md bg-slate-50 px-3 py-2">
-                    <div className="font-semibold text-slate-900">{item.title}</div>
-                    <div className="text-xs text-slate-500">{item.description}</div>
-                  </div>
-                ))}
+                {screenshotDrafts.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-3 text-slate-500">
+                    Пока нет скриншотов. Добавьте пример интерфейса.
+                  </p>
+                ) : (
+                  screenshotDrafts.map((item, index) => (
+                    <div key={`${item.title}-${item.description}`} className="flex items-center justify-between rounded-md bg-white px-3 py-2">
+                      <div>
+                        <div className="font-semibold text-slate-900">{item.title}</div>
+                        <div className="text-xs text-slate-500">{item.description}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEditScreenshot(index)}
+                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary/40 hover:text-primary"
+                        >
+                          Редактировать
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteScreenshot(index)}
+                          className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-          </div>
+          )}
         </div>
       </section>
 

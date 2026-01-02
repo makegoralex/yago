@@ -1,9 +1,32 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import LandingHeader from '../components/ui/LandingHeader';
-import { blogPosts } from '../constants/content';
+import { fetchContent, loadContent, subscribeContentUpdates } from '../lib/contentStore';
+import { applySeo } from '../lib/seo';
 
 const BlogPage: React.FC = () => {
+  const [content, setContent] = useState(loadContent());
+  const { blogPosts } = content;
+
+  useEffect(() => subscribeContentUpdates(setContent), []);
+  useEffect(() => {
+    let isActive = true;
+    fetchContent().then((nextContent) => {
+      if (isActive) setContent(nextContent);
+    });
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    applySeo({
+      title: 'Блог Yago POS',
+      description: 'Статьи и советы для владельцев кофеен: учет, маркетинг, развитие бизнеса.',
+      keywords: 'Yago POS, блог, кофейня, статьи, бизнес, учет',
+    });
+  }, []);
+
   return (
     <div className="landing-shell min-h-screen">
       <LandingHeader />

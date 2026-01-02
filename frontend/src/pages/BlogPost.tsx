@@ -1,11 +1,41 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import LandingHeader from '../components/ui/LandingHeader';
-import { blogPosts } from '../constants/content';
+import { fetchContent, loadContent, subscribeContentUpdates } from '../lib/contentStore';
+import { applySeo } from '../lib/seo';
 
 const BlogPostPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
+  const [content, setContent] = useState(loadContent());
+  const { blogPosts } = content;
   const post = blogPosts.find((item) => item.slug === slug);
+
+  useEffect(() => subscribeContentUpdates(setContent), []);
+  useEffect(() => {
+    let isActive = true;
+    fetchContent().then((nextContent) => {
+      if (isActive) setContent(nextContent);
+    });
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!post) {
+      applySeo({
+        title: 'Статья не найдена | Yago POS',
+        description: 'Страница не найдена. Вернитесь в блог.',
+      });
+      return;
+    }
+
+    applySeo({
+      title: post.seoTitle || post.title,
+      description: post.seoDescription || post.excerpt,
+      keywords: post.seoKeywords || 'Yago POS, блог, кофейня, статьи, POS',
+    });
+  }, [post]);
 
   if (!post) {
     return (

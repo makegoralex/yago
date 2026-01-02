@@ -68,6 +68,10 @@ const serveSpaFallback = (req, res, next) => {
     return next();
   }
 
+  if (req.path.startsWith('/assets') || path.extname(req.path)) {
+    return next();
+  }
+
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return next();
   }

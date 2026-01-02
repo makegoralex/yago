@@ -1,11 +1,41 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import LandingHeader from '../components/ui/LandingHeader';
-import { newsItems } from '../constants/content';
+import { fetchContent, loadContent, subscribeContentUpdates } from '../lib/contentStore';
+import { applySeo } from '../lib/seo';
 
 const NewsPostPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
+  const [content, setContent] = useState(loadContent());
+  const { newsItems } = content;
   const item = newsItems.find((entry) => entry.slug === slug);
+
+  useEffect(() => subscribeContentUpdates(setContent), []);
+  useEffect(() => {
+    let isActive = true;
+    fetchContent().then((nextContent) => {
+      if (isActive) setContent(nextContent);
+    });
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!item) {
+      applySeo({
+        title: 'Новость не найдена | Yago POS',
+        description: 'Запись не найдена. Вернитесь к списку новостей.',
+      });
+      return;
+    }
+
+    applySeo({
+      title: item.seoTitle || item.title,
+      description: item.seoDescription || item.description,
+      keywords: item.seoKeywords || 'Yago POS, новости, касса, POS',
+    });
+  }, [item]);
 
   if (!item) {
     return (
