@@ -219,6 +219,13 @@ textarea:focus {
   color: var(--text-primary);
 }
 
+html.pos-locked,
+body.pos-locked {
+  overscroll-behavior: none;
+  overflow: hidden;
+  height: 100%;
+}
+
 .pos-shell .shadow-soft,
 .pos-shell .shadow-2xl {
   box-shadow: none !important;
