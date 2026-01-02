@@ -1,10 +1,24 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Megaphone } from 'lucide-react';
 import LandingHeader from '../components/ui/LandingHeader';
-import { newsItems } from '../constants/content';
+import { loadContent, subscribeContentUpdates } from '../lib/contentStore';
+import { applySeo } from '../lib/seo';
 
 const NewsPage: React.FC = () => {
+  const [content, setContent] = useState(loadContent());
+  const { newsItems } = content;
+
+  useEffect(() => subscribeContentUpdates(setContent), []);
+
+  useEffect(() => {
+    applySeo({
+      title: 'Новости Yago POS',
+      description: 'Свежие обновления, новые функции и улучшения в Yago POS.',
+      keywords: 'Yago POS, новости, обновления, касса, POS',
+    });
+  }, []);
+
   return (
     <div className="landing-shell min-h-screen">
       <LandingHeader />

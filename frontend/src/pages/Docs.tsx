@@ -1,9 +1,23 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import LandingHeader from '../components/ui/LandingHeader';
-import { instructionLinks } from '../constants/content';
+import { loadContent, subscribeContentUpdates } from '../lib/contentStore';
+import { applySeo } from '../lib/seo';
 
 const DocsPage: React.FC = () => {
+  const [content, setContent] = useState(loadContent());
+  const { instructionLinks } = content;
+
+  useEffect(() => subscribeContentUpdates(setContent), []);
+
+  useEffect(() => {
+    applySeo({
+      title: 'Инструкции Yago POS',
+      description: 'Гайды и инструкции по запуску и использованию Yago POS.',
+      keywords: 'Yago POS, инструкции, help, гайды, POS',
+    });
+  }, []);
+
   return (
     <div className="landing-shell min-h-screen">
       <LandingHeader />
