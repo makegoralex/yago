@@ -2,7 +2,7 @@ import { isAxiosError } from 'axios';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { loadContent, saveContent } from '../lib/contentStore';
+import { fetchContent, loadContent, saveContent } from '../lib/contentStore';
 import { useAuthStore } from '../store/auth';
 import type { BlogPost, InstructionLink, NewsItem, ScreenshotItem } from '../constants/content';
 
@@ -481,7 +481,21 @@ const SuperAdminPage: React.FC = () => {
   }, [fetchBillingConfig, fetchBillingSummary, fetchOrganizations, fetchUsers]);
 
   useEffect(() => {
-    saveContent({
+    let isActive = true;
+    fetchContent().then((nextContent) => {
+      if (!isActive) return;
+      setNewsDrafts(nextContent.newsItems);
+      setBlogDrafts(nextContent.blogPosts);
+      setInstructionDrafts(nextContent.instructionLinks);
+      setScreenshotDrafts(nextContent.screenshotGallery);
+    });
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    void saveContent({
       newsItems: newsDrafts,
       blogPosts: blogDrafts,
       instructionLinks: instructionDrafts,

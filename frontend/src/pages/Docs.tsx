@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import LandingHeader from '../components/ui/LandingHeader';
-import { loadContent, subscribeContentUpdates } from '../lib/contentStore';
+import { fetchContent, loadContent, subscribeContentUpdates } from '../lib/contentStore';
 import { applySeo } from '../lib/seo';
 
 const DocsPage: React.FC = () => {
@@ -9,6 +9,15 @@ const DocsPage: React.FC = () => {
   const { instructionLinks } = content;
 
   useEffect(() => subscribeContentUpdates(setContent), []);
+  useEffect(() => {
+    let isActive = true;
+    fetchContent().then((nextContent) => {
+      if (isActive) setContent(nextContent);
+    });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   useEffect(() => {
     applySeo({

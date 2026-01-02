@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/auth';
 import type { AuthUser } from '../store/auth';
 import { useToast } from '../providers/ToastProvider';
 import LandingHeader from '../components/ui/LandingHeader';
-import { loadContent, subscribeContentUpdates } from '../lib/contentStore';
+import { fetchContent, loadContent, subscribeContentUpdates } from '../lib/contentStore';
 import { applySeo } from '../lib/seo';
 
 const featureGroups = [
@@ -116,6 +116,16 @@ const LandingPage: React.FC = () => {
   }, []);
 
   useEffect(() => subscribeContentUpdates(setContent), []);
+
+  useEffect(() => {
+    let isActive = true;
+    fetchContent().then((nextContent) => {
+      if (isActive) setContent(nextContent);
+    });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   return (
     <div className="landing-shell min-h-screen bg-white">

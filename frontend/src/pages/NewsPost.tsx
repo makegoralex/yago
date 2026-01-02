@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import LandingHeader from '../components/ui/LandingHeader';
-import { loadContent, subscribeContentUpdates } from '../lib/contentStore';
+import { fetchContent, loadContent, subscribeContentUpdates } from '../lib/contentStore';
 import { applySeo } from '../lib/seo';
 
 const NewsPostPage: React.FC = () => {
@@ -11,6 +11,15 @@ const NewsPostPage: React.FC = () => {
   const item = newsItems.find((entry) => entry.slug === slug);
 
   useEffect(() => subscribeContentUpdates(setContent), []);
+  useEffect(() => {
+    let isActive = true;
+    fetchContent().then((nextContent) => {
+      if (isActive) setContent(nextContent);
+    });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!item) {

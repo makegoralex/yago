@@ -8,6 +8,7 @@ import {
   type NewsItem,
   type ScreenshotItem,
 } from '../constants/content';
+import api from './api';
 
 export type ContentCollection = {
   newsItems: NewsItem[];
@@ -50,12 +51,32 @@ export const loadContent = (): ContentCollection => {
   return normalizeContent(saved);
 };
 
-export const saveContent = (nextContent: ContentCollection) => {
+export const saveContent = async (nextContent: ContentCollection) => {
   const storage = getStorage();
   if (!storage) return;
   storage.setItem(STORAGE_KEY, JSON.stringify(nextContent));
+  try {
+    await api.put('/api/content', nextContent);
+  } catch (error) {
+    console.error('Failed to sync content to server:', error);
+  }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('yago-content-updated'));
+  }
+};
+
+export const fetchContent = async (): Promise<ContentCollection> => {
+  try {
+    const response = await api.get('/api/content');
+    const payload = normalizeContent(response.data?.data ?? null);
+    const storage = getStorage();
+    if (storage) {
+      storage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    }
+    return payload;
+  } catch (error) {
+    console.error('Failed to fetch content from server:', error);
+    return loadContent();
   }
 };
 
