@@ -97,7 +97,9 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
 
   useEffect(() => {
     if (open) {
-      modalScrollRef.current?.scrollTo({ top: 0 });
+      if (modalScrollRef.current) {
+        modalScrollRef.current.scrollTo({ top: 0 });
+      }
     }
   }, [open, searchQuery, suggestions.length]);
 
