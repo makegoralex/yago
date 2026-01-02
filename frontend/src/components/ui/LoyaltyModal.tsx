@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import api from '../../lib/api';
-import { useToast } from '../../providers/ToastProvider';
 import type { CustomerSummary } from '../../store/order';
 
 export type LoyaltyModalProps = {
@@ -15,11 +14,9 @@ const MIN_PHONE_SEARCH_LENGTH = 4;
 const defaultPhoneValue = '+7';
 
 const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) => {
-  const { notify } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [createPhone, setCreatePhone] = useState(defaultPhoneValue);
   const [name, setName] = useState('');
-  const [results, setResults] = useState<CustomerSummary[]>([]);
   const [customers, setCustomers] = useState<CustomerSummary[]>([]);
   const [suggestions, setSuggestions] = useState<CustomerSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -46,9 +43,7 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
         }));
         setCustomers(mapped);
       })
-      .catch(() => {
-        notify({ title: 'Не удалось загрузить клиентов', type: 'error' });
-      })
+      .catch(() => {})
       .finally(() => {
         if (isMounted) {
           setLoading(false);
@@ -58,15 +53,13 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
     setSearchQuery('');
     setCreatePhone(defaultPhoneValue);
     setName('');
-    setResults([]);
     setSuggestions([]);
 
     return () => {
       isMounted = false;
-      setResults([]);
       setSuggestions([]);
     };
-  }, [open, notify]);
+  }, [open]);
 
   const filterCustomers = useCallback(
     (query: string) => {
@@ -96,6 +89,7 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
       setSuggestions([]);
       return;
     }
+  }, [open, searchQuery, results.length, suggestions.length]);
 
     const filtered = filterCustomers(searchQuery);
     setSuggestions(filtered.slice(0, 5));
@@ -105,42 +99,19 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
     if (open) {
       modalScrollRef.current?.scrollTo({ top: 0 });
     }
-  }, [open, searchQuery, results.length, suggestions.length]);
+  }, [open, searchQuery, suggestions.length]);
 
-  const trimmedQuery = searchQuery.trim();
-  const hasLetters = /[a-zа-яё]/i.test(trimmedQuery);
-  const searchDigits = normalizePhone(trimmedQuery);
-  const isPhoneQueryReady = searchDigits.length >= MIN_PHONE_SEARCH_LENGTH;
-  const isSearchReady = isPhoneQueryReady || (hasLetters && trimmedQuery.length >= 2);
-
-  const displayResults = useMemo(() => {
-    if (results.length > 0) {
-      return results;
-    }
-
-    return suggestions;
-  }, [results, suggestions]);
 
   const attachAndClose = (customer: CustomerSummary) => {
     onAttach(customer);
-    notify({ title: 'Клиент выбран', description: customer.name, type: 'success' });
     onClose();
   };
 
   if (!open) return null;
 
-  const handleSearch = async () => {
-    const filtered = filterCustomers(searchQuery);
-    setResults(filtered);
-    if (filtered.length === 0) {
-      notify({ title: 'Клиент не найден', description: 'Можно создать нового клиента ниже.' });
-    }
-  };
-
   const handleSearchQueryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setSearchQuery(value);
-    setResults([]);
   };
 
   const handleCreatePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,11 +133,8 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
         phone: response.data.data.phone ?? createPhone,
         points: typeof response.data.data.points === 'number' ? response.data.data.points : 0,
       };
-      setResults([created]);
       setCustomers((prev) => [created, ...prev]);
-      notify({ title: 'Клиент создан', type: 'success' });
     } catch (error) {
-      notify({ title: 'Не удалось создать клиента', type: 'error' });
     } finally {
       setLoading(false);
     }

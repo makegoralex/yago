@@ -19,7 +19,6 @@ import {
   type SelectedModifier,
 } from '../store/order';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-import { useToast } from '../providers/ToastProvider';
 import { useShiftStore, type ShiftSummary } from '../store/shift';
 import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
@@ -132,20 +131,11 @@ const POSPage: React.FC = () => {
   const isOpeningShift = useShiftStore((state) => state.opening);
   const isClosingShift = useShiftStore((state) => state.closing);
 
-  const { notify } = useToast();
   const formatBillingDate = (value?: string | null) =>
     value ? new Date(value).toLocaleDateString('ru-RU') : '—';
   const requireActiveSubscription = useCallback(() => {
-    if (!billingLocked) return true;
-
-    notify({
-      title: 'Подписка неактивна',
-      description: 'Продлите подписку в настройках, чтобы продолжить оформлять заказы.',
-      type: 'error',
-    });
-
-    return false;
-  }, [billingLocked, notify]);
+    return !billingLocked;
+  }, [billingLocked]);
   const [isPaymentOpen, setPaymentOpen] = useState(false);
   const [isLoyaltyOpen, setLoyaltyOpen] = useState(false);
   const [isPaying, setPaying] = useState(false);
@@ -187,10 +177,8 @@ const POSPage: React.FC = () => {
   }, [activeSection, fetchActiveOrders]);
 
   useEffect(() => {
-    void fetchCurrentShift().catch(() =>
-      notify({ title: 'Смена', description: 'Не удалось загрузить состояние смены', type: 'error' })
-    );
-  }, [fetchCurrentShift, notify]);
+    void fetchCurrentShift().catch(() => undefined);
+  }, [fetchCurrentShift]);
 
   const currentShiftId = currentShift?._id;
 
@@ -200,10 +188,8 @@ const POSPage: React.FC = () => {
       return;
     }
 
-    void fetchShiftHistory().catch(() =>
-      notify({ title: 'История чеков', description: 'Не удалось обновить историю смены', type: 'error' })
-    );
-  }, [currentShiftId, fetchShiftHistory, resetShiftHistory, notify]);
+    void fetchShiftHistory().catch(() => undefined);
+  }, [currentShiftId, fetchShiftHistory, resetShiftHistory]);
 
   const filteredProducts = useMemo(() => {
     if (!activeCategoryId) {
@@ -235,11 +221,6 @@ const POSPage: React.FC = () => {
     }
 
     if (!currentShift) {
-      notify({
-        title: 'Смена закрыта',
-        description: 'Откройте смену, чтобы начать продажи',
-        type: 'info',
-      });
       return;
     }
 
@@ -247,11 +228,7 @@ const POSPage: React.FC = () => {
     try {
       await createDraft({ forceNew: true });
     } catch (error) {
-      notify({
-        title: 'Ошибка заказа',
-        description: 'Не удалось создать черновик заказа',
-        type: 'error',
-      });
+      // ignore
     } finally {
       setStartingOrder(false);
     }
@@ -270,14 +247,9 @@ const POSPage: React.FC = () => {
     setPaying(true);
     try {
       await payOrder(payload);
-      notify({
-        title: 'Оплата проведена',
-        description: 'Завершите заказ, чтобы отправить его в историю',
-        type: 'success',
-      });
       setPaymentOpen(false);
     } catch (error) {
-      notify({ title: 'Ошибка оплаты', description: 'Попробуйте снова', type: 'error' });
+      // ignore
     } finally {
       setPaying(false);
     }
@@ -295,11 +267,9 @@ const POSPage: React.FC = () => {
     setCompleting(true);
     try {
       await completeOrder();
-      notify({ title: 'Заказ завершён', description: 'Чек отправлен в историю', type: 'success' });
       await fetchShiftHistory().catch(() => undefined);
     } catch (error) {
-      const description = error instanceof Error ? error.message : 'Не удалось завершить заказ';
-      notify({ title: 'Ошибка завершения', description, type: 'error' });
+      // ignore
     } finally {
       setCompleting(false);
     }
@@ -313,7 +283,7 @@ const POSPage: React.FC = () => {
     try {
       await attachCustomer(customerToAttach);
     } catch (error) {
-      notify({ title: 'Не удалось привязать клиента', type: 'error' });
+      // ignore
     } finally {
       setLoyaltyOpen(false);
     }
@@ -327,11 +297,11 @@ const POSPage: React.FC = () => {
     try {
       await clearDiscount();
       await attachCustomer(null);
-      notify({ title: 'Клиент отвязан', type: 'info' });
     } catch (error) {
-      notify({ title: 'Не удалось отвязать клиента', type: 'error' });
+      // ignore
+    } finally {
+      setLoyaltyOpen(false);
     }
-    setLoyaltyOpen(false);
   };
 
   const handleOrderTagChange = async (nextTag: OrderTag | null) => {
@@ -342,8 +312,7 @@ const POSPage: React.FC = () => {
     try {
       await setOrderTag(nextTag);
     } catch (error) {
-      const description = error instanceof Error ? error.message : 'Не удалось изменить тип заказа';
-      notify({ title: 'Ошибка метки заказа', description, type: 'error' });
+      // ignore
     }
   };
 
@@ -360,11 +329,9 @@ const POSPage: React.FC = () => {
         return;
       }
       await redeemPoints(pointsValue);
-      notify({ title: 'Баллы списаны', type: 'success' });
       setRedeemOpen(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось списать баллы';
-      notify({ title: 'Ошибка списания', description: message, type: 'error' });
+      // ignore
     } finally {
       setRedeeming(false);
     }
@@ -377,12 +344,10 @@ const POSPage: React.FC = () => {
 
     try {
       await openShift();
-      notify({ title: 'Смена открыта', type: 'success' });
       await fetchShiftHistory().catch(() => undefined);
       setShiftPanelOpen(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось открыть смену';
-      notify({ title: 'Не удалось открыть смену', description: message, type: 'error' });
+      // ignore
     }
   };
 
@@ -403,23 +368,18 @@ const POSPage: React.FC = () => {
     try {
       await closeShift();
       resetShiftHistory();
-      notify({ title: 'Смена закрыта', type: 'info' });
       setShiftPanelOpen(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось закрыть смену';
-      notify({ title: 'Не удалось закрыть смену', description: message, type: 'error' });
+      // ignore
     }
   };
 
   const handleRefreshHistory = () => {
     if (!currentShift) {
-      notify({ title: 'Смена закрыта', description: 'Откройте смену, чтобы просматривать чеки', type: 'info' });
       return;
     }
 
-    void fetchShiftHistory().catch(() =>
-      notify({ title: 'История чеков', description: 'Не удалось обновить историю', type: 'error' })
-    );
+    void fetchShiftHistory().catch(() => undefined);
   };
 
   const handleAddProduct = (product: typeof products[number]) => {
@@ -432,9 +392,7 @@ const POSPage: React.FC = () => {
       return;
     }
 
-    void addProduct(product).catch(() => {
-      notify({ title: 'Не удалось добавить товар', type: 'error' });
-    });
+    void addProduct(product).catch(() => undefined);
   };
 
   const handleModifierConfirm = (modifiers: SelectedModifier[]) => {
@@ -444,9 +402,7 @@ const POSPage: React.FC = () => {
 
     if (!modifierProduct) return;
 
-    void addProduct(modifierProduct, modifiers).catch(() => {
-      notify({ title: 'Не удалось добавить товар', type: 'error' });
-    });
+    void addProduct(modifierProduct, modifiers).catch(() => undefined);
     setModifierProduct(null);
   };
 
@@ -705,30 +661,17 @@ const POSPage: React.FC = () => {
               onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
               onRedeemLoyalty={() => {
                 if (!customer || customer.points <= 0) {
-                  notify({ title: 'Нет доступных баллов', type: 'info' });
                   return;
                 }
                 setRedeemOpen(true);
               }}
-              onClearDiscount={() =>
-                void clearDiscount().catch(() => notify({ title: 'Не удалось сбросить скидку', type: 'error' }))
-              }
-              onCancel={() =>
-                void cancelOrder()
-                  .then(() => {
-                  notify({ title: 'Заказ отменён', type: 'info' });
-                })
-                  .catch(() => notify({ title: 'Не удалось отменить заказ', type: 'error' }))
-              }
+              onClearDiscount={() => void clearDiscount().catch(() => undefined)}
+              onCancel={() => void cancelOrder().catch(() => undefined)}
               onComplete={() => void handleCompleteCurrentOrder()}
               availableDiscounts={availableDiscounts}
               appliedDiscounts={appliedDiscounts}
               selectedDiscountIds={selectedDiscountIds}
-              onToggleDiscount={(discountId) =>
-                void toggleDiscount(discountId).catch(() =>
-                  notify({ title: 'Не удалось применить скидку', type: 'error' })
-                )
-              }
+              onToggleDiscount={(discountId) => void toggleDiscount(discountId).catch(() => undefined)}
               visible
             />
           </div>
