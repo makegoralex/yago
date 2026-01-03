@@ -2277,7 +2277,7 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const handleSelectProduct = (product: Product) => {
+  function handleSelectProduct(product: Product) {
     setSelectedProduct(product);
     setIsCreatingProduct(false);
     setProductEditDirty(false);
@@ -2312,6 +2312,11 @@ const AdminPage: React.FC = () => {
         ? product.modifierGroups.map((group) => group._id).filter(Boolean)
         : []
     );
+  }
+
+  const updateProductEditField = (field: keyof typeof productEditForm, value: string | boolean) => {
+    setProductEditDirty(true);
+    setProductEditForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const updateProductEditField = (field: keyof typeof productEditForm, value: string | boolean) => {
