@@ -2314,12 +2314,7 @@ const AdminPage: React.FC = () => {
     );
   }
 
-  const updateProductEditField = (field: keyof typeof productEditForm, value: string | boolean) => {
-    setProductEditDirty(true);
-    setProductEditForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const updateProductEditField = (field: keyof typeof productEditForm, value: string | boolean) => {
+  const handleProductEditFieldChange = (field: keyof typeof productEditForm, value: string | boolean) => {
     setProductEditDirty(true);
     setProductEditForm((prev) => ({ ...prev, [field]: value }));
   };
@@ -4645,7 +4640,7 @@ const AdminPage: React.FC = () => {
                                   onChange={(event) =>
                                     isCreatingProduct
                                       ? setNewProduct((prev) => ({ ...prev, name: event.target.value }))
-                                      : updateProductEditField('name', event.target.value)
+                                      : handleProductEditFieldChange('name', event.target.value)
                                   }
                                   className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                                 />
@@ -4657,7 +4652,7 @@ const AdminPage: React.FC = () => {
                                   onChange={(event) =>
                                     isCreatingProduct
                                       ? setNewProduct((prev) => ({ ...prev, categoryId: event.target.value }))
-                                      : updateProductEditField('categoryId', event.target.value)
+                                      : handleProductEditFieldChange('categoryId', event.target.value)
                                   }
                                   className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                                 >
@@ -4676,7 +4671,7 @@ const AdminPage: React.FC = () => {
                                   onChange={(event) =>
                                     isCreatingProduct
                                       ? setNewProduct((prev) => ({ ...prev, description: event.target.value }))
-                                      : updateProductEditField('description', event.target.value)
+                                      : handleProductEditFieldChange('description', event.target.value)
                                   }
                                   className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                                   rows={3}
@@ -4690,7 +4685,7 @@ const AdminPage: React.FC = () => {
                                   onChange={(event) =>
                                     isCreatingProduct
                                       ? setNewProduct((prev) => ({ ...prev, imageUrl: event.target.value }))
-                                      : updateProductEditField('imageUrl', event.target.value)
+                                      : handleProductEditFieldChange('imageUrl', event.target.value)
                                   }
                                   className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                                 />
@@ -4706,7 +4701,7 @@ const AdminPage: React.FC = () => {
                                             ...prev,
                                             discountType: event.target.value as typeof prev.discountType,
                                           }))
-                                        : updateProductEditField('discountType', event.target.value)
+                                        : handleProductEditFieldChange('discountType', event.target.value)
                                     }
                                     className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                                   >
@@ -4725,7 +4720,7 @@ const AdminPage: React.FC = () => {
                                     onChange={(event) =>
                                       isCreatingProduct
                                         ? setNewProduct((prev) => ({ ...prev, discountValue: event.target.value }))
-                                        : updateProductEditField('discountValue', event.target.value)
+                                        : handleProductEditFieldChange('discountValue', event.target.value)
                                     }
                                     className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                                   />
@@ -4739,7 +4734,7 @@ const AdminPage: React.FC = () => {
                                       type="checkbox"
                                       className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
                                       checked={productEditForm.isActive}
-                                      onChange={(event) => updateProductEditField('isActive', event.target.checked)}
+                                      onChange={(event) => handleProductEditFieldChange('isActive', event.target.checked)}
                                     />
                                     В продаже
                                   </label>
@@ -4768,7 +4763,7 @@ const AdminPage: React.FC = () => {
                                       onChange={(event) =>
                                         isCreatingProduct
                                           ? setNewProduct((prev) => ({ ...prev, basePrice: event.target.value }))
-                                          : updateProductEditField('basePrice', event.target.value)
+                                          : handleProductEditFieldChange('basePrice', event.target.value)
                                       }
                                       className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                                     />
@@ -4970,7 +4965,7 @@ const AdminPage: React.FC = () => {
                             onChange={(event) =>
                               isCreatingProduct
                                 ? setNewProduct((prev) => ({ ...prev, name: event.target.value }))
-                                : updateProductEditField('name', event.target.value)
+                                : handleProductEditFieldChange('name', event.target.value)
                             }
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                           />
@@ -4982,7 +4977,7 @@ const AdminPage: React.FC = () => {
                             onChange={(event) =>
                               isCreatingProduct
                                 ? setNewProduct((prev) => ({ ...prev, categoryId: event.target.value }))
-                                : updateProductEditField('categoryId', event.target.value)
+                                : handleProductEditFieldChange('categoryId', event.target.value)
                             }
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                           >
@@ -5008,7 +5003,7 @@ const AdminPage: React.FC = () => {
                             onChange={(event) =>
                               isCreatingProduct
                                 ? setNewProduct((prev) => ({ ...prev, basePrice: event.target.value }))
-                                : updateProductEditField('basePrice', event.target.value)
+                                : handleProductEditFieldChange('basePrice', event.target.value)
                             }
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                           />
@@ -5020,7 +5015,7 @@ const AdminPage: React.FC = () => {
                             onChange={(event) =>
                               isCreatingProduct
                                 ? setNewProduct((prev) => ({ ...prev, description: event.target.value }))
-                                : updateProductEditField('description', event.target.value)
+                                : handleProductEditFieldChange('description', event.target.value)
                             }
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                             rows={3}
@@ -5034,7 +5029,7 @@ const AdminPage: React.FC = () => {
                             onChange={(event) =>
                               isCreatingProduct
                                 ? setNewProduct((prev) => ({ ...prev, imageUrl: event.target.value }))
-                                : updateProductEditField('imageUrl', event.target.value)
+                                : handleProductEditFieldChange('imageUrl', event.target.value)
                             }
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                           />
@@ -5049,7 +5044,7 @@ const AdminPage: React.FC = () => {
                                     ...prev,
                                     discountType: event.target.value as typeof prev.discountType,
                                   }))
-                                : updateProductEditField('discountType', event.target.value)
+                                : handleProductEditFieldChange('discountType', event.target.value)
                             }
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                           >
@@ -5068,7 +5063,7 @@ const AdminPage: React.FC = () => {
                             onChange={(event) =>
                               isCreatingProduct
                                 ? setNewProduct((prev) => ({ ...prev, discountValue: event.target.value }))
-                                : updateProductEditField('discountValue', event.target.value)
+                                : handleProductEditFieldChange('discountValue', event.target.value)
                             }
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                           />
