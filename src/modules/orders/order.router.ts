@@ -6,7 +6,7 @@ import { enforceActiveSubscription } from '../../middleware/subscription';
 import { validateRequest } from '../../middleware/validation';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
 import { CustomerModel } from '../customers/customer.model';
-import { earnLoyaltyPoints } from '../loyalty/loyalty.service';
+import { earnLoyaltyPoints, redeemLoyaltyPoints } from '../loyalty/loyalty.service';
 import {
   OrderModel,
   type OrderDocument,
@@ -851,6 +851,21 @@ router.post(
       const message = error instanceof Error ? error.message : 'Сначала откройте смену на кассе';
       res.status(409).json({ data: null, error: message });
       return;
+    }
+
+    if (order.manualDiscount > 0) {
+      if (!order.customerId) {
+        res.status(400).json({ data: null, error: 'Для списания баллов нужен клиент' });
+        return;
+      }
+
+      try {
+        await redeemLoyaltyPoints(order.customerId.toString(), order.manualDiscount);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Не удалось списать баллы';
+        res.status(400).json({ data: null, error: message });
+        return;
+      }
     }
 
     order.status = 'completed';

@@ -827,21 +827,16 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       throw new Error('Баллы превышают сумму заказа');
     }
 
-    if (points > customer.points) {
+    const remainingPoints = Math.max(customer.points - manualDiscount, 0);
+    if (points > remainingPoints) {
       throw new Error('Недостаточно баллов у клиента');
     }
 
     set({ loading: true });
     try {
-      const response = await api.post('/api/loyalty/redeem', { customerId, points });
-      const updatedCustomer = mapCustomer(response.data.data?.customer) ?? {
-        ...customer,
-        points: customer.points - points,
-      };
-
       const newManualDiscount = roundCurrency(manualDiscount + points);
 
-      set({ customer: updatedCustomer, manualDiscount: newManualDiscount });
+      set({ manualDiscount: newManualDiscount });
 
       await get().syncItems(get().items, { manualDiscount: newManualDiscount, customerId });
     } finally {
