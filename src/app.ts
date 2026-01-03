@@ -194,13 +194,6 @@ if (!frontendDistPath) {
 app.use(serveFrontendStatic);
 app.use(serveSpaFallback);
 
-const frontendPath = path.join(__dirname, 'frontend');
-app.use(express.static(frontendPath));
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(frontendPath, 'index.html'));
-});
-
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ message: 'Internal server error' });

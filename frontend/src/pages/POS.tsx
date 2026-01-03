@@ -96,6 +96,7 @@ const POSPage: React.FC = () => {
   const subtotal = useOrderStore((state) => state.subtotal);
   const discount = useOrderStore((state) => state.discount);
   const total = useOrderStore((state) => state.total);
+  const manualDiscount = useOrderStore((state) => state.manualDiscount);
   const status = useOrderStore((state) => state.status);
   const orderId = useOrderStore((state) => state.orderId);
   const orderTag = useOrderStore((state) => state.orderTag);
@@ -113,6 +114,7 @@ const POSPage: React.FC = () => {
   const redeemPoints = useOrderStore((state) => state.redeemPoints);
   const clearDiscount = useOrderStore((state) => state.clearDiscount);
   const cancelOrder = useOrderStore((state) => state.cancelOrder);
+  const cancelReceipt = useOrderStore((state) => state.cancelReceipt);
   const availableDiscounts = useOrderStore((state) => state.availableDiscounts);
   const appliedDiscounts = useOrderStore((state) => state.appliedDiscounts);
   const selectedDiscountIds = useOrderStore((state) => state.selectedDiscountIds);
@@ -150,6 +152,10 @@ const POSPage: React.FC = () => {
   const [isShiftPanelOpen, setShiftPanelOpen] = useState(false);
   const [modifierProduct, setModifierProduct] = useState<Product | null>(null);
   const orderTagsEnabled = useRestaurantStore((state) => state.enableOrderTags);
+  const redeemablePoints = useMemo(
+    () => Math.max((customer?.points ?? 0) - manualDiscount, 0),
+    [customer?.points, manualDiscount]
+  );
 
   useEffect(() => {
     void fetchCatalog();
@@ -380,6 +386,19 @@ const POSPage: React.FC = () => {
     }
 
     void fetchShiftHistory().catch(() => undefined);
+  };
+
+  const handleCancelReceipt = async (orderId: string) => {
+    const confirmed = window.confirm('Отменить чек? Баллы и остатки будут возвращены.');
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await cancelReceipt(orderId);
+    } catch (error) {
+      // ignore
+    }
   };
 
   const handleAddProduct = (product: typeof products[number]) => {
@@ -660,7 +679,7 @@ const POSPage: React.FC = () => {
               orderTag={orderTag}
               onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
               onRedeemLoyalty={() => {
-                if (!customer || customer.points <= 0) {
+                if (!customer || redeemablePoints <= 0) {
                   return;
                 }
                 setRedeemOpen(true);
@@ -700,7 +719,7 @@ const POSPage: React.FC = () => {
       <RedeemPointsModal
         open={isRedeemOpen}
         onClose={() => setRedeemOpen(false)}
-        maxPoints={customer?.points ?? 0}
+        maxPoints={redeemablePoints}
         maxAmount={Math.max(subtotal - discount, 0)}
         onSubmit={(value) => handleRedeemConfirm(value)}
         isProcessing={isRedeeming}
@@ -712,6 +731,7 @@ const POSPage: React.FC = () => {
           loading={shiftHistoryLoading}
           shiftLoading={isShiftLoading}
           onRefresh={handleRefreshHistory}
+          onCancelReceipt={handleCancelReceipt}
           className="mb-0"
         />
       </FloatingPanelOverlay>
@@ -952,6 +972,7 @@ type ReceiptHistoryCardProps = {
   loading: boolean;
   shiftLoading: boolean;
   onRefresh: () => void;
+  onCancelReceipt: (orderId: string) => void;
   className?: string;
 };
 
@@ -961,12 +982,19 @@ const ReceiptHistoryCard: React.FC<ReceiptHistoryCardProps> = ({
   loading,
   shiftLoading,
   onRefresh,
+  onCancelReceipt,
   className,
 }) => {
   const paymentLabel = (method?: PaymentMethod) => {
     if (method === 'card') return 'Карта';
     if (method === 'cash') return 'Наличные';
     return 'Без данных';
+  };
+
+  const statusLabel = (status: OrderHistoryEntry['status']) => {
+    if (status === 'paid') return 'Оплачен';
+    if (status === 'completed') return 'Завершён';
+    return 'Отменён';
   };
 
   return (
@@ -1016,6 +1044,26 @@ const ReceiptHistoryCard: React.FC<ReceiptHistoryCardProps> = ({
                   <p className="text-base font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
                   <p className="text-xs uppercase text-slate-400">{paymentLabel(order.paymentMethod)}</p>
                 </div>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <span
+                  className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase ${
+                    order.status === 'cancelled'
+                      ? 'bg-rose-50 text-rose-600'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {statusLabel(order.status)}
+                </span>
+                {order.status !== 'cancelled' ? (
+                  <button
+                    type="button"
+                    onClick={() => onCancelReceipt(order._id)}
+                    className="rounded-full border border-rose-200 px-3 py-1 text-[11px] font-semibold text-rose-600 transition hover:bg-rose-50"
+                  >
+                    Отменить чек
+                  </button>
+                ) : null}
               </div>
               {order.items.length ? (
                 <p className="mt-2 text-xs text-slate-500">

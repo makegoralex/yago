@@ -133,6 +133,7 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
         points: typeof response.data.data.points === 'number' ? response.data.data.points : 0,
       };
       setCustomers((prev) => [created, ...prev]);
+      attachAndClose(created);
     } catch (error) {
     } finally {
       setLoading(false);
