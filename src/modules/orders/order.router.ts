@@ -6,7 +6,12 @@ import { enforceActiveSubscription } from '../../middleware/subscription';
 import { validateRequest } from '../../middleware/validation';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
 import { CustomerModel } from '../customers/customer.model';
-import { earnLoyaltyPoints } from '../loyalty/loyalty.service';
+import {
+  earnLoyaltyPoints,
+  redeemLoyaltyPoints,
+  restoreLoyaltyPoints,
+  rollbackEarnedLoyaltyPoints,
+} from '../loyalty/loyalty.service';
 import {
   OrderModel,
   type OrderDocument,
@@ -25,9 +30,10 @@ const router = Router();
 
 const CASHIER_ROLES = ['cashier', 'owner', 'superAdmin'];
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'card'];
-const ORDER_STATUSES: OrderStatus[] = ['draft', 'paid', 'completed'];
+const ORDER_STATUSES: OrderStatus[] = ['draft', 'paid', 'completed', 'cancelled'];
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['draft', 'paid'];
 const FULFILLED_ORDER_STATUSES: OrderStatus[] = ['paid', 'completed'];
+const SHIFT_HISTORY_STATUSES: OrderStatus[] = ['paid', 'completed', 'cancelled'];
 const ORDER_TAGS: OrderTag[] = ['takeaway', 'delivery'];
 const CUSTOMER_PROJECTION = 'name phone points';
 
@@ -142,7 +148,7 @@ const buildShiftHistoryFilter = (
     organizationId: shift.organizationId,
     locationId: shift.locationId,
     registerId: shift.registerId,
-    status: { $in: FULFILLED_ORDER_STATUSES },
+    status: { $in: SHIFT_HISTORY_STATUSES },
     createdAt: range,
   } as FilterQuery<OrderDocument>;
 };
@@ -246,6 +252,67 @@ const deductInventoryForOrder = async (order: OrderDocument): Promise<void> => {
       }
 
       await adjustInventoryQuantity(warehouseId, 'product', item.productId, -item.qty, organizationId);
+    }
+  }
+};
+
+const restoreInventoryForOrder = async (order: OrderDocument): Promise<void> => {
+  const organizationId = order.organizationId as Types.ObjectId | undefined;
+  if (!organizationId) {
+    return;
+  }
+
+  const warehouseId = await resolveWarehouseId(organizationId, order.warehouseId);
+
+  if (!warehouseId) {
+    return;
+  }
+
+  if (!Array.isArray(order.items) || order.items.length === 0) {
+    return;
+  }
+
+  const productIds = order.items.map((item) => item.productId);
+  const products = await ProductModel.find({ _id: { $in: productIds }, organizationId })
+    .select('ingredients')
+    .lean();
+
+  if (!products.length) {
+    return;
+  }
+
+  const productMap = new Map<string, typeof products[number]>();
+  for (const product of products) {
+    productMap.set(product._id.toString(), product);
+  }
+
+  for (const item of order.items) {
+    const product = productMap.get(item.productId.toString());
+    if (!product) {
+      continue;
+    }
+
+    if (Array.isArray(product.ingredients) && product.ingredients.length > 0) {
+      for (const ingredientEntry of product.ingredients) {
+        const restoreQty = ingredientEntry.quantity * item.qty;
+        if (restoreQty <= 0) {
+          continue;
+        }
+
+        await adjustInventoryQuantity(
+          warehouseId,
+          'ingredient',
+          new Types.ObjectId(ingredientEntry.ingredientId),
+          restoreQty,
+          organizationId
+        );
+      }
+    } else {
+      if (item.qty <= 0) {
+        continue;
+      }
+
+      await adjustInventoryQuantity(warehouseId, 'product', item.productId, item.qty, organizationId);
     }
   }
 };
@@ -789,6 +856,21 @@ router.post(
       return;
     }
 
+    if (order.manualDiscount > 0) {
+      if (!order.customerId) {
+        res.status(400).json({ data: null, error: 'Для списания баллов нужен клиент' });
+        return;
+      }
+
+      try {
+        await redeemLoyaltyPoints(order.customerId.toString(), order.manualDiscount);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Не удалось списать баллы';
+        res.status(400).json({ data: null, error: message });
+        return;
+      }
+    }
+
     order.payment = {
       method,
       amount: normalizedAmount,
@@ -845,15 +927,86 @@ router.post(
       return;
     }
 
-    try {
-      await ensureOrderShiftIsActive(order, req.user?.id);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Сначала откройте смену на кассе';
-      res.status(409).json({ data: null, error: message });
+    order.status = 'completed';
+    await order.save();
+
+    const populatedOrder =
+      (await reloadOrderWithCustomer(order._id as Types.ObjectId, order.organizationId)) ?? order;
+
+    res.json({ data: populatedOrder, error: null });
+  })
+);
+
+router.post(
+  '/:id/cancel',
+  requireRole(CASHIER_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
       return;
     }
 
-    order.status = 'completed';
+    if (!isValidObjectId(id)) {
+      res.status(400).json({ data: null, error: 'Invalid order id' });
+      return;
+    }
+
+    const order = (await findOrderForOrganization(id, organizationId)) as OrderDocument | null;
+
+    if (!order) {
+      res.status(404).json({ data: null, error: 'Order not found' });
+      return;
+    }
+
+    const isAdmin = ['owner', 'superAdmin'].includes(req.user?.role ?? '');
+    if (!isAdmin && (!req.user?.id || order.cashierId.toString() !== req.user.id)) {
+      res.status(403).json({ data: null, error: 'Forbidden' });
+      return;
+    }
+
+    if (order.status === 'cancelled') {
+      res.status(409).json({ data: null, error: 'Order already cancelled' });
+      return;
+    }
+
+    if (order.status === 'draft') {
+      res.status(409).json({ data: null, error: 'Only paid orders can be cancelled' });
+      return;
+    }
+
+    if (order.status !== 'paid' && order.status !== 'completed') {
+      res.status(409).json({ data: null, error: 'Only paid orders can be cancelled' });
+      return;
+    }
+
+    await restoreInventoryForOrder(order);
+
+    if (order.customerId) {
+      if (order.manualDiscount > 0) {
+        try {
+          await restoreLoyaltyPoints(order.customerId.toString(), order.manualDiscount);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Не удалось вернуть баллы';
+          res.status(400).json({ data: null, error: message });
+          return;
+        }
+      }
+
+      if (order.total > 0) {
+        try {
+          await rollbackEarnedLoyaltyPoints(order.customerId.toString(), order.total);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Не удалось откатить начисление баллов';
+          res.status(400).json({ data: null, error: message });
+          return;
+        }
+      }
+    }
+
+    order.status = 'cancelled';
     await order.save();
 
     const populatedOrder =

@@ -14,7 +14,7 @@ type OrderPanelProps = {
   subtotal: number;
   discount: number;
   total: number;
-  status: 'draft' | 'paid' | 'completed' | null;
+  status: 'draft' | 'paid' | 'completed' | 'cancelled' | null;
   onIncrement: (lineId: string) => void;
   onDecrement: (lineId: string) => void;
   onRemove: (lineId: string) => void;
@@ -43,6 +43,7 @@ const statusLabels: Record<NonNullable<OrderPanelProps['status']>, string> = {
   draft: 'В работе',
   paid: 'Оплачен',
   completed: 'Завершён',
+  cancelled: 'Отменён',
 };
 
 const OrderPanel: React.FC<OrderPanelProps> = ({
