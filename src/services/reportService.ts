@@ -172,11 +172,38 @@ export const getDailyReport = async (
   }));
 };
 
-export const getTopProducts = async (
-  organizationId: Types.ObjectId,
-  limit: number
-): Promise<TopProductEntry[]> => {
+interface TopProductsParams {
+  organizationId: Types.ObjectId;
+  limit: number;
+  from?: Date;
+  to?: Date;
+}
+
+export const getTopProducts = async ({
+  organizationId,
+  limit,
+  from,
+  to,
+}: TopProductsParams): Promise<TopProductEntry[]> => {
   const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
+  const matchStage: Record<string, unknown> = {
+    status: { $in: REVENUE_STATUSES },
+    organizationId,
+  };
+
+  if (from || to) {
+    const createdAtMatch: Record<string, Date> = {};
+
+    if (from) {
+      createdAtMatch.$gte = from;
+    }
+
+    if (to) {
+      createdAtMatch.$lt = to;
+    }
+
+    matchStage.createdAt = createdAtMatch;
+  }
 
   const products: Array<{
     _id: Types.ObjectId | null;
@@ -189,7 +216,7 @@ export const getTopProducts = async (
     totalQuantity: number;
     totalRevenue: number;
   }>([
-    { $match: { status: { $in: REVENUE_STATUSES }, organizationId } },
+    { $match: matchStage },
     { $unwind: '$items' },
     {
       $group: {

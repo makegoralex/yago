@@ -140,7 +140,34 @@ router.get(
       return;
     }
 
-    const products = await getTopProducts(organizationId, limit ?? 5);
+    const fromParam = parseDateOnly(req.query.from);
+    const toParam = parseDateOnly(req.query.to);
+
+    if (req.query.from && !fromParam) {
+      res.status(400).json({ data: null, error: 'from must be in YYYY-MM-DD format' });
+      return;
+    }
+
+    if (req.query.to && !toParam) {
+      res.status(400).json({ data: null, error: 'to must be in YYYY-MM-DD format' });
+      return;
+    }
+
+    if (fromParam && toParam && fromParam > toParam) {
+      res.status(400).json({ data: null, error: 'from must be earlier than to' });
+      return;
+    }
+
+    const exclusiveTo = toParam
+      ? new Date(toParam.getTime() + 24 * 60 * 60 * 1000)
+      : undefined;
+
+    const products = await getTopProducts({
+      organizationId,
+      limit: limit ?? 5,
+      from: fromParam ?? undefined,
+      to: exclusiveTo,
+    });
 
     res.json({ data: products, error: null });
   })
