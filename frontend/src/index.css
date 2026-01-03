@@ -105,13 +105,13 @@ button:active {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #e2e8f0 0%, #cbd5e1 100%);
+  background: #cbd5e1;
   border: 2px solid #f8fafc;
   border-radius: 9999px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #cbd5e1 0%, #94a3b8 100%);
+  background: #94a3b8;
 }
 
 input,
@@ -137,10 +137,7 @@ textarea:focus {
 }
 
 .admin-shell {
-  background:
-    radial-gradient(900px circle at 10% 0%, color-mix(in srgb, var(--accent-primary) 35%, transparent), transparent 60%),
-    radial-gradient(600px circle at 90% 10%, color-mix(in srgb, var(--accent-primary) 22%, transparent), transparent 55%),
-    var(--bg-main);
+  background: var(--bg-main);
   color: var(--color-text);
 }
 
