@@ -52,7 +52,7 @@ const RedeemPointsModal: React.FC<RedeemPointsModalProps> = ({
     await onSubmit(numeric);
   };
 
-  const handleRedeemAll = async () => {
+  const handleRedeemAll = () => {
     if (maxRedeemable <= 0) {
       setError('Введите количество баллов больше нуля');
       return;
@@ -60,7 +60,6 @@ const RedeemPointsModal: React.FC<RedeemPointsModalProps> = ({
 
     setError(null);
     setPoints(String(maxRedeemable));
-    await onSubmit(maxRedeemable);
   };
 
   return (

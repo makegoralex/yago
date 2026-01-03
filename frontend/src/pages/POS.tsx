@@ -96,6 +96,7 @@ const POSPage: React.FC = () => {
   const subtotal = useOrderStore((state) => state.subtotal);
   const discount = useOrderStore((state) => state.discount);
   const total = useOrderStore((state) => state.total);
+  const manualDiscount = useOrderStore((state) => state.manualDiscount);
   const status = useOrderStore((state) => state.status);
   const orderId = useOrderStore((state) => state.orderId);
   const orderTag = useOrderStore((state) => state.orderTag);
@@ -150,6 +151,10 @@ const POSPage: React.FC = () => {
   const [isShiftPanelOpen, setShiftPanelOpen] = useState(false);
   const [modifierProduct, setModifierProduct] = useState<Product | null>(null);
   const orderTagsEnabled = useRestaurantStore((state) => state.enableOrderTags);
+  const redeemablePoints = useMemo(
+    () => Math.max((customer?.points ?? 0) - manualDiscount, 0),
+    [customer?.points, manualDiscount]
+  );
 
   useEffect(() => {
     void fetchCatalog();
@@ -660,7 +665,7 @@ const POSPage: React.FC = () => {
               orderTag={orderTag}
               onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
               onRedeemLoyalty={() => {
-                if (!customer || customer.points <= 0) {
+                if (!customer || redeemablePoints <= 0) {
                   return;
                 }
                 setRedeemOpen(true);
@@ -700,7 +705,7 @@ const POSPage: React.FC = () => {
       <RedeemPointsModal
         open={isRedeemOpen}
         onClose={() => setRedeemOpen(false)}
-        maxPoints={customer?.points ?? 0}
+        maxPoints={redeemablePoints}
         maxAmount={Math.max(subtotal - discount, 0)}
         onSubmit={(value) => handleRedeemConfirm(value)}
         isProcessing={isRedeeming}
