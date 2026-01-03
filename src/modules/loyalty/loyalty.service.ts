@@ -84,3 +84,75 @@ export const redeemLoyaltyPoints = async (
 
   return customer;
 };
+
+export const restoreLoyaltyPoints = async (
+  customerId: string,
+  points: number
+): Promise<CustomerDocument> => {
+  if (!isValidObjectId(customerId)) {
+    throw new Error('Invalid customerId');
+  }
+
+  if (typeof points !== 'number' || Number.isNaN(points) || points <= 0) {
+    throw new Error('points must be a positive number');
+  }
+
+  const normalizedPoints = roundTwoDecimals(points);
+
+  const customer = await CustomerModel.findById(customerId);
+
+  if (!customer) {
+    throw new Error('Customer not found');
+  }
+
+  customer.points = roundTwoDecimals(customer.points + normalizedPoints);
+
+  await customer.save();
+
+  return customer;
+};
+
+export const rollbackEarnedLoyaltyPoints = async (
+  customerId: string,
+  amount: number
+): Promise<{ customer: CustomerDocument; pointsReverted: number }> => {
+  if (!isValidObjectId(customerId)) {
+    throw new Error('Invalid customerId');
+  }
+
+  if (typeof amount !== 'number' || Number.isNaN(amount) || amount <= 0) {
+    throw new Error('amount must be a positive number');
+  }
+
+  const customer = await CustomerModel.findById(customerId);
+
+  if (!customer) {
+    throw new Error('Customer not found');
+  }
+
+  const organizationId =
+    customer.organizationId instanceof Types.ObjectId
+      ? customer.organizationId
+      : customer.organizationId
+        ? new Types.ObjectId(customer.organizationId.toString())
+        : undefined;
+
+  if (!organizationId) {
+    throw new Error('Organization context is required');
+  }
+
+  const normalizedAmount = roundTwoDecimals(amount);
+  if (normalizedAmount <= 0) {
+    throw new Error('amount must be a positive number');
+  }
+
+  const loyaltyRate = await getLoyaltyAccrualRate(organizationId);
+  const pointsEarned = roundTwoDecimals((normalizedAmount * loyaltyRate) / 100);
+
+  customer.points = roundTwoDecimals(Math.max(customer.points - pointsEarned, 0));
+  customer.totalSpent = roundTwoDecimals(Math.max(customer.totalSpent - normalizedAmount, 0));
+
+  await customer.save();
+
+  return { customer, pointsReverted: pointsEarned };
+};

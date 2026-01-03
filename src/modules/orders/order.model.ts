@@ -1,6 +1,6 @@
 import { Schema, model, Types, Document } from 'mongoose';
 
-export type OrderStatus = 'draft' | 'paid' | 'completed';
+export type OrderStatus = 'draft' | 'paid' | 'completed' | 'cancelled';
 
 export type PaymentMethod = 'cash' | 'card';
 
@@ -160,7 +160,7 @@ const orderSchema = new Schema<OrderDocument>(
     orderTag: { type: String, enum: ['takeaway', 'delivery'], required: false },
     status: {
       type: String,
-      enum: ['draft', 'paid', 'completed'],
+      enum: ['draft', 'paid', 'completed', 'cancelled'],
       required: true,
       default: 'draft',
     },
