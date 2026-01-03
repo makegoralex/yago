@@ -718,7 +718,7 @@ const AdminPage: React.FC = () => {
       ]);
       setSummary(summaryRes.data.data);
       setDaily(normalizeDailyReport(dailyRes.data.data));
-      setTopProducts(productsRes.data.data);
+      setTopProducts(normalizeTopProducts(productsRes.data.data));
       setTopCustomers(customersRes.data.data);
     } catch (error) {
       notify({ title: 'Не удалось загрузить отчеты', type: 'error' });
@@ -1645,15 +1645,31 @@ const AdminPage: React.FC = () => {
         const dateRaw = typeof entry?.date === 'string' ? entry.date : '';
         const parsed = dateRaw ? new Date(dateRaw) : null;
         const safeDate = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : dateRaw;
+        const typedEntry = entry as { revenue?: number; totalRevenue?: number; orders?: number; orderCount?: number };
 
         return {
           date: safeDate,
-          revenue: normalizeNumber((entry as { revenue?: number }).revenue),
-          orders: normalizeNumber((entry as { orders?: number }).orders),
+          revenue: normalizeNumber(typedEntry.revenue ?? typedEntry.totalRevenue),
+          orders: normalizeNumber(typedEntry.orders ?? typedEntry.orderCount),
         };
       })
       .filter((entry) => entry.date)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
+
+  const normalizeTopProducts = (data: unknown): { name: string; qty: number }[] => {
+    if (!Array.isArray(data)) return [];
+
+    return data
+      .map((entry) => {
+        const typedEntry = entry as { name?: string; qty?: number; totalQuantity?: number };
+
+        return {
+          name: typeof typedEntry.name === 'string' ? typedEntry.name : 'Позиция',
+          qty: normalizeNumber(typedEntry.qty ?? typedEntry.totalQuantity),
+        };
+      })
+      .filter((entry) => entry.name);
   };
 
   const revenueExtremes = useMemo(() => {
