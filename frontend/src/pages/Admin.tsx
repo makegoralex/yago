@@ -4258,35 +4258,38 @@ const AdminPage: React.FC = () => {
       ) : null}
 
       {activeTab === 'menu' ? (
-        <div className="lg:flex lg:items-start lg:gap-6">
-          <aside className="mb-4 w-full lg:mb-0 lg:w-[240px]">
-            <div className="rounded-2xl bg-slate-50/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Меню</p>
-              <div className="mt-4 flex flex-col gap-2">
-                {[
-                  { id: 'products', label: 'Позиции', description: 'Создание и настройка блюд' },
-                  { id: 'categories', label: 'Категории', description: 'Группировка и порядок' },
-                  { id: 'ingredients', label: 'Ингредиенты', description: 'Себестоимость и закупки' },
-                  { id: 'modifiers', label: 'Модификаторы', description: 'Дополнения и опции' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setMenuSection(item.id as typeof menuSection)}
-                    className={`flex flex-col rounded-xl px-3 py-2 text-left transition ${
-                      menuSection === item.id
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'text-slate-500 hover:bg-slate-100'
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-soft">
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: 'products', label: 'Позиции', description: 'Создание и настройка блюд' },
+                { id: 'categories', label: 'Категории', description: 'Группировка и порядок' },
+                { id: 'ingredients', label: 'Ингредиенты', description: 'Себестоимость и закупки' },
+                { id: 'modifiers', label: 'Модификаторы', description: 'Дополнения и опции' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setMenuSection(item.id as typeof menuSection)}
+                  className={`flex flex-1 items-center justify-between gap-2 rounded-2xl px-4 py-2 text-left text-sm font-semibold transition sm:flex-initial ${
+                    menuSection === item.id
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  <span
+                    className={`hidden text-xs font-normal sm:inline ${
+                      menuSection === item.id ? 'text-slate-200' : 'text-slate-400'
                     }`}
                   >
-                    <span className="text-sm font-semibold">{item.label}</span>
-                    <span className="text-xs">{item.description}</span>
-                  </button>
-                ))}
-              </div>
+                    {item.description}
+                  </span>
+                </button>
+              ))}
             </div>
-          </aside>
-          <div className="flex-1 space-y-6">
+          </div>
+          <div className="space-y-6">
             {menuSection === 'categories' ? (
               <Card title="Категории">
                 <form onSubmit={handleCreateCategory} className="mb-4 flex gap-2">
@@ -4354,7 +4357,7 @@ const AdminPage: React.FC = () => {
             ) : null}
 
             {menuSection === 'products' ? (
-              <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)_380px]">
+              <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)_380px]">
                 <aside className="space-y-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-140px)] lg:overflow-hidden">
                   <Card title="Категории">
                     <form onSubmit={handleCreateCategory} className="flex gap-2">
