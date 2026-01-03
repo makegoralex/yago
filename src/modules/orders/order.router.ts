@@ -1177,7 +1177,7 @@ router.get(
     }
 
     const filter: FilterQuery<OrderDocument> = {
-      status: { $in: FULFILLED_ORDER_STATUSES },
+      status: { $in: SHIFT_HISTORY_STATUSES },
       createdAt: { $gte: resolvedRange.from, $lte: resolvedRange.to },
       organizationId,
     };

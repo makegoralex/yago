@@ -323,6 +323,7 @@ type ReceiptHistoryOrder = {
   _id: string;
   total: number;
   createdAt: string;
+  status: 'paid' | 'completed' | 'cancelled';
   paymentMethod?: 'cash' | 'card';
   items: Array<{ name: string; qty: number; total: number }>;
   customerName?: string;
@@ -353,6 +354,10 @@ const mapReceiptHistoryOrder = (payload: any): ReceiptHistoryOrder => {
     : [];
 
   const paymentMethod = payload?.payment?.method;
+  const status =
+    payload?.status === 'paid' || payload?.status === 'completed' || payload?.status === 'cancelled'
+      ? payload.status
+      : 'paid';
   const customerName =
     typeof payload?.customerId?.name === 'string'
       ? payload.customerId.name
@@ -366,6 +371,7 @@ const mapReceiptHistoryOrder = (payload: any): ReceiptHistoryOrder => {
     _id: String(id),
     total: typeof payload?.total === 'number' ? payload.total : 0,
     createdAt,
+    status,
     paymentMethod: paymentMethod === 'cash' || paymentMethod === 'card' ? paymentMethod : undefined,
     items,
     customerName,
@@ -778,6 +784,25 @@ const AdminPage: React.FC = () => {
       }
     },
     [notify]
+  );
+
+  const handleCancelReceipt = useCallback(
+    async (orderId: string) => {
+      const confirmed = window.confirm('Отменить чек? Баллы и остатки будут возвращены.');
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        await api.post(`/api/orders/${orderId}/cancel`);
+        await loadReceiptHistory(receiptHistoryDate);
+        notify({ title: 'Чек отменён', type: 'success' });
+      } catch (error) {
+        console.error('Не удалось отменить чек', error);
+        notify({ title: 'Не удалось отменить чек', type: 'error' });
+      }
+    },
+    [loadReceiptHistory, notify, receiptHistoryDate]
   );
 
   const loadMenuData = useCallback(async () => {
@@ -3475,6 +3500,30 @@ const AdminPage: React.FC = () => {
                                   : '—'}
                             </p>
                           </div>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                          <span
+                            className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase ${
+                              order.status === 'cancelled'
+                                ? 'bg-rose-50 text-rose-600'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {order.status === 'paid'
+                              ? 'Оплачен'
+                              : order.status === 'completed'
+                                ? 'Завершён'
+                                : 'Отменён'}
+                          </span>
+                          {order.status !== 'cancelled' ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleCancelReceipt(order._id)}
+                              className="rounded-full border border-rose-200 px-3 py-1 text-[11px] font-semibold text-rose-600 transition hover:bg-rose-50"
+                            >
+                              Отменить чек
+                            </button>
+                          ) : null}
                         </div>
                         {order.items.length ? (
                           <p className="mt-2 text-xs text-slate-500">
