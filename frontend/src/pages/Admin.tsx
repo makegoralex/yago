@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 import * as XLSX from 'xlsx';
 import {
@@ -418,6 +418,7 @@ const endOfDay = (value: Date): Date => {
 
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { notify } = useToast();
   const { theme, toggleTheme } = useTheme();
   const {
@@ -532,6 +533,15 @@ const AdminPage: React.FC = () => {
   const [categoryEditName, setCategoryEditName] = useState('');
   const [categorySortOrder, setCategorySortOrder] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isCreatingProduct, setIsCreatingProduct] = useState(false);
+  const [menuCategoryFilterId, setMenuCategoryFilterId] = useState('');
+  const [menuCategorySearch, setMenuCategorySearch] = useState('');
+  const [menuSearch, setMenuSearch] = useState('');
+  const [menuStatusFilter, setMenuStatusFilter] = useState<'all' | 'active' | 'hidden'>('all');
+  const [menuCostFilter, setMenuCostFilter] = useState<'all' | 'noCost'>('all');
+  const [menuSort, setMenuSort] = useState<'name' | 'price' | 'markup' | 'profit'>('name');
+  const [menuPriceDrafts, setMenuPriceDrafts] = useState<Record<string, string>>({});
+  const [productEditDirty, setProductEditDirty] = useState(false);
   const [productEditForm, setProductEditForm] = useState({
     name: '',
     description: '',
@@ -1024,6 +1034,50 @@ const AdminPage: React.FC = () => {
     [ingredients]
   );
   const productMap = useMemo(() => new Map(products.map((product) => [product._id, product])), [products]);
+  const markupThresholds = useMemo(() => ({ warning: 50, danger: 20 }), []);
+
+  const getProductPrice = useCallback((product: Product) => {
+    if (product.basePrice !== undefined && product.basePrice !== null) {
+      return product.basePrice;
+    }
+
+    return product.price ?? 0;
+  }, []);
+
+  const getEconomics = useCallback((price: number, cost?: number | null) => {
+    if (!Number.isFinite(price)) {
+      return { grossProfit: null, markupPercent: null, marginPercent: null };
+    }
+
+    if (cost === null || cost === undefined || cost === 0 || !Number.isFinite(cost)) {
+      return { grossProfit: null, markupPercent: null, marginPercent: null };
+    }
+
+    const grossProfit = price - cost;
+    const markupPercent = cost > 0 ? (grossProfit / cost) * 100 : null;
+    const marginPercent = price > 0 ? (grossProfit / price) * 100 : null;
+
+    return { grossProfit, markupPercent, marginPercent };
+  }, []);
+
+  const getMarkupColor = useCallback(
+    (markupPercent: number | null) => {
+      if (markupPercent === null || !Number.isFinite(markupPercent)) {
+        return 'text-slate-400';
+      }
+
+      if (markupPercent < markupThresholds.danger) {
+        return 'text-red-600';
+      }
+
+      if (markupPercent < markupThresholds.warning) {
+        return 'text-amber-600';
+      }
+
+      return 'text-emerald-600';
+    },
+    [markupThresholds]
+  );
 
   const receiptTypeLabels: Record<StockReceipt['type'], string> = useMemo(
     () => ({
@@ -1061,6 +1115,104 @@ const AdminPage: React.FC = () => {
     },
     [ingredientMap, productMap]
   );
+
+  const sortedCategories = useMemo(() => {
+    return [...categories].sort((a, b) => {
+      const sortA = typeof a.sortOrder === 'number' ? a.sortOrder : 9999;
+      const sortB = typeof b.sortOrder === 'number' ? b.sortOrder : 9999;
+      if (sortA !== sortB) {
+        return sortA - sortB;
+      }
+      return a.name.localeCompare(b.name, 'ru');
+    });
+  }, [categories]);
+
+  const filteredCategories = useMemo(() => {
+    const query = menuCategorySearch.trim().toLowerCase();
+    if (!query) {
+      return sortedCategories;
+    }
+
+    return sortedCategories.filter((category) => category.name.toLowerCase().includes(query));
+  }, [menuCategorySearch, sortedCategories]);
+
+  const categoryCountMap = useMemo(() => {
+    return products.reduce<Record<string, number>>((acc, product) => {
+      if (!product.categoryId) {
+        return acc;
+      }
+      acc[product.categoryId] = (acc[product.categoryId] || 0) + 1;
+      return acc;
+    }, {});
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const searchQuery = menuSearch.trim().toLowerCase();
+
+    return products
+      .filter((product) => {
+        if (menuCategoryFilterId && product.categoryId !== menuCategoryFilterId) {
+          return false;
+        }
+
+        if (menuStatusFilter === 'active' && product.isActive === false) {
+          return false;
+        }
+
+        if (menuStatusFilter === 'hidden' && product.isActive !== false) {
+          return false;
+        }
+
+        const hasNoCost = !product.costPrice || product.costPrice === 0;
+        if (menuCostFilter === 'noCost' && !hasNoCost) {
+          return false;
+        }
+
+        if (searchQuery && !product.name.toLowerCase().includes(searchQuery)) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((first, second) => {
+        const firstPrice = getProductPrice(first);
+        const secondPrice = getProductPrice(second);
+        const firstCost = first.costPrice ?? 0;
+        const secondCost = second.costPrice ?? 0;
+        const firstEconomics = getEconomics(firstPrice, firstCost);
+        const secondEconomics = getEconomics(secondPrice, secondCost);
+
+        if (menuSort === 'price') {
+          return secondPrice - firstPrice;
+        }
+
+        if (menuSort === 'markup') {
+          return normalizeNumber(secondEconomics.markupPercent) - normalizeNumber(firstEconomics.markupPercent);
+        }
+
+        if (menuSort === 'profit') {
+          return normalizeNumber(secondEconomics.grossProfit) - normalizeNumber(firstEconomics.grossProfit);
+        }
+
+        const firstCategory = categories.find((category) => category._id === first.categoryId)?.name ?? '';
+        const secondCategory = categories.find((category) => category._id === second.categoryId)?.name ?? '';
+        const categorySort = firstCategory.localeCompare(secondCategory, 'ru');
+        if (categorySort !== 0) {
+          return categorySort;
+        }
+        return first.name.localeCompare(second.name, 'ru');
+      });
+  }, [
+    categories,
+    getEconomics,
+    getProductPrice,
+    menuCategoryFilterId,
+    menuCostFilter,
+    menuSearch,
+    menuSort,
+    menuStatusFilter,
+    products,
+  ]);
 
   const filteredStockReceipts = useMemo(() => {
     if (!selectedWarehouse) {
@@ -1576,6 +1728,35 @@ const AdminPage: React.FC = () => {
     loadCashiersData,
   ]);
 
+  useEffect(() => {
+    if (activeTab !== 'menu' || menuSection !== 'products') {
+      return;
+    }
+
+    const categoryFromQuery = searchParams.get('cat') ?? '';
+    const itemFromQuery = searchParams.get('item') ?? '';
+
+    if (categoryFromQuery !== menuCategoryFilterId) {
+      setMenuCategoryFilterId(categoryFromQuery);
+    }
+
+    if (itemFromQuery && itemFromQuery !== selectedProduct?._id) {
+      const match = products.find((product) => product._id === itemFromQuery);
+      if (match) {
+        setIsCreatingProduct(false);
+        setProductEditDirty(false);
+        handleSelectProduct(match);
+      }
+    }
+  }, [
+    activeTab,
+    menuCategoryFilterId,
+    menuSection,
+    products,
+    searchParams,
+    selectedProduct?._id,
+  ]);
+
   const loyaltySummary = useMemo<LoyaltyPointSummary>(() => ({
     totalPointsIssued: summary.totalPointsIssued,
     totalPointsRedeemed: summary.totalPointsRedeemed,
@@ -1632,6 +1813,31 @@ const AdminPage: React.FC = () => {
     normalizeNumber(value).toLocaleString('ru-RU', {
       maximumFractionDigits: 0,
     });
+
+  const updateMenuQueryParams = useCallback(
+    (updates: { cat?: string; item?: string }) => {
+      const params = new URLSearchParams(searchParams);
+
+      if ('cat' in updates) {
+        if (updates.cat) {
+          params.set('cat', updates.cat);
+        } else {
+          params.delete('cat');
+        }
+      }
+
+      if ('item' in updates) {
+        if (updates.item) {
+          params.set('item', updates.item);
+        } else {
+          params.delete('item');
+        }
+      }
+
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
 
   const normalizeDashboardFilterParams = (filters: { from: string; to: string }) => {
     const from = filters.from || undefined;
@@ -1798,6 +2004,57 @@ const AdminPage: React.FC = () => {
     [ingredients, productEditIngredients, productIngredients, selectedProduct]
   );
 
+  const ingredientCostTotal = useMemo(
+    () =>
+      baseIngredientsForCost.reduce((total, item) => {
+        return total + item.normalizedQuantity * item.costPerUnit;
+      }, 0),
+    [baseIngredientsForCost]
+  );
+
+  const editorPriceValue = useMemo(() => {
+    if (isCreatingProduct) {
+      return Number(newProduct.basePrice || 0);
+    }
+
+    if (productEditForm.basePrice) {
+      return Number(productEditForm.basePrice);
+    }
+
+    return Number(productEditForm.price || 0);
+  }, [isCreatingProduct, newProduct.basePrice, productEditForm.basePrice, productEditForm.price]);
+
+  const editorCostValue = useMemo(() => {
+    if (baseIngredientsForCost.length > 0) {
+      return ingredientCostTotal;
+    }
+
+    if (selectedProduct?.costPrice !== undefined && selectedProduct?.costPrice !== null) {
+      return selectedProduct.costPrice;
+    }
+
+    return null;
+  }, [baseIngredientsForCost.length, ingredientCostTotal, selectedProduct]);
+
+  const editorEconomics = useMemo(
+    () => getEconomics(editorPriceValue, editorCostValue),
+    [editorCostValue, editorPriceValue, getEconomics]
+  );
+
+  const hasNewProductChanges = useMemo(() => {
+    if (newProduct.name.trim()) return true;
+    if (newProduct.description.trim()) return true;
+    if (newProduct.categoryId) return true;
+    if (newProduct.basePrice) return true;
+    if (newProduct.discountType) return true;
+    if (newProduct.discountValue) return true;
+    if (newProduct.imageUrl.trim()) return true;
+    if (newProductModifierIds.length) return true;
+    return productIngredients.some((item) => item.ingredientId || item.quantity || item.unit);
+  }, [newProduct, newProductModifierIds.length, productIngredients]);
+
+  const isEditorOpen = isCreatingProduct || Boolean(selectedProduct);
+
   const mergeOptionWithBaseIngredients = useCallback(
     (option: ModifierOptionForm): ModifierOptionForm => {
       if (!baseIngredientDeltas.length) {
@@ -1884,6 +2141,113 @@ const AdminPage: React.FC = () => {
     );
   };
 
+  const canDiscardProductChanges = useCallback(() => {
+    if (productEditDirty || (isCreatingProduct && hasNewProductChanges)) {
+      return window.confirm('Есть несохранённые изменения. Перейти без сохранения?');
+    }
+    return true;
+  }, [hasNewProductChanges, isCreatingProduct, productEditDirty]);
+
+  const resetNewProductDraft = useCallback(() => {
+    setNewProduct({
+      name: '',
+      description: '',
+      categoryId: '',
+      basePrice: '',
+      discountType: '',
+      discountValue: '',
+      imageUrl: '',
+    });
+    setNewProductModifierIds([]);
+    setProductIngredients([{ ingredientId: '', quantity: '' }]);
+  }, []);
+
+  const mapProductIngredientsToForm = useCallback(
+    (product: Product) => {
+      if (!Array.isArray(product.ingredients) || product.ingredients.length === 0) {
+        return [{ ingredientId: '', quantity: '', unit: '' }];
+      }
+      return product.ingredients.map((entry) => {
+        const ingredientUnit = ingredients.find((ingredient) => ingredient._id === entry.ingredientId)?.unit;
+        return {
+          ingredientId: entry.ingredientId,
+          quantity: entry.quantity.toString(),
+          unit: entry.unit || ingredientUnit || '',
+        };
+      });
+    },
+    [ingredients]
+  );
+
+  const handleMenuCategoryFilterSelect = useCallback(
+    (categoryId: string) => {
+      if (!canDiscardProductChanges()) {
+        return;
+      }
+
+      setMenuCategoryFilterId(categoryId);
+      if (selectedProduct && categoryId && selectedProduct.categoryId !== categoryId) {
+        setSelectedProduct(null);
+        updateMenuQueryParams({ item: '' });
+      }
+      updateMenuQueryParams({ cat: categoryId || undefined });
+    },
+    [canDiscardProductChanges, selectedProduct, updateMenuQueryParams]
+  );
+
+  const handleMenuProductSelect = useCallback(
+    (product: Product) => {
+      if (!canDiscardProductChanges()) {
+        return;
+      }
+      handleSelectProduct(product);
+      updateMenuQueryParams({ item: product._id, cat: product.categoryId });
+    },
+    [canDiscardProductChanges, handleSelectProduct, updateMenuQueryParams]
+  );
+
+  const handleStartCreateProduct = useCallback(() => {
+    if (!canDiscardProductChanges()) {
+      return;
+    }
+    setSelectedProduct(null);
+    setProductEditDirty(false);
+    setIsCreatingProduct(true);
+    resetNewProductDraft();
+    updateMenuQueryParams({ item: '' });
+  }, [canDiscardProductChanges, resetNewProductDraft, updateMenuQueryParams]);
+
+  const handleDuplicateProduct = useCallback(
+    (product: Product) => {
+      if (!canDiscardProductChanges()) {
+        return;
+      }
+      setSelectedProduct(null);
+      setProductEditDirty(false);
+      setIsCreatingProduct(true);
+      setNewProduct({
+        name: `${product.name} (копия)`,
+        description: product.description ?? '',
+        categoryId: product.categoryId ?? '',
+        basePrice: product.basePrice !== undefined ? product.basePrice.toString() : product.price?.toString() ?? '',
+        discountType: product.discountType ?? '',
+        discountValue:
+          product.discountValue !== undefined && product.discountValue !== null
+            ? product.discountValue.toString()
+            : '',
+        imageUrl: product.imageUrl ?? '',
+      });
+      setNewProductModifierIds(
+        Array.isArray(product.modifierGroups)
+          ? product.modifierGroups.map((group) => group._id).filter(Boolean)
+          : []
+      );
+      setProductIngredients(mapProductIngredientsToForm(product));
+      updateMenuQueryParams({ item: '' });
+    },
+    [canDiscardProductChanges, mapProductIngredientsToForm, updateMenuQueryParams]
+  );
+
   const handleUpdateCategory = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedCategory) return;
@@ -1913,8 +2277,10 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const handleSelectProduct = (product: Product) => {
+  function handleSelectProduct(product: Product) {
     setSelectedProduct(product);
+    setIsCreatingProduct(false);
+    setProductEditDirty(false);
     setProductEditForm({
       name: product.name,
       description: product.description ?? '',
@@ -1946,6 +2312,11 @@ const AdminPage: React.FC = () => {
         ? product.modifierGroups.map((group) => group._id).filter(Boolean)
         : []
     );
+  }
+
+  const handleProductEditFieldChange = (field: keyof typeof productEditForm, value: string | boolean) => {
+    setProductEditDirty(true);
+    setProductEditForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSelectModifierGroup = (group: ModifierGroup) => {
@@ -2121,6 +2492,7 @@ const AdminPage: React.FC = () => {
     field: 'ingredientId' | 'quantity' | 'unit',
     value: string
   ) => {
+    setProductEditDirty(true);
     setProductEditIngredients((prev) => {
       const copy = [...prev];
       const ingredientUnit =
@@ -2142,10 +2514,12 @@ const AdminPage: React.FC = () => {
   };
 
   const addEditIngredientRow = () => {
+    setProductEditDirty(true);
     setProductEditIngredients((prev) => [...prev, { ingredientId: '', quantity: '', unit: '' }]);
   };
 
   const removeEditIngredientRow = (index: number) => {
+    setProductEditDirty(true);
     setProductEditIngredients((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
   };
 
@@ -2156,6 +2530,7 @@ const AdminPage: React.FC = () => {
   };
 
   const handleToggleEditProductModifier = (groupId: string) => {
+    setProductEditDirty(true);
     setProductEditModifiers((prev) =>
       prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
     );
@@ -2212,6 +2587,7 @@ const AdminPage: React.FC = () => {
     try {
       await api.put(`/api/catalog/products/${selectedProduct._id}`, payload);
       notify({ title: 'Позиция обновлена', type: 'success' });
+      setProductEditDirty(false);
       await loadMenuData();
       const refreshed = products.find((product) => product._id === selectedProduct._id);
       if (refreshed) {
@@ -2233,6 +2609,7 @@ const AdminPage: React.FC = () => {
       notify({ title: 'Позиция удалена', type: 'success' });
       if (selectedProduct?._id === productId) {
         setSelectedProduct(null);
+        updateMenuQueryParams({ item: '' });
       }
       await loadMenuData();
     } catch (error) {
@@ -2336,7 +2713,8 @@ const AdminPage: React.FC = () => {
         payload.modifierGroups = newProductModifierIds;
       }
 
-      await api.post('/api/catalog/products', payload);
+      const response = await api.post('/api/catalog/products', payload);
+      const createdProduct = getResponseData<Product>(response);
       notify({ title: 'Позиция добавлена', type: 'success' });
       setNewProduct({
         name: '',
@@ -2349,6 +2727,11 @@ const AdminPage: React.FC = () => {
       });
       setNewProductModifierIds([]);
       setProductIngredients([{ ingredientId: '', quantity: '' }]);
+      setIsCreatingProduct(false);
+      if (createdProduct) {
+        handleSelectProduct(createdProduct);
+        updateMenuQueryParams({ item: createdProduct._id, cat: createdProduct.categoryId });
+      }
       void loadMenuData();
     } catch (error) {
       notify({ title: 'Не удалось создать позицию', type: 'error' });
@@ -2390,6 +2773,62 @@ const AdminPage: React.FC = () => {
       notify({ title: 'Не удалось обновить позицию', type: 'error' });
     }
   };
+
+  const resetPriceDraft = useCallback(
+    (product: Product) => {
+      setMenuPriceDrafts((prev) => ({
+        ...prev,
+        [product._id]: getProductPrice(product).toString(),
+      }));
+    },
+    [getProductPrice]
+  );
+
+  const commitPriceDraft = useCallback(
+    (product: Product) => {
+      const raw = menuPriceDrafts[product._id];
+      if (raw === undefined) {
+        return;
+      }
+
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        resetPriceDraft(product);
+        return;
+      }
+
+      const current = getProductPrice(product);
+      if (parsed !== current) {
+        void handleProductPriceChange(product._id, { basePrice: parsed });
+      }
+    },
+    [getProductPrice, handleProductPriceChange, menuPriceDrafts, resetPriceDraft]
+  );
+
+  const handleCancelProductEdit = useCallback(() => {
+    if (isCreatingProduct) {
+      resetNewProductDraft();
+      setIsCreatingProduct(false);
+      updateMenuQueryParams({ item: '' });
+      return;
+    }
+
+    if (selectedProduct) {
+      const refreshed = productMap.get(selectedProduct._id) ?? selectedProduct;
+      handleSelectProduct(refreshed);
+      setProductEditDirty(false);
+    }
+  }, [handleSelectProduct, isCreatingProduct, productMap, resetNewProductDraft, selectedProduct, updateMenuQueryParams]);
+
+  const handleCloseEditor = useCallback(() => {
+    if (!canDiscardProductChanges()) {
+      return;
+    }
+    setSelectedProduct(null);
+    setIsCreatingProduct(false);
+    setProductEditDirty(false);
+    updateMenuQueryParams({ item: '' });
+  }, [canDiscardProductChanges, updateMenuQueryParams]);
 
   const handleCreateIngredient = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3202,6 +3641,14 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const menuEditorTitle = isCreatingProduct
+    ? 'Новая позиция'
+    : selectedProduct
+      ? 'Редактор позиции'
+      : 'Редактор позиции';
+  const editorCostMissing = !editorCostValue || editorCostValue === 0;
+  const menuEditorFormId = isCreatingProduct ? 'menu-create-form' : 'menu-edit-form';
+
   return (
     <div className="admin-shell min-h-screen">
       <header className="admin-header border-b">
@@ -3811,35 +4258,38 @@ const AdminPage: React.FC = () => {
       ) : null}
 
       {activeTab === 'menu' ? (
-        <div className="lg:flex lg:items-start lg:gap-6">
-          <aside className="mb-4 w-full lg:mb-0 lg:w-[240px]">
-            <div className="rounded-2xl bg-slate-50/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Меню</p>
-              <div className="mt-4 flex flex-col gap-2">
-                {[
-                  { id: 'products', label: 'Позиции', description: 'Создание и настройка блюд' },
-                  { id: 'categories', label: 'Категории', description: 'Группировка и порядок' },
-                  { id: 'ingredients', label: 'Ингредиенты', description: 'Себестоимость и закупки' },
-                  { id: 'modifiers', label: 'Модификаторы', description: 'Дополнения и опции' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setMenuSection(item.id as typeof menuSection)}
-                    className={`flex flex-col rounded-xl px-3 py-2 text-left transition ${
-                      menuSection === item.id
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'text-slate-500 hover:bg-slate-100'
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-soft">
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: 'products', label: 'Позиции', description: 'Создание и настройка блюд' },
+                { id: 'categories', label: 'Категории', description: 'Группировка и порядок' },
+                { id: 'ingredients', label: 'Ингредиенты', description: 'Себестоимость и закупки' },
+                { id: 'modifiers', label: 'Модификаторы', description: 'Дополнения и опции' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setMenuSection(item.id as typeof menuSection)}
+                  className={`flex flex-1 items-center justify-between gap-2 rounded-2xl px-4 py-2 text-left text-sm font-semibold transition sm:flex-initial ${
+                    menuSection === item.id
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  <span
+                    className={`hidden text-xs font-normal sm:inline ${
+                      menuSection === item.id ? 'text-slate-200' : 'text-slate-400'
                     }`}
                   >
-                    <span className="text-sm font-semibold">{item.label}</span>
-                    <span className="text-xs">{item.description}</span>
-                  </button>
-                ))}
-              </div>
+                    {item.description}
+                  </span>
+                </button>
+              ))}
             </div>
-          </aside>
-          <div className="flex-1 space-y-6">
+          </div>
+          <div className="space-y-6">
             {menuSection === 'categories' ? (
               <Card title="Категории">
                 <form onSubmit={handleCreateCategory} className="mb-4 flex gap-2">
@@ -3907,464 +4357,877 @@ const AdminPage: React.FC = () => {
             ) : null}
 
             {menuSection === 'products' ? (
-              <>
-                <Card title="Новая позиция">
-                  <form onSubmit={handleCreateProduct} className="space-y-4 text-sm">
-                    <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)_380px]">
+                <aside className="space-y-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-140px)] lg:overflow-hidden">
+                  <Card title="Категории">
+                    <form onSubmit={handleCreateCategory} className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Название"
-                        value={newProduct.name}
-                        onChange={(event) => setNewProduct((prev) => ({ ...prev, name: event.target.value }))}
-                        className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                        value={newCategoryName}
+                        onChange={(event) => setNewCategoryName(event.target.value)}
+                        placeholder="Новая категория"
+                        className="flex-1 rounded-full border border-slate-200 px-3 py-2 text-sm"
                       />
-                      <select
-                        value={newProduct.categoryId}
-                        onChange={(event) => setNewProduct((prev) => ({ ...prev, categoryId: event.target.value }))}
-                        className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                      <button
+                        type="submit"
+                        className="rounded-full bg-slate-900 px-3 py-2 text-xs font-semibold text-white"
                       >
-                        <option value="">Категория</option>
-                        {categories.map((category) => (
-                          <option key={category._id} value={category._id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
+                        + Категория
+                      </button>
+                    </form>
+                    {sortedCategories.length > 15 ? (
                       <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="Базовая цена"
-                        value={newProduct.basePrice}
-                        onChange={(event) => setNewProduct((prev) => ({ ...prev, basePrice: event.target.value }))}
-                        className="rounded-2xl border border-slate-200 px-4 py-2"
+                        type="search"
+                        value={menuCategorySearch}
+                        onChange={(event) => setMenuCategorySearch(event.target.value)}
+                        placeholder="Поиск категории"
+                        className="mt-3 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
                       />
-                      <select
-                        value={newProduct.discountType}
-                        onChange={(event) =>
-                          setNewProduct((prev) => ({ ...prev, discountType: event.target.value as typeof prev.discountType }))
-                        }
-                        className="rounded-2xl border border-slate-200 px-4 py-2"
+                    ) : null}
+                    <div className="mt-3 space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => handleMenuCategoryFilterSelect('')}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
+                          menuCategoryFilterId === '' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-600 hover:bg-slate-100'
+                        }`}
                       >
-                        <option value="">Без скидки</option>
-                        <option value="percentage">Скидка %</option>
-                        <option value="fixed">Фикс. скидка</option>
-                      </select>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="Значение скидки"
-                        value={newProduct.discountValue}
-                        onChange={(event) => setNewProduct((prev) => ({ ...prev, discountValue: event.target.value }))}
-                        className="rounded-2xl border border-slate-200 px-4 py-2"
-                      />
-                      <input
-                        type="url"
-                        placeholder="Ссылка на фото"
-                        value={newProduct.imageUrl}
-                        onChange={(event) => setNewProduct((prev) => ({ ...prev, imageUrl: event.target.value }))}
-                        className="rounded-2xl border border-slate-200 px-4 py-2"
-                      />
-                    </div>
-                    <textarea
-                      placeholder="Описание"
-                      value={newProduct.description}
-                      onChange={(event) => setNewProduct((prev) => ({ ...prev, description: event.target.value }))}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                      rows={3}
-                    />
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase text-slate-500">Модификаторы</p>
-                      {modifierGroups.length ? (
-                        <div className="max-h-32 space-y-2 overflow-y-auto rounded-2xl border border-slate-100 p-3">
-                          {modifierGroups.map((group) => {
-                            const checked = newProductModifierIds.includes(group._id);
-                            return (
-                              <label
-                                key={group._id}
-                                className="flex items-center justify-between rounded-xl px-2 py-1 text-sm transition hover:bg-slate-50"
-                              >
-                                <span className="text-slate-700">
-                                  {group.name}
-                                  <span className="ml-2 text-[11px] uppercase text-slate-400">
-                                    {group.selectionType === 'single' ? '1 вариант' : 'Несколько'}
-                                    {group.required ? ' · Обязательная' : ''}
-                                  </span>
-                                </span>
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => handleToggleNewProductModifier(group._id)}
-                                  className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-                                />
-                              </label>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-slate-400">Создайте группы модификаторов и привяжите их к позиции.</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase text-slate-500">Ингредиенты</p>
-                      {productIngredients.map((row, index) => (
-                        <div key={index} className="flex gap-2">
-                        <select
-                          value={row.ingredientId}
-                          onChange={(event) => handleIngredientChange(index, 'ingredientId', event.target.value)}
-                          className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
+                        <span className="font-semibold">Все категории</span>
+                        <span className="text-xs text-slate-400">{products.length}</span>
+                      </button>
+                      {filteredCategories.map((category) => (
+                        <button
+                          key={category._id}
+                          type="button"
+                          onClick={() => handleMenuCategoryFilterSelect(category._id)}
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
+                            menuCategoryFilterId === category._id
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
                         >
-                            <option value="">Ингредиент</option>
-                            {ingredients.map((ingredient) => (
-                              <option key={ingredient._id} value={ingredient._id}>
-                                {ingredient.name}
+                          <span className="font-semibold">{category.name}</span>
+                          <span className="text-xs text-slate-400">{categoryCountMap[category._id] ?? 0}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </Card>
+                </aside>
+                <div className="space-y-4">
+                  <Card
+                    title="Позиции меню"
+                    actions={
+                      <button
+                        type="button"
+                        onClick={handleStartCreateProduct}
+                        className="rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-white"
+                      >
+                        + Новая позиция
+                      </button>
+                    }
+                  >
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <div className="flex-1 min-w-[220px]">
+                          <input
+                            type="search"
+                            value={menuSearch}
+                            onChange={(event) => setMenuSearch(event.target.value)}
+                            placeholder="Поиск позиции"
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                          />
+                        </div>
+                        <div className="w-full lg:hidden">
+                          <select
+                            value={menuCategoryFilterId}
+                            onChange={(event) => handleMenuCategoryFilterSelect(event.target.value)}
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                          >
+                            <option value="">Все категории</option>
+                            {sortedCategories.map((category) => (
+                              <option key={category._id} value={category._id}>
+                                {category.name}
                               </option>
                             ))}
                           </select>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={row.quantity}
-                          onChange={(event) => handleIngredientChange(index, 'quantity', event.target.value)}
-                          className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
-                          placeholder="Кол-во"
-                        />
-                        <select
-                          value={row.unit || ''}
-                          onChange={(event) => handleIngredientChange(index, 'unit', event.target.value)}
-                          className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
-                        >
-                          <option value="">Ед.</option>
-                          {measurementUnits.map((unit) => (
-                            <option key={unit} value={unit}>
-                              {unit}
-                            </option>
-                          ))}
-                        </select>
                         </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={handleAddIngredientRow}
-                        className="text-xs font-semibold text-slate-500 hover:text-slate-700"
-                      >
-                        + Добавить ингредиент
-                      </button>
+                        <select
+                          value={menuStatusFilter}
+                          onChange={(event) => setMenuStatusFilter(event.target.value as typeof menuStatusFilter)}
+                          className="rounded-2xl border border-slate-200 px-3 py-2"
+                        >
+                          <option value="all">Все статусы</option>
+                          <option value="active">В продаже</option>
+                          <option value="hidden">Скрытые</option>
+                        </select>
+                        <select
+                          value={menuCostFilter}
+                          onChange={(event) => setMenuCostFilter(event.target.value as typeof menuCostFilter)}
+                          className="rounded-2xl border border-slate-200 px-3 py-2"
+                        >
+                          <option value="all">Любая себестоимость</option>
+                          <option value="noCost">Без себестоимости</option>
+                        </select>
+                        <select
+                          value={menuSort}
+                          onChange={(event) => setMenuSort(event.target.value as typeof menuSort)}
+                          className="rounded-2xl border border-slate-200 px-3 py-2"
+                        >
+                          <option value="name">По названию</option>
+                          <option value="price">По цене</option>
+                          <option value="markup">По наценке %</option>
+                          <option value="profit">По прибыли ₽</option>
+                        </select>
+                      </div>
+                      {menuLoading ? (
+                        <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
+                      ) : filteredProducts.length ? (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-left text-sm">
+                            <thead>
+                              <tr className="text-xs uppercase text-slate-400">
+                                <th className="px-3 py-2">Название</th>
+                                <th className="px-3 py-2">Цена ₽</th>
+                                <th className="px-3 py-2">Себестоимость ₽</th>
+                                <th className="px-3 py-2">Наценка %</th>
+                                <th className="px-3 py-2">Прибыль ₽</th>
+                                <th className="px-3 py-2">Статус</th>
+                                <th className="px-3 py-2 text-right">Действия</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {filteredProducts.map((product) => {
+                                const draftValue = menuPriceDrafts[product._id] ?? getProductPrice(product).toString();
+                                const parsedDraft = Number(draftValue);
+                                const priceValue = Number.isFinite(parsedDraft) ? parsedDraft : getProductPrice(product);
+                                const costValue = product.costPrice ?? null;
+                                const economics = getEconomics(priceValue, costValue);
+                                const hasNoCost = !costValue || costValue === 0;
+                                const isSelected = selectedProduct?._id === product._id && !isCreatingProduct;
+                                const categoryName = categories.find((cat) => cat._id === product.categoryId)?.name ?? '—';
+                                return (
+                                  <tr
+                                    key={product._id}
+                                    className={`cursor-pointer align-middle transition ${
+                                      isSelected ? 'bg-emerald-50' : 'hover:bg-slate-50'
+                                    }`}
+                                    onClick={() => handleMenuProductSelect(product)}
+                                  >
+                                    <td className="px-3 py-2">
+                                      <p className="font-semibold text-slate-800">{product.name}</p>
+                                      <p className="text-xs text-slate-400">{categoryName}</p>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={draftValue}
+                                        onClick={(event) => event.stopPropagation()}
+                                        onChange={(event) =>
+                                          setMenuPriceDrafts((prev) => ({ ...prev, [product._id]: event.target.value }))
+                                        }
+                                        onBlur={() => commitPriceDraft(product)}
+                                        onKeyDown={(event) => {
+                                          if (event.key === 'Enter') {
+                                            event.currentTarget.blur();
+                                          }
+                                          if (event.key === 'Escape') {
+                                            resetPriceDraft(product);
+                                            event.currentTarget.blur();
+                                          }
+                                        }}
+                                        className="w-24 rounded-xl border border-slate-200 px-2 py-1 text-sm"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2 text-slate-600">
+                                      <div className="flex items-center gap-2">
+                                        <span>
+                                          {hasNoCost ? '—' : `${formatCurrency(costValue ?? 0)} ₽`}
+                                        </span>
+                                        {hasNoCost ? (
+                                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-600">
+                                            нет себестоимости
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    </td>
+                                    <td className={`px-3 py-2 font-semibold ${getMarkupColor(economics.markupPercent)}`}>
+                                      {economics.markupPercent !== null
+                                        ? `${economics.markupPercent.toFixed(0)}%`
+                                        : '—'}
+                                    </td>
+                                    <td className="px-3 py-2 text-slate-600">
+                                      {economics.grossProfit !== null
+                                        ? `${formatCurrency(economics.grossProfit)} ₽`
+                                        : '—'}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-500">
+                                        <input
+                                          type="checkbox"
+                                          className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                                          checked={product.isActive !== false}
+                                          onClick={(event) => event.stopPropagation()}
+                                          onChange={(event) =>
+                                            handleProductPriceChange(product._id, { isActive: event.target.checked })
+                                          }
+                                        />
+                                        В продаже
+                                      </label>
+                                    </td>
+                                    <td className="px-3 py-2 text-right">
+                                      <details className="relative inline-block" onClick={(event) => event.stopPropagation()}>
+                                        <summary className="cursor-pointer rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">
+                                          ⋯
+                                        </summary>
+                                        <div className="absolute right-0 z-10 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-2 text-xs shadow-lg">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDuplicateProduct(product)}
+                                            className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
+                                          >
+                                            Копировать
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleProductPriceChange(product._id, { isActive: false })}
+                                            className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
+                                          >
+                                            Архивировать
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteProduct(product._id)}
+                                            className="w-full rounded-lg px-2 py-1 text-left text-red-600 hover:bg-red-50"
+                                          >
+                                            Удалить
+                                          </button>
+                                        </div>
+                                      </details>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl bg-slate-50 p-6 text-center text-sm text-slate-400">
+                          Нет позиций по выбранным фильтрам
+                        </div>
+                      )}
                     </div>
-                    <button
-                      type="submit"
-                      className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
-                    >
-                      Сохранить позицию
-                    </button>
-                  </form>
-                </Card>
-                <Card title="Позиции меню">
-                  {menuLoading ? (
-                    <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-left text-sm">
-                        <thead>
-                          <tr className="text-xs uppercase text-slate-400">
-                            <th className="px-3 py-2">Название</th>
-                            <th className="px-3 py-2">Категория</th>
-                            <th className="px-3 py-2">Цена</th>
-                            <th className="px-3 py-2">Себестоимость</th>
-                            <th className="px-3 py-2">Скидка</th>
-                            <th className="px-3 py-2">Статус</th>
-                            <th className="px-3 py-2 text-right">Действия</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {products.map((product) => {
-                            const categoryName = categories.find((cat) => cat._id === product.categoryId)?.name || '—';
-                            const discountLabel = product.discountType
-                              ? product.discountType === 'percentage'
-                                ? `${product.discountValue ?? 0}%`
-                                : `${product.discountValue?.toFixed(2)} ₽`
-                              : '—';
-                            return (
-                              <tr key={product._id} className="align-middle">
-                                <td className="px-3 py-2 font-medium text-slate-800">{product.name}</td>
-                                <td className="px-3 py-2 text-slate-500">{categoryName}</td>
-                                <td className="px-3 py-2">
-                                  <div className="flex items-center gap-2">
+                  </Card>
+                </div>
+                <div className="hidden lg:block">
+                  <div className="sticky top-24 max-h-[calc(100vh-140px)]">
+                    <Card title={menuEditorTitle}>
+                      <div className="flex h-[calc(100vh-220px)] flex-col">
+                        <div className="flex-1 overflow-y-auto pr-1">
+                          {!isEditorOpen ? (
+                            <p className="text-sm text-slate-400">
+                              Выберите позицию в списке или создайте новую.
+                            </p>
+                          ) : (
+                            <form
+                              id={menuEditorFormId}
+                              onSubmit={isCreatingProduct ? handleCreateProduct : handleUpdateProduct}
+                              className="space-y-4 text-sm"
+                            >
+                              <div className="space-y-2">
+                                <label className="text-xs font-semibold uppercase text-slate-400">Название</label>
+                                <input
+                                  type="text"
+                                  value={isCreatingProduct ? newProduct.name : productEditForm.name}
+                                  onChange={(event) =>
+                                    isCreatingProduct
+                                      ? setNewProduct((prev) => ({ ...prev, name: event.target.value }))
+                                      : handleProductEditFieldChange('name', event.target.value)
+                                  }
+                                  className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-semibold uppercase text-slate-400">Категория</label>
+                                <select
+                                  value={isCreatingProduct ? newProduct.categoryId : productEditForm.categoryId}
+                                  onChange={(event) =>
+                                    isCreatingProduct
+                                      ? setNewProduct((prev) => ({ ...prev, categoryId: event.target.value }))
+                                      : handleProductEditFieldChange('categoryId', event.target.value)
+                                  }
+                                  className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                                >
+                                  <option value="">Выберите категорию</option>
+                                  {categories.map((category) => (
+                                    <option key={category._id} value={category._id}>
+                                      {category.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-semibold uppercase text-slate-400">Описание</label>
+                                <textarea
+                                  value={isCreatingProduct ? newProduct.description : productEditForm.description}
+                                  onChange={(event) =>
+                                    isCreatingProduct
+                                      ? setNewProduct((prev) => ({ ...prev, description: event.target.value }))
+                                      : handleProductEditFieldChange('description', event.target.value)
+                                  }
+                                  className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                                  rows={3}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-semibold uppercase text-slate-400">Фото (URL)</label>
+                                <input
+                                  type="url"
+                                  value={isCreatingProduct ? newProduct.imageUrl : productEditForm.imageUrl}
+                                  onChange={(event) =>
+                                    isCreatingProduct
+                                      ? setNewProduct((prev) => ({ ...prev, imageUrl: event.target.value }))
+                                      : handleProductEditFieldChange('imageUrl', event.target.value)
+                                  }
+                                  className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                                />
+                              </div>
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                  <label className="text-xs font-semibold uppercase text-slate-400">Тип скидки</label>
+                                  <select
+                                    value={isCreatingProduct ? newProduct.discountType : productEditForm.discountType}
+                                    onChange={(event) =>
+                                      isCreatingProduct
+                                        ? setNewProduct((prev) => ({
+                                            ...prev,
+                                            discountType: event.target.value as typeof prev.discountType,
+                                          }))
+                                        : handleProductEditFieldChange('discountType', event.target.value)
+                                    }
+                                    className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                                  >
+                                    <option value="">Без скидки</option>
+                                    <option value="percentage">Скидка %</option>
+                                    <option value="fixed">Фикс. скидка</option>
+                                  </select>
+                                </div>
+                                <div className="space-y-2">
+                                  <label className="text-xs font-semibold uppercase text-slate-400">Значение скидки</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={isCreatingProduct ? newProduct.discountValue : productEditForm.discountValue}
+                                    onChange={(event) =>
+                                      isCreatingProduct
+                                        ? setNewProduct((prev) => ({ ...prev, discountValue: event.target.value }))
+                                        : handleProductEditFieldChange('discountValue', event.target.value)
+                                    }
+                                    className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                                  />
+                                </div>
+                              </div>
+                              {!isCreatingProduct ? (
+                                <div className="space-y-2">
+                                  <label className="text-xs font-semibold uppercase text-slate-400">Статус</label>
+                                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                                      checked={productEditForm.isActive}
+                                      onChange={(event) => handleProductEditFieldChange('isActive', event.target.checked)}
+                                    />
+                                    В продаже
+                                  </label>
+                                </div>
+                              ) : null}
+                              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                <p className="text-xs font-semibold uppercase text-slate-400">Экономика</p>
+                                <div className="mt-3 grid gap-3">
+                                  <div className="space-y-1">
+                                    <label className="text-[11px] uppercase text-slate-400">Себестоимость ₽</label>
+                                    <div className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                                      {editorCostMissing ? '—' : `${formatCurrency(editorCostValue ?? 0)} ₽`}
+                                    </div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[11px] uppercase text-slate-400">Цена ₽</label>
                                     <input
                                       type="number"
                                       step="0.01"
                                       min="0"
-                                      defaultValue={product.basePrice ?? product.price}
-                                      className="w-24 rounded-xl border border-slate-200 px-2 py-1 text-sm"
-                                      onBlur={(event) =>
-                                        handleProductPriceChange(product._id, { basePrice: Number(event.target.value) })
+                                      value={
+                                        isCreatingProduct
+                                          ? newProduct.basePrice
+                                          : productEditForm.basePrice || productEditForm.price
                                       }
-                                    />
-                                    <span className="text-sm text-slate-400">({product.price.toFixed(2)} ₽)</span>
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2 text-slate-500">
-                                  {product.costPrice !== undefined ? `${product.costPrice.toFixed(2)} ₽` : '—'}
-                                </td>
-                                <td className="px-3 py-2 text-slate-500">{discountLabel}</td>
-                                <td className="px-3 py-2">
-                                  <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-500">
-                                    <input
-                                      type="checkbox"
-                                      className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-                                      checked={product.isActive !== false}
                                       onChange={(event) =>
-                                        handleProductPriceChange(product._id, { isActive: event.target.checked })
+                                        isCreatingProduct
+                                          ? setNewProduct((prev) => ({ ...prev, basePrice: event.target.value }))
+                                          : handleProductEditFieldChange('basePrice', event.target.value)
                                       }
+                                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                                     />
-                                    В продаже
-                                  </label>
-                                </td>
-                                <td className="px-3 py-2 text-right text-xs text-slate-400">
-                                  <div className="flex justify-end gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSelectProduct(product)}
-                                      className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-600 shadow-inner hover:bg-emerald-50"
-                                    >
-                                      Настроить
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleProductPriceChange(product._id, {
-                                          discountType: null,
-                                          discountValue: null,
-                                          basePrice: product.basePrice ?? product.price,
-                                          price: product.basePrice ?? product.price,
-                                        })
-                                      }
-                                      className="rounded-full px-3 py-1 transition hover:bg-slate-200"
-                                    >
-                                      Сбросить скидку
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteProduct(product._id)}
-                                      className="rounded-full px-3 py-1 font-semibold text-red-600 transition hover:bg-red-50"
-                                    >
-                                      Удалить
-                                    </button>
                                   </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Card>
-                <Card title="Настройка выбранной позиции">
-                  {selectedProduct ? (
-                    <form onSubmit={handleUpdateProduct} className="grid gap-4 text-sm md:grid-cols-2">
-                      <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase text-slate-400">Название</label>
-                        <input
-                          type="text"
-                          value={productEditForm.name}
-                          onChange={(event) => setProductEditForm((prev) => ({ ...prev, name: event.target.value }))}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase text-slate-400">Категория</label>
-                        <select
-                          value={productEditForm.categoryId}
-                          onChange={(event) =>
-                            setProductEditForm((prev) => ({ ...prev, categoryId: event.target.value }))
-                          }
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                        >
-                          <option value="">Выберите категорию</option>
-                          {categories.map((category) => (
-                            <option key={category._id} value={category._id}>
-                              {category.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase text-slate-400">Описание</label>
-                        <textarea
-                          value={productEditForm.description}
-                          onChange={(event) => setProductEditForm((prev) => ({ ...prev, description: event.target.value }))}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                          rows={3}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase text-slate-400">Изображение</label>
-                        <input
-                          type="url"
-                          value={productEditForm.imageUrl}
-                          onChange={(event) => setProductEditForm((prev) => ({ ...prev, imageUrl: event.target.value }))}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase text-slate-400">Базовая цена</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={productEditForm.basePrice}
-                          onChange={(event) => setProductEditForm((prev) => ({ ...prev, basePrice: event.target.value }))}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase text-slate-400">Тип скидки</label>
-                        <select
-                          value={productEditForm.discountType}
-                          onChange={(event) =>
-                            setProductEditForm((prev) => ({ ...prev, discountType: event.target.value as typeof prev.discountType }))
-                          }
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                        >
-                          <option value="">Нет</option>
-                          <option value="percentage">Процент</option>
-                          <option value="fixed">Фиксированная</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase text-slate-400">Значение скидки</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={productEditForm.discountValue}
-                          onChange={(event) => setProductEditForm((prev) => ({ ...prev, discountValue: event.target.value }))}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase text-slate-400">Статус</label>
-                        <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-                            checked={productEditForm.isActive}
-                            onChange={(event) => setProductEditForm((prev) => ({ ...prev, isActive: event.target.checked }))}
-                          />
-                          В продаже
-                        </label>
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase text-slate-400">Модификаторы</p>
-                        {modifierGroups.length ? (
-                          <div className="max-h-32 space-y-2 overflow-y-auto rounded-2xl border border-slate-100 p-3">
-                            {modifierGroups.map((group) => {
-                              const checked = productEditModifiers.includes(group._id);
-                              return (
-                                <label
-                                  key={group._id}
-                                  className="flex items-center justify-between rounded-xl px-2 py-1 text-sm transition hover:bg-slate-50"
-                                >
-                                  <span className="text-slate-700">
-                                    {group.name}
-                                    <span className="ml-2 text-[11px] uppercase text-slate-400">
-                                      {group.selectionType === 'single' ? '1 вариант' : 'Несколько'}
-                                      {group.required ? ' · Обязательная' : ''}
-                                    </span>
-                                  </span>
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => handleToggleEditProductModifier(group._id)}
-                                    className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-                                  />
-                                </label>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-400">Группы модификаторов пока не созданы.</p>
-                        )}
-                      </div>
-                      <div className="md:col-span-2 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold uppercase text-slate-400">Ингредиенты</p>
-                          <button
-                            type="button"
-                            onClick={addEditIngredientRow}
-                            className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
-                          >
-                            + Добавить
-                          </button>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                      <label className="text-[11px] uppercase text-slate-400">Наценка %</label>
+                                      <div className={`rounded-xl bg-white px-3 py-2 text-sm font-semibold ${getMarkupColor(editorEconomics.markupPercent)}`}>
+                                        {editorEconomics.markupPercent !== null
+                                          ? `${editorEconomics.markupPercent.toFixed(0)}%`
+                                          : '—'}
+                                      </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="text-[11px] uppercase text-slate-400">Прибыль ₽</label>
+                                      <div className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                                        {editorEconomics.grossProfit !== null
+                                          ? `${formatCurrency(editorEconomics.grossProfit)} ₽`
+                                          : '—'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {editorCostMissing ? (
+                                    <span className="text-xs font-semibold text-amber-600">Нет себестоимости</span>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-semibold uppercase text-slate-400">Ингредиенты</p>
+                                  <button
+                                    type="button"
+                                    onClick={isCreatingProduct ? handleAddIngredientRow : addEditIngredientRow}
+                                    className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                                  >
+                                    + Добавить
+                                  </button>
+                                </div>
+                                {(isCreatingProduct ? productIngredients : productEditIngredients).length === 0 ? (
+                                  <p className="text-xs text-slate-400">
+                                    Ингредиенты не указаны, позиция считается самостоятельной.
+                                  </p>
+                                ) : null}
+                                {(isCreatingProduct ? productIngredients : productEditIngredients).map((row, index) => (
+                                  <div key={index} className="flex flex-wrap items-center gap-2">
+                                    <select
+                                      value={row.ingredientId}
+                                      onChange={(event) =>
+                                        isCreatingProduct
+                                          ? handleIngredientChange(index, 'ingredientId', event.target.value)
+                                          : handleEditIngredientChange(index, 'ingredientId', event.target.value)
+                                      }
+                                      className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
+                                    >
+                                      <option value="">Ингредиент</option>
+                                      {ingredients.map((ingredient) => (
+                                        <option key={ingredient._id} value={ingredient._id}>
+                                          {ingredient.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={row.quantity}
+                                      onChange={(event) =>
+                                        isCreatingProduct
+                                          ? handleIngredientChange(index, 'quantity', event.target.value)
+                                          : handleEditIngredientChange(index, 'quantity', event.target.value)
+                                      }
+                                      className="w-24 rounded-2xl border border-slate-200 px-3 py-2"
+                                      placeholder="Кол-во"
+                                    />
+                                    <select
+                                      value={row.unit || ''}
+                                      onChange={(event) =>
+                                        isCreatingProduct
+                                          ? handleIngredientChange(index, 'unit', event.target.value)
+                                          : handleEditIngredientChange(index, 'unit', event.target.value)
+                                      }
+                                      className="w-20 rounded-2xl border border-slate-200 px-3 py-2"
+                                    >
+                                      <option value="">Ед.</option>
+                                      {measurementUnits.map((unit) => (
+                                        <option key={unit} value={unit}>
+                                          {unit}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {!isCreatingProduct ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeEditIngredientRow(index)}
+                                        className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-slate-200"
+                                      >
+                                        Удалить
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-semibold uppercase text-slate-400">Модификаторы</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMenuSection('modifiers')}
+                                    className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                                  >
+                                    Настроить
+                                  </button>
+                                </div>
+                                {modifierGroups.length ? (
+                                  <div className="space-y-2 rounded-2xl border border-slate-100 p-3">
+                                    {modifierGroups.map((group) => {
+                                      const checked = isCreatingProduct
+                                        ? newProductModifierIds.includes(group._id)
+                                        : productEditModifiers.includes(group._id);
+                                      return (
+                                        <label
+                                          key={group._id}
+                                          className="flex items-center justify-between rounded-xl px-2 py-1 text-sm transition hover:bg-slate-50"
+                                        >
+                                          <span className="text-slate-700">
+                                            {group.name}
+                                            <span className="ml-2 text-[11px] uppercase text-slate-400">
+                                              {group.selectionType === 'single' ? '1 вариант' : 'Несколько'}
+                                              {group.required ? ' · Обязательная' : ''}
+                                            </span>
+                                          </span>
+                                          <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() =>
+                                              isCreatingProduct
+                                                ? handleToggleNewProductModifier(group._id)
+                                                : handleToggleEditProductModifier(group._id)
+                                            }
+                                            className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                                          />
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-slate-400">Группы модификаторов пока не созданы.</p>
+                                )}
+                              </div>
+                            </form>
+                          )}
                         </div>
-                        {productEditIngredients.length === 0 ? (
-                          <p className="text-xs text-slate-400">Ингредиенты не указаны, позиция считается самостоятельной.</p>
+                        {isEditorOpen ? (
+                          <div className="sticky bottom-0 mt-4 flex items-center justify-between gap-2 border-t border-slate-100 bg-white pt-3">
+                            <button
+                              type="button"
+                              onClick={handleCancelProductEdit}
+                              className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                            >
+                              Отмена
+                            </button>
+                            <button
+                              type="submit"
+                              form={menuEditorFormId}
+                              className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white"
+                            >
+                              Сохранить
+                            </button>
+                          </div>
                         ) : null}
-                        {productEditIngredients.map((row, index) => (
-                          <div key={index} className="flex flex-wrap items-center gap-2">
+                      </div>
+                    </Card>
+                  </div>
+                </div>
+                {isEditorOpen ? (
+                  <div className="fixed inset-0 z-50 flex flex-col bg-white lg:hidden">
+                    <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={handleCloseEditor}
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
+                      >
+                        Назад
+                      </button>
+                      <p className="text-sm font-semibold text-slate-800">{menuEditorTitle}</p>
+                      <span className="w-12" />
+                    </div>
+                    <div className="flex-1 overflow-y-auto px-4 py-4">
+                      <form
+                        id={`${menuEditorFormId}-mobile`}
+                        onSubmit={isCreatingProduct ? handleCreateProduct : handleUpdateProduct}
+                        className="space-y-4 text-sm"
+                      >
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold uppercase text-slate-400">Название</label>
+                          <input
+                            type="text"
+                            value={isCreatingProduct ? newProduct.name : productEditForm.name}
+                            onChange={(event) =>
+                              isCreatingProduct
+                                ? setNewProduct((prev) => ({ ...prev, name: event.target.value }))
+                                : handleProductEditFieldChange('name', event.target.value)
+                            }
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold uppercase text-slate-400">Категория</label>
                           <select
-                            value={row.ingredientId}
-                            onChange={(event) => handleEditIngredientChange(index, 'ingredientId', event.target.value)}
-                            className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
+                            value={isCreatingProduct ? newProduct.categoryId : productEditForm.categoryId}
+                            onChange={(event) =>
+                              isCreatingProduct
+                                ? setNewProduct((prev) => ({ ...prev, categoryId: event.target.value }))
+                                : handleProductEditFieldChange('categoryId', event.target.value)
+                            }
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                           >
-                              <option value="">Ингредиент</option>
-                              {ingredients.map((ingredient) => (
-                                <option key={ingredient._id} value={ingredient._id}>
-                                  {ingredient.name}
-                                </option>
-                              ))}
-                            </select>
+                            <option value="">Выберите категорию</option>
+                            {categories.map((category) => (
+                              <option key={category._id} value={category._id}>
+                                {category.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold uppercase text-slate-400">Цена ₽</label>
                           <input
                             type="number"
                             step="0.01"
                             min="0"
-                            value={row.quantity}
-                            onChange={(event) => handleEditIngredientChange(index, 'quantity', event.target.value)}
-                            className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
-                            placeholder="Кол-во"
+                            value={
+                              isCreatingProduct
+                                ? newProduct.basePrice
+                                : productEditForm.basePrice || productEditForm.price
+                            }
+                            onChange={(event) =>
+                              isCreatingProduct
+                                ? setNewProduct((prev) => ({ ...prev, basePrice: event.target.value }))
+                                : handleProductEditFieldChange('basePrice', event.target.value)
+                            }
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                           />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold uppercase text-slate-400">Описание</label>
+                          <textarea
+                            value={isCreatingProduct ? newProduct.description : productEditForm.description}
+                            onChange={(event) =>
+                              isCreatingProduct
+                                ? setNewProduct((prev) => ({ ...prev, description: event.target.value }))
+                                : handleProductEditFieldChange('description', event.target.value)
+                            }
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                            rows={3}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold uppercase text-slate-400">Фото (URL)</label>
+                          <input
+                            type="url"
+                            value={isCreatingProduct ? newProduct.imageUrl : productEditForm.imageUrl}
+                            onChange={(event) =>
+                              isCreatingProduct
+                                ? setNewProduct((prev) => ({ ...prev, imageUrl: event.target.value }))
+                                : handleProductEditFieldChange('imageUrl', event.target.value)
+                            }
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold uppercase text-slate-400">Тип скидки</label>
                           <select
-                            value={row.unit || ''}
-                            onChange={(event) => handleEditIngredientChange(index, 'unit', event.target.value)}
-                            className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
+                            value={isCreatingProduct ? newProduct.discountType : productEditForm.discountType}
+                            onChange={(event) =>
+                              isCreatingProduct
+                                ? setNewProduct((prev) => ({
+                                    ...prev,
+                                    discountType: event.target.value as typeof prev.discountType,
+                                  }))
+                                : handleProductEditFieldChange('discountType', event.target.value)
+                            }
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                           >
-                            <option value="">Ед.</option>
-                            {measurementUnits.map((unit) => (
-                              <option key={unit} value={unit}>
-                                {unit}
-                              </option>
-                            ))}
+                            <option value="">Без скидки</option>
+                            <option value="percentage">Скидка %</option>
+                            <option value="fixed">Фикс. скидка</option>
                           </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold uppercase text-slate-400">Значение скидки</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={isCreatingProduct ? newProduct.discountValue : productEditForm.discountValue}
+                            onChange={(event) =>
+                              isCreatingProduct
+                                ? setNewProduct((prev) => ({ ...prev, discountValue: event.target.value }))
+                                : handleProductEditFieldChange('discountValue', event.target.value)
+                            }
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                          />
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-xs font-semibold uppercase text-slate-400">Экономика</p>
+                          <div className="mt-3 grid gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[11px] uppercase text-slate-400">Себестоимость ₽</label>
+                              <div className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                                {editorCostMissing ? '—' : `${formatCurrency(editorCostValue ?? 0)} ₽`}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[11px] uppercase text-slate-400">Наценка %</label>
+                                <div className={`rounded-xl bg-white px-3 py-2 text-sm font-semibold ${getMarkupColor(editorEconomics.markupPercent)}`}>
+                                  {editorEconomics.markupPercent !== null
+                                    ? `${editorEconomics.markupPercent.toFixed(0)}%`
+                                    : '—'}
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[11px] uppercase text-slate-400">Прибыль ₽</label>
+                                <div className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                                  {editorEconomics.grossProfit !== null
+                                    ? `${formatCurrency(editorEconomics.grossProfit)} ₽`
+                                    : '—'}
+                                </div>
+                              </div>
+                            </div>
+                            {editorCostMissing ? (
+                              <span className="text-xs font-semibold text-amber-600">Нет себестоимости</span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold uppercase text-slate-400">Ингредиенты</p>
                             <button
                               type="button"
-                              onClick={() => removeEditIngredientRow(index)}
-                              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-200"
+                              onClick={isCreatingProduct ? handleAddIngredientRow : addEditIngredientRow}
+                              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
                             >
-                              Удалить
+                              + Добавить
                             </button>
                           </div>
-                        ))}
-                      </div>
-                      <div className="md:col-span-2 flex items-center justify-between">
-                        <span className="text-xs text-slate-400">
-                          Себестоимость: {selectedProduct.costPrice !== undefined ? `${selectedProduct.costPrice.toFixed(2)} ₽` : '—'}
-                        </span>
+                          {(isCreatingProduct ? productIngredients : productEditIngredients).map((row, index) => (
+                            <div key={index} className="flex flex-wrap items-center gap-2">
+                              <select
+                                value={row.ingredientId}
+                                onChange={(event) =>
+                                  isCreatingProduct
+                                    ? handleIngredientChange(index, 'ingredientId', event.target.value)
+                                    : handleEditIngredientChange(index, 'ingredientId', event.target.value)
+                                }
+                                className="flex-1 rounded-2xl border border-slate-200 px-3 py-2"
+                              >
+                                <option value="">Ингредиент</option>
+                                {ingredients.map((ingredient) => (
+                                  <option key={ingredient._id} value={ingredient._id}>
+                                    {ingredient.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={row.quantity}
+                                onChange={(event) =>
+                                  isCreatingProduct
+                                    ? handleIngredientChange(index, 'quantity', event.target.value)
+                                    : handleEditIngredientChange(index, 'quantity', event.target.value)
+                                }
+                                className="w-24 rounded-2xl border border-slate-200 px-3 py-2"
+                                placeholder="Кол-во"
+                              />
+                              <select
+                                value={row.unit || ''}
+                                onChange={(event) =>
+                                  isCreatingProduct
+                                    ? handleIngredientChange(index, 'unit', event.target.value)
+                                    : handleEditIngredientChange(index, 'unit', event.target.value)
+                                }
+                                className="w-20 rounded-2xl border border-slate-200 px-3 py-2"
+                              >
+                                <option value="">Ед.</option>
+                                {measurementUnits.map((unit) => (
+                                  <option key={unit} value={unit}>
+                                    {unit}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold uppercase text-slate-400">Модификаторы</p>
+                            <button
+                              type="button"
+                              onClick={() => setMenuSection('modifiers')}
+                              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                            >
+                              Настроить
+                            </button>
+                          </div>
+                          {modifierGroups.length ? (
+                            <div className="space-y-2 rounded-2xl border border-slate-100 p-3">
+                              {modifierGroups.map((group) => {
+                                const checked = isCreatingProduct
+                                  ? newProductModifierIds.includes(group._id)
+                                  : productEditModifiers.includes(group._id);
+                                return (
+                                  <label
+                                    key={group._id}
+                                    className="flex items-center justify-between rounded-xl px-2 py-1 text-sm transition hover:bg-slate-50"
+                                  >
+                                    <span className="text-slate-700">{group.name}</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() =>
+                                        isCreatingProduct
+                                          ? handleToggleNewProductModifier(group._id)
+                                          : handleToggleEditProductModifier(group._id)
+                                      }
+                                      className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                                    />
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400">Группы модификаторов пока не созданы.</p>
+                          )}
+                        </div>
+                      </form>
+                    </div>
+                    <div className="border-t border-slate-200 bg-white px-4 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCancelProductEdit}
+                          className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600"
+                        >
+                          Отмена
+                        </button>
                         <button
                           type="submit"
-                          className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
+                          form={`${menuEditorFormId}-mobile`}
+                          className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white"
                         >
-                          Сохранить изменения
+                          Сохранить
                         </button>
                       </div>
-                    </form>
-                  ) : (
-                    <p className="text-xs text-slate-400">Выберите позицию из списка, чтобы изменить описание, цену или состав.</p>
-                  )}
-                </Card>
-              </>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
 
             {menuSection === 'ingredients' ? (
