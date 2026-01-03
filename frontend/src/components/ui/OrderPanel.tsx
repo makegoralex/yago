@@ -14,7 +14,7 @@ type OrderPanelProps = {
   subtotal: number;
   discount: number;
   total: number;
-  status: 'draft' | 'paid' | 'completed' | null;
+  status: 'draft' | 'paid' | 'completed' | 'cancelled' | null;
   onIncrement: (lineId: string) => void;
   onDecrement: (lineId: string) => void;
   onRemove: (lineId: string) => void;
@@ -43,6 +43,7 @@ const statusLabels: Record<NonNullable<OrderPanelProps['status']>, string> = {
   draft: 'В работе',
   paid: 'Оплачен',
   completed: 'Завершён',
+  cancelled: 'Отменён',
 };
 
 const OrderPanel: React.FC<OrderPanelProps> = ({
@@ -111,16 +112,16 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
 
   return (
     <aside
-      className={`custom-scrollbar flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-xl bg-white shadow-soft transition-transform ${
+      className={`custom-scrollbar flex h-full w-full min-h-0 flex-col overflow-y-auto overflow-x-hidden overscroll-x-none rounded-xl bg-white shadow-soft transition-transform ${
         visible ? 'translate-x-0' : 'translate-x-full'
       }`}
     >
-      <div className="flex items-center justify-between px-4 py-3">
-        <div>
+      <div className="flex min-w-0 items-center justify-between px-4 py-3">
+        <div className="min-w-0">
           <p className="text-base font-semibold text-slate-900">Текущий заказ</p>
           <p className="text-xs text-slate-500">{items.length} позиций</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {status && status !== 'draft' ? (
             <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase text-slate-600">
               {statusLabels[status]}
@@ -171,10 +172,10 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
       ) : null}
       {customer ? (
         <div className="mx-4 mb-3 rounded-xl border border-secondary/20 bg-secondary/5 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">{customer.name}</p>
-              <p className="text-xs text-slate-500">{customer.phone ?? '—'}</p>
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">{customer.name}</p>
+              <p className="truncate text-xs text-slate-500">{customer.phone ?? '—'}</p>
             </div>
             <div className="text-right">
               <p className="text-[11px] uppercase text-slate-400">Баллы</p>

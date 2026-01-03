@@ -19,6 +19,7 @@ const RedeemPointsModal: React.FC<RedeemPointsModalProps> = ({
 }) => {
   const [points, setPoints] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const maxRedeemable = Math.floor(Math.min(maxPoints, maxAmount));
 
   useEffect(() => {
     if (open) {
@@ -51,6 +52,16 @@ const RedeemPointsModal: React.FC<RedeemPointsModalProps> = ({
     await onSubmit(numeric);
   };
 
+  const handleRedeemAll = () => {
+    if (maxRedeemable <= 0) {
+      setError('Введите количество баллов больше нуля');
+      return;
+    }
+
+    setError(null);
+    setPoints(String(maxRedeemable));
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-soft">
@@ -74,11 +85,19 @@ const RedeemPointsModal: React.FC<RedeemPointsModalProps> = ({
           <input
             type="number"
             min={1}
-            max={Math.floor(Math.min(maxPoints, maxAmount))}
+            max={maxRedeemable}
             value={points}
             onChange={(event) => setPoints(event.target.value)}
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
           />
+          <button
+            type="button"
+            onClick={handleRedeemAll}
+            disabled={isProcessing || maxRedeemable <= 0}
+            className="flex h-12 w-full items-center justify-center rounded-2xl border-2 border-secondary text-base font-semibold text-secondary shadow-soft transition hover:bg-secondary/10 disabled:opacity-60"
+          >
+            Списать все доступные баллы
+          </button>
           {error ? <p className="text-sm text-red-500">{error}</p> : null}
         </div>
         <div className="mt-6 flex gap-3">

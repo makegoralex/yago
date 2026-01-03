@@ -55,7 +55,7 @@ export type ActiveOrder = {
 export type OrderHistoryEntry = {
   _id: string;
   total: number;
-  status: 'paid' | 'completed';
+  status: 'paid' | 'completed' | 'cancelled';
   createdAt: string;
   paymentMethod?: PaymentMethod;
   items: OrderItem[];
@@ -97,7 +97,7 @@ type OrderState = {
   discount: number;
   manualDiscount: number;
   total: number;
-  status: 'draft' | 'paid' | 'completed' | null;
+  status: 'draft' | 'paid' | 'completed' | 'cancelled' | null;
   customerId: string | null;
   customer: CustomerSummary | null;
   orderTag: OrderTag | null;
@@ -116,6 +116,7 @@ type OrderState = {
   payOrder: (payload: { method: PaymentMethod; amountTendered: number; change?: number }) => Promise<void>;
   completeOrder: () => Promise<void>;
   cancelOrder: () => Promise<void>;
+  cancelReceipt: (orderId: string) => Promise<void>;
   reset: () => void;
   syncItems: (
     items: OrderItem[],
@@ -404,7 +405,7 @@ const mapDiscountSummaries = (discounts: any): DiscountSummary[] => {
 };
 
 const parseStatus = (status: unknown): OrderState['status'] => {
-  if (status === 'draft' || status === 'paid' || status === 'completed') {
+  if (status === 'draft' || status === 'paid' || status === 'completed' || status === 'cancelled') {
     return status;
   }
 
@@ -475,7 +476,9 @@ const mapOrderHistoryEntry = (order: any): OrderHistoryEntry | null => {
   }
 
   const status: OrderHistoryEntry['status'] | null =
-    order.status === 'paid' || order.status === 'completed' ? order.status : null;
+    order.status === 'paid' || order.status === 'completed' || order.status === 'cancelled'
+      ? order.status
+      : null;
   if (!status) {
     return null;
   }
@@ -695,6 +698,23 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       set({ loading: false });
     }
   },
+  async cancelReceipt(orderId) {
+    if (!orderId) {
+      return;
+    }
+
+    set({ loading: true });
+    try {
+      await api.post(`/api/orders/${orderId}/cancel`);
+      if (get().orderId === orderId) {
+        get().reset();
+      }
+      void get().fetchShiftHistory().catch(() => undefined);
+      void get().fetchActiveOrders();
+    } finally {
+      set({ loading: false });
+    }
+  },
   reset() {
     set({
       orderId: null,
@@ -827,21 +847,16 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       throw new Error('Баллы превышают сумму заказа');
     }
 
-    if (points > customer.points) {
+    const remainingPoints = Math.max(customer.points - manualDiscount, 0);
+    if (points > remainingPoints) {
       throw new Error('Недостаточно баллов у клиента');
     }
 
     set({ loading: true });
     try {
-      const response = await api.post('/api/loyalty/redeem', { customerId, points });
-      const updatedCustomer = mapCustomer(response.data.data?.customer) ?? {
-        ...customer,
-        points: customer.points - points,
-      };
-
       const newManualDiscount = roundCurrency(manualDiscount + points);
 
-      set({ customer: updatedCustomer, manualDiscount: newManualDiscount });
+      set({ manualDiscount: newManualDiscount });
 
       await get().syncItems(get().items, { manualDiscount: newManualDiscount, customerId });
     } finally {
