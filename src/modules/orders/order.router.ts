@@ -789,6 +789,21 @@ router.post(
       return;
     }
 
+    if (order.manualDiscount > 0) {
+      if (!order.customerId) {
+        res.status(400).json({ data: null, error: 'Для списания баллов нужен клиент' });
+        return;
+      }
+
+      try {
+        await redeemLoyaltyPoints(order.customerId.toString(), order.manualDiscount);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Не удалось списать баллы';
+        res.status(400).json({ data: null, error: message });
+        return;
+      }
+    }
+
     order.payment = {
       method,
       amount: normalizedAmount,
