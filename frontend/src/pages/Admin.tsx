@@ -495,6 +495,8 @@ const AdminPage: React.FC = () => {
   const [daily, setDaily] = useState<{ date: string; revenue: number; orders: number }[]>([]);
   const [topProducts, setTopProducts] = useState<{ name: string; qty: number }[]>([]);
   const [topCustomers, setTopCustomers] = useState<{ name: string; totalSpent: number }[]>([]);
+  const [dashboardFilters, setDashboardFilters] = useState({ from: '', to: '' });
+  const [dashboardPeriod, setDashboardPeriod] = useState<{ from?: string; to?: string } | null>(null);
   const [salesShiftStats, setSalesShiftStats] = useState<SalesAndShiftStats | null>(null);
   const [salesStatsLoading, setSalesStatsLoading] = useState(false);
   const [salesStatsError, setSalesStatsError] = useState<string | null>(null);
@@ -707,18 +709,22 @@ const AdminPage: React.FC = () => {
     }));
   }, [inventoryAuditForm.items.length, inventoryAuditForm.warehouseId, inventoryItems]);
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (filters?: { from?: string; to?: string }) => {
     try {
       setLoadingDashboard(true);
+      const params = {
+        ...(filters?.from ? { from: filters.from } : {}),
+        ...(filters?.to ? { to: filters.to } : {}),
+      };
       const [summaryRes, dailyRes, productsRes, customersRes] = await Promise.all([
         api.get('/api/reports/summary'),
-        api.get('/api/reports/daily'),
-        api.get('/api/reports/top-products'),
+        api.get('/api/reports/daily', { params }),
+        api.get('/api/reports/top-products', { params }),
         api.get('/api/reports/top-customers'),
       ]);
       setSummary(summaryRes.data.data);
       setDaily(normalizeDailyReport(dailyRes.data.data));
-      setTopProducts(productsRes.data.data);
+      setTopProducts(normalizeTopProducts(productsRes.data.data));
       setTopCustomers(customersRes.data.data);
     } catch (error) {
       notify({ title: 'Не удалось загрузить отчеты', type: 'error' });
@@ -1627,6 +1633,37 @@ const AdminPage: React.FC = () => {
       maximumFractionDigits: 0,
     });
 
+  const normalizeDashboardFilterParams = (filters: { from: string; to: string }) => {
+    const from = filters.from || undefined;
+    const to = filters.to || undefined;
+
+    if (from && to) {
+      const fromDate = new Date(`${from}T00:00:00`);
+      const toDate = new Date(`${to}T00:00:00`);
+      if (fromDate > toDate) {
+        notify({ title: 'Дата начала больше даты окончания', type: 'error' });
+        return null;
+      }
+    }
+
+    return { from, to };
+  };
+
+  const handleDashboardFilterSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalized = normalizeDashboardFilterParams(dashboardFilters);
+    if (!normalized) return;
+
+    setDashboardPeriod(normalized);
+    void loadDashboard(normalized);
+  };
+
+  const handleDashboardFilterReset = () => {
+    setDashboardFilters({ from: '', to: '' });
+    setDashboardPeriod(null);
+    void loadDashboard();
+  };
+
   const formatDateTick = (value?: string) => {
     if (!value) return '';
     const date = new Date(value);
@@ -1645,15 +1682,31 @@ const AdminPage: React.FC = () => {
         const dateRaw = typeof entry?.date === 'string' ? entry.date : '';
         const parsed = dateRaw ? new Date(dateRaw) : null;
         const safeDate = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : dateRaw;
+        const typedEntry = entry as { revenue?: number; totalRevenue?: number; orders?: number; orderCount?: number };
 
         return {
           date: safeDate,
-          revenue: normalizeNumber((entry as { revenue?: number }).revenue),
-          orders: normalizeNumber((entry as { orders?: number }).orders),
+          revenue: normalizeNumber(typedEntry.revenue ?? typedEntry.totalRevenue),
+          orders: normalizeNumber(typedEntry.orders ?? typedEntry.orderCount),
         };
       })
       .filter((entry) => entry.date)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
+
+  const normalizeTopProducts = (data: unknown): { name: string; qty: number }[] => {
+    if (!Array.isArray(data)) return [];
+
+    return data
+      .map((entry) => {
+        const typedEntry = entry as { name?: string; qty?: number; totalQuantity?: number };
+
+        return {
+          name: typeof typedEntry.name === 'string' ? typedEntry.name : 'Позиция',
+          qty: normalizeNumber(typedEntry.qty ?? typedEntry.totalQuantity),
+        };
+      })
+      .filter((entry) => entry.name);
   };
 
   const revenueExtremes = useMemo(() => {
@@ -3536,7 +3589,54 @@ const AdminPage: React.FC = () => {
                 )}
               </Card>
             </div>
-            <div className="mt-6 grid gap-4 xl:grid-cols-2">
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <form onSubmit={handleDashboardFilterSubmit} className="flex flex-wrap items-end gap-3 text-sm">
+                <label className="flex flex-col text-slate-600">
+                  <span className="mb-1 text-xs uppercase text-slate-400">С</span>
+                  <input
+                    type="date"
+                    value={dashboardFilters.from}
+                    max={dashboardFilters.to || todayInputValue}
+                    onChange={(event) =>
+                      setDashboardFilters((prev) => ({ ...prev, from: event.target.value }))
+                    }
+                    className="rounded-2xl border border-slate-200 px-3 py-2"
+                  />
+                </label>
+                <label className="flex flex-col text-slate-600">
+                  <span className="mb-1 text-xs uppercase text-slate-400">По</span>
+                  <input
+                    type="date"
+                    value={dashboardFilters.to}
+                    max={todayInputValue}
+                    min={dashboardFilters.from || undefined}
+                    onChange={(event) =>
+                      setDashboardFilters((prev) => ({ ...prev, to: event.target.value }))
+                    }
+                    className="rounded-2xl border border-slate-200 px-3 py-2"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={loadingDashboard}
+                >
+                  Применить
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDashboardFilterReset}
+                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+                  disabled={loadingDashboard}
+                >
+                  Сбросить
+                </button>
+                {dashboardPeriod ? (
+                  <span className="text-xs text-slate-400">{formatPeriodLabel(dashboardPeriod)}</span>
+                ) : null}
+              </form>
+            </div>
+            <div className="mt-4 grid gap-4 xl:grid-cols-2">
               <Card title="Выручка по дням">
                 <div className="h-72 w-full">
                   {daily.length ? (
