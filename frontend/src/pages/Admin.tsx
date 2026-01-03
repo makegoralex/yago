@@ -1649,8 +1649,7 @@ const AdminPage: React.FC = () => {
     return { from, to };
   };
 
-  const handleDashboardFilterSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleDashboardFilterSubmit = () => {
     const normalized = normalizeDashboardFilterParams(dashboardFilters);
     if (!normalized) return;
 
@@ -3589,8 +3588,11 @@ const AdminPage: React.FC = () => {
                 )}
               </Card>
             </div>
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-              <form onSubmit={handleDashboardFilterSubmit} className="flex flex-wrap items-end gap-3 text-sm">
+            <Card title="Период для графиков">
+              <p className="mb-3 text-xs text-slate-500">
+                Применяется к графикам «Выручка по дням» и «Топ продукты».
+              </p>
+              <div className="flex flex-wrap items-end gap-3 text-sm">
                 <label className="flex flex-col text-slate-600">
                   <span className="mb-1 text-xs uppercase text-slate-400">С</span>
                   <input
@@ -3617,7 +3619,8 @@ const AdminPage: React.FC = () => {
                   />
                 </label>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleDashboardFilterSubmit}
                   className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                   disabled={loadingDashboard}
                 >
@@ -3634,10 +3637,17 @@ const AdminPage: React.FC = () => {
                 {dashboardPeriod ? (
                   <span className="text-xs text-slate-400">{formatPeriodLabel(dashboardPeriod)}</span>
                 ) : null}
-              </form>
-            </div>
+              </div>
+            </Card>
             <div className="mt-4 grid gap-4 xl:grid-cols-2">
-              <Card title="Выручка по дням">
+              <Card
+                title="Выручка по дням"
+                actions={
+                  dashboardPeriod ? (
+                    <span className="text-xs text-slate-400">{formatPeriodLabel(dashboardPeriod)}</span>
+                  ) : null
+                }
+              >
                 <div className="h-72 w-full">
                   {daily.length ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -3734,7 +3744,14 @@ const AdminPage: React.FC = () => {
                   )}
                 </div>
               </Card>
-              <Card title="Топ продукты">
+              <Card
+                title="Топ продукты"
+                actions={
+                  dashboardPeriod ? (
+                    <span className="text-xs text-slate-400">{formatPeriodLabel(dashboardPeriod)}</span>
+                  ) : null
+                }
+              >
                 <div className="h-72 w-full">
                   {topProducts.length ? (
                     <ResponsiveContainer width="100%" height="100%">
