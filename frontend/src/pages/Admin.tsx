@@ -4260,7 +4260,7 @@ const AdminPage: React.FC = () => {
       {activeTab === 'menu' ? (
         <div className="space-y-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-soft">
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 { id: 'products', label: 'Позиции', description: 'Создание и настройка блюд' },
                 { id: 'categories', label: 'Категории', description: 'Группировка и порядок' },
@@ -4271,19 +4271,19 @@ const AdminPage: React.FC = () => {
                   key={item.id}
                   type="button"
                   onClick={() => setMenuSection(item.id as typeof menuSection)}
-                  className={`flex flex-1 items-center justify-between gap-2 rounded-2xl px-4 py-2 text-left text-sm font-semibold transition sm:flex-initial ${
+                  className={`flex min-w-0 flex-col items-start justify-center gap-1 rounded-2xl px-4 py-3 text-left text-sm font-semibold leading-snug transition ${
                     menuSection === item.id
                       ? 'bg-slate-900 text-white shadow-sm'
                       : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  <span>{item.label}</span>
+                  <span className="max-w-full truncate">{item.label}</span>
                   <span
-                    className={`hidden text-xs font-normal sm:inline ${
+                    className={`max-w-full text-xs font-normal leading-snug ${
                       menuSection === item.id ? 'text-slate-200' : 'text-slate-400'
                     }`}
                   >
-                    {item.description}
+                    <span className="block break-words">{item.description}</span>
                   </span>
                 </button>
               ))}
@@ -4485,13 +4485,13 @@ const AdminPage: React.FC = () => {
                         <div className="overflow-x-auto">
                           <table className="min-w-full text-left text-sm">
                             <thead>
-                              <tr className="text-xs uppercase text-slate-400">
+                              <tr className="text-[10px] uppercase tracking-wide text-slate-400">
                                 <th className="px-3 py-2">Название</th>
-                                <th className="px-3 py-2">Цена ₽</th>
-                                <th className="px-3 py-2">Себестоимость ₽</th>
-                                <th className="px-3 py-2">Наценка %</th>
-                                <th className="px-3 py-2">Прибыль ₽</th>
-                                <th className="px-3 py-2">Статус</th>
+                                <th className="px-3 py-2 whitespace-nowrap">Цена ₽</th>
+                                <th className="px-3 py-2 whitespace-nowrap">Себестоимость ₽</th>
+                                <th className="px-3 py-2 whitespace-nowrap">Наценка %</th>
+                                <th className="px-3 py-2 whitespace-nowrap">Прибыль ₽</th>
+                                <th className="px-3 py-2 whitespace-nowrap">Статус</th>
                                 <th className="px-3 py-2 text-right">Действия</th>
                               </tr>
                             </thead>
