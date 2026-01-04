@@ -1992,6 +1992,12 @@ const AdminPage: React.FC = () => {
     [ingredients]
   );
 
+  const defaultProductUnit = useMemo(() => {
+    const normalizedUnits = measurementUnits.map((unit) => unit.trim()).filter((unit) => unit.length > 0);
+    const fallbackUnit = normalizedUnits[0] ?? 'шт';
+    return normalizedUnits.find((unit) => unit.toLowerCase() === 'шт') ?? fallbackUnit;
+  }, [measurementUnits]);
+
   const baseIngredientDeltas = useMemo(
     () =>
       (selectedProduct ? productEditIngredients : productIngredients)
@@ -5925,15 +5931,22 @@ const AdminPage: React.FC = () => {
                             </select>
                           </div>
                           <div className="grid gap-2 md:grid-cols-4">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.quantity}
-                              onChange={(event) => handleReceiptItemChange(index, 'quantity', event.target.value)}
-                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                              placeholder="Количество"
-                            />
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.quantity}
+                                onChange={(event) => handleReceiptItemChange(index, 'quantity', event.target.value)}
+                                className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                                placeholder="Количество"
+                              />
+                              <span className="text-xs text-slate-500">
+                                {item.itemType === 'ingredient'
+                                  ? ingredientUnitMap[item.itemId] || 'ед.'
+                                  : defaultProductUnit}
+                              </span>
+                            </div>
                             <input
                               type="number"
                               min="0"
