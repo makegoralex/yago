@@ -4956,7 +4956,7 @@ const AdminPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={handleCloseEditor}
-                            className="relative inline-flex h-8 items-center justify-center rounded-full border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                            className="relative z-10 inline-flex h-8 items-center justify-center rounded-full border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer pointer-events-auto"
                           >
                             Закрыть
                           </button>
