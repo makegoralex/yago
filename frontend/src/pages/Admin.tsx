@@ -597,6 +597,8 @@ const AdminPage: React.FC = () => {
         itemId: '',
         quantity: '',
         unitCost: '',
+        totalCost: '',
+        priceSource: 'unitCost' as 'unitCost' | 'totalCost',
       },
     ],
   });
@@ -1990,6 +1992,12 @@ const AdminPage: React.FC = () => {
     [ingredients]
   );
 
+  const defaultProductUnit = useMemo(() => {
+    const normalizedUnits = measurementUnits.map((unit) => unit.trim()).filter((unit) => unit.length > 0);
+    const fallbackUnit = normalizedUnits[0] ?? 'шт';
+    return normalizedUnits.find((unit) => unit.toLowerCase() === 'шт') ?? fallbackUnit;
+  }, [measurementUnits]);
+
   const baseIngredientDeltas = useMemo(
     () =>
       (selectedProduct ? productEditIngredients : productIngredients)
@@ -3082,12 +3090,61 @@ const AdminPage: React.FC = () => {
 
   const handleReceiptItemChange = (
     index: number,
-    field: 'itemType' | 'itemId' | 'quantity' | 'unitCost',
+    field: 'itemType' | 'itemId' | 'quantity' | 'unitCost' | 'totalCost',
     value: string
   ) => {
     setReceiptForm((prev) => {
       const items = [...prev.items];
-      items[index] = { ...items[index], [field]: value };
+      const current = { ...items[index], [field]: value };
+      const parseNumber = (input: string) => {
+        const trimmed = input.trim();
+        if (!trimmed) {
+          return null;
+        }
+        const numberValue = Number(trimmed);
+        return Number.isFinite(numberValue) ? numberValue : null;
+      };
+      const quantityValue = parseNumber(current.quantity);
+      const unitCostValue = parseNumber(current.unitCost);
+      const totalCostValue = parseNumber(current.totalCost);
+      const quantityValid = quantityValue !== null && quantityValue > 0;
+      const formatCurrency = (amount: number) => amount.toFixed(2);
+
+      if (field === 'unitCost') {
+        current.priceSource = 'unitCost';
+        if (quantityValid && unitCostValue !== null) {
+          current.totalCost = formatCurrency(quantityValue * unitCostValue);
+        } else if (!value.trim()) {
+          current.totalCost = '';
+        }
+      }
+
+      if (field === 'totalCost') {
+        current.priceSource = 'totalCost';
+        if (quantityValid && totalCostValue !== null) {
+          current.unitCost = formatCurrency(totalCostValue / quantityValue);
+        } else if (!value.trim() || !quantityValid) {
+          current.unitCost = '';
+        }
+      }
+
+      if (field === 'quantity') {
+        if (!quantityValid) {
+          if (current.priceSource === 'totalCost') {
+            current.unitCost = '';
+          } else {
+            current.totalCost = '';
+          }
+        } else if (current.priceSource === 'totalCost') {
+          if (totalCostValue !== null) {
+            current.unitCost = formatCurrency(totalCostValue / quantityValue);
+          }
+        } else if (unitCostValue !== null) {
+          current.totalCost = formatCurrency(quantityValue * unitCostValue);
+        }
+      }
+
+      items[index] = current;
       return { ...prev, items };
     });
   };
@@ -3097,7 +3154,14 @@ const AdminPage: React.FC = () => {
       ...prev,
       items: [
         ...prev.items,
-        { itemType: 'ingredient' as 'ingredient' | 'product', itemId: '', quantity: '', unitCost: '' },
+        {
+          itemType: 'ingredient' as 'ingredient' | 'product',
+          itemId: '',
+          quantity: '',
+          unitCost: '',
+          totalCost: '',
+          priceSource: 'unitCost' as 'unitCost' | 'totalCost',
+        },
       ],
     }));
   };
@@ -3122,6 +3186,8 @@ const AdminPage: React.FC = () => {
           itemId: '',
           quantity: '',
           unitCost: '',
+          totalCost: '',
+          priceSource: 'unitCost',
         },
       ],
     });
@@ -3236,6 +3302,8 @@ const AdminPage: React.FC = () => {
               itemId: item.itemId,
               quantity: item.quantity.toString(),
               unitCost: item.unitCost.toString(),
+              totalCost: (item.quantity * item.unitCost).toFixed(2),
+              priceSource: 'unitCost',
             }))
           : [
               {
@@ -3243,6 +3311,8 @@ const AdminPage: React.FC = () => {
                 itemId: '',
                 quantity: '',
                 unitCost: '',
+                totalCost: '',
+                priceSource: 'unitCost',
               },
             ],
     });
@@ -5860,16 +5930,23 @@ const AdminPage: React.FC = () => {
                                   ))}
                             </select>
                           </div>
-                          <div className="grid gap-2 md:grid-cols-3">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.quantity}
-                              onChange={(event) => handleReceiptItemChange(index, 'quantity', event.target.value)}
-                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                              placeholder="Количество"
-                            />
+                          <div className="grid gap-2 md:grid-cols-4">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.quantity}
+                                onChange={(event) => handleReceiptItemChange(index, 'quantity', event.target.value)}
+                                className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                                placeholder="Количество"
+                              />
+                              <span className="text-xs text-slate-500">
+                                {item.itemType === 'ingredient'
+                                  ? ingredientUnitMap[item.itemId] || 'ед.'
+                                  : defaultProductUnit}
+                              </span>
+                            </div>
                             <input
                               type="number"
                               min="0"
@@ -5879,13 +5956,16 @@ const AdminPage: React.FC = () => {
                               className="w-full rounded-xl border border-slate-200 px-3 py-2"
                               placeholder="Цена за ед."
                             />
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                                <p>Стоимость</p>
-                                <p className="text-sm font-semibold text-slate-800">
-                                  {(Number(item.quantity) * Number(item.unitCost || 0)).toFixed(2)} ₽
-                                </p>
-                              </div>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.totalCost}
+                              onChange={(event) => handleReceiptItemChange(index, 'totalCost', event.target.value)}
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                              placeholder="Общая сумма"
+                            />
+                            <div className="flex items-center justify-end">
                               {receiptItems.length > 1 ? (
                                 <button
                                   type="button"
