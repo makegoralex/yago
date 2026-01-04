@@ -2076,6 +2076,9 @@ const AdminPage: React.FC = () => {
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const menuDrawerTitleId = 'menu-drawer-title';
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const actionMenuButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const mergeOptionWithBaseIngredients = useCallback(
     (option: ModifierOptionForm): ModifierOptionForm => {
@@ -2222,6 +2225,7 @@ const AdminPage: React.FC = () => {
       if (!canDiscardProductChanges()) {
         return;
       }
+      setOpenActionMenuId(null);
       handleSelectProduct(product);
       updateMenuQueryParams({ item: product._id, cat: product.categoryId });
     },
@@ -2232,6 +2236,7 @@ const AdminPage: React.FC = () => {
     if (!canDiscardProductChanges()) {
       return;
     }
+    setOpenActionMenuId(null);
     setSelectedProduct(null);
     setProductEditDirty(false);
     setIsCreatingProduct(true);
@@ -2851,6 +2856,26 @@ const AdminPage: React.FC = () => {
     setProductEditDirty(false);
     updateMenuQueryParams({ item: '' });
   }, [canDiscardProductChanges, updateMenuQueryParams]);
+
+  useEffect(() => {
+    if (!openActionMenuId) {
+      return;
+    }
+
+    const handleDocumentClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (actionMenuRef.current?.contains(target) || actionMenuButtonRef.current?.contains(target)) {
+        return;
+      }
+      setOpenActionMenuId(null);
+    };
+
+    document.addEventListener('click', handleDocumentClick, true);
+
+    return () => {
+      document.removeEventListener('click', handleDocumentClick, true);
+    };
+  }, [openActionMenuId]);
 
   useEffect(() => {
     if (!isEditorOpen) {
@@ -4681,37 +4706,69 @@ const AdminPage: React.FC = () => {
                                       : '—'}
                                   </div>
                                   <div className="flex justify-end">
-                                    <details
+                                    <div
                                       className="relative"
                                       onClick={(event) => event.stopPropagation()}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Escape') {
+                                          setOpenActionMenuId(null);
+                                        }
+                                      }}
                                     >
-                                      <summary className="cursor-pointer rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-50">
+                                      <button
+                                        type="button"
+                                        ref={openActionMenuId === product._id ? actionMenuButtonRef : undefined}
+                                        onClick={() =>
+                                          setOpenActionMenuId((prev) => (prev === product._id ? null : product._id))
+                                        }
+                                        className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+                                        aria-haspopup="menu"
+                                        aria-expanded={openActionMenuId === product._id}
+                                      >
                                         ⋯
-                                      </summary>
-                                      <div className="absolute right-0 z-10 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-2 text-xs shadow-lg">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDuplicateProduct(product)}
-                                          className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
+                                      </button>
+                                      {openActionMenuId === product._id ? (
+                                        <div
+                                          ref={actionMenuRef}
+                                          className="absolute right-0 z-10 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-2 text-xs shadow-lg"
+                                          role="menu"
                                         >
-                                          Копировать
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleProductPriceChange(product._id, { isActive: false })}
-                                          className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
-                                        >
-                                          Архивировать
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeleteProduct(product._id)}
-                                          className="w-full rounded-lg px-2 py-1 text-left text-red-600 hover:bg-red-50"
-                                        >
-                                          Удалить
-                                        </button>
-                                      </div>
-                                    </details>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              handleDuplicateProduct(product);
+                                              setOpenActionMenuId(null);
+                                            }}
+                                            className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
+                                            role="menuitem"
+                                          >
+                                            Копировать
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              handleProductPriceChange(product._id, { isActive: false });
+                                              setOpenActionMenuId(null);
+                                            }}
+                                            className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
+                                            role="menuitem"
+                                          >
+                                            Архивировать
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              handleDeleteProduct(product._id);
+                                              setOpenActionMenuId(null);
+                                            }}
+                                            className="w-full rounded-lg px-2 py-1 text-left text-red-600 hover:bg-red-50"
+                                            role="menuitem"
+                                          >
+                                            Удалить
+                                          </button>
+                                        </div>
+                                      ) : null}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -4748,37 +4805,69 @@ const AdminPage: React.FC = () => {
                                     <p className="text-sm font-semibold text-slate-900">{product.name}</p>
                                     <p className="text-xs text-slate-400">{categoryName}</p>
                                   </div>
-                                  <details
+                                  <div
                                     className="relative"
                                     onClick={(event) => event.stopPropagation()}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Escape') {
+                                        setOpenActionMenuId(null);
+                                      }
+                                    }}
                                   >
-                                    <summary className="cursor-pointer rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">
+                                    <button
+                                      type="button"
+                                      ref={openActionMenuId === product._id ? actionMenuButtonRef : undefined}
+                                      onClick={() =>
+                                        setOpenActionMenuId((prev) => (prev === product._id ? null : product._id))
+                                      }
+                                      className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500"
+                                      aria-haspopup="menu"
+                                      aria-expanded={openActionMenuId === product._id}
+                                    >
                                       ⋯
-                                    </summary>
-                                    <div className="absolute right-0 z-10 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-2 text-xs shadow-lg">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDuplicateProduct(product)}
-                                        className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
+                                    </button>
+                                    {openActionMenuId === product._id ? (
+                                      <div
+                                        ref={actionMenuRef}
+                                        className="absolute right-0 z-10 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-2 text-xs shadow-lg"
+                                        role="menu"
                                       >
-                                        Копировать
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleProductPriceChange(product._id, { isActive: false })}
-                                        className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
-                                      >
-                                        Архивировать
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteProduct(product._id)}
-                                        className="w-full rounded-lg px-2 py-1 text-left text-red-600 hover:bg-red-50"
-                                      >
-                                        Удалить
-                                      </button>
-                                    </div>
-                                  </details>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            handleDuplicateProduct(product);
+                                            setOpenActionMenuId(null);
+                                          }}
+                                          className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
+                                          role="menuitem"
+                                        >
+                                          Копировать
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            handleProductPriceChange(product._id, { isActive: false });
+                                            setOpenActionMenuId(null);
+                                          }}
+                                          className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
+                                          role="menuitem"
+                                        >
+                                          Архивировать
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            handleDeleteProduct(product._id);
+                                            setOpenActionMenuId(null);
+                                          }}
+                                          className="w-full rounded-lg px-2 py-1 text-left text-red-600 hover:bg-red-50"
+                                          role="menuitem"
+                                        >
+                                          Удалить
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 </div>
                                 <div className="mt-4 grid gap-2 text-sm">
                                   <div className="flex items-center justify-between">
@@ -4867,7 +4956,7 @@ const AdminPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={handleCloseEditor}
-                            className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
+                            className="relative inline-flex h-8 items-center justify-center rounded-full border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                           >
                             Закрыть
                           </button>
