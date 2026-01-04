@@ -4374,7 +4374,7 @@ const AdminPage: React.FC = () => {
                     menuSection === item.id
                       ? 'border-violet-600 text-violet-600'
                       : 'border-transparent text-slate-500 hover:text-slate-700'
-                  }`}
+                  } rounded-none`}
                 >
                   {item.label}
                 </button>
@@ -4586,12 +4586,13 @@ const AdminPage: React.FC = () => {
                       <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
                     ) : filteredProducts.length ? (
                       <>
-                        <div className="hidden md:grid grid-cols-[minmax(0,1fr)_100px_120px_110px_120px] gap-3 px-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        <div className="hidden md:grid grid-cols-[minmax(0,1fr)_100px_120px_110px_120px_40px] gap-3 px-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
                           <span>Название</span>
                           <span className="text-right">Цена</span>
                           <span className="text-right">Себест.</span>
                           <span className="text-right">Наценка</span>
                           <span className="text-right">Маржа</span>
+                          <span className="text-right"> </span>
                         </div>
                         <div className="hidden md:flex flex-col gap-2">
                           {filteredProducts.map((product) => {
@@ -4623,7 +4624,7 @@ const AdminPage: React.FC = () => {
                                 role="button"
                                 tabIndex={0}
                               >
-                                <div className="grid items-center gap-3 md:grid-cols-[minmax(0,1fr)_100px_120px_110px_120px] pr-10">
+                                <div className="grid items-center gap-3 md:grid-cols-[minmax(0,1fr)_100px_120px_110px_120px_40px]">
                                   <div className="min-w-0">
                                     <p className="truncate text-sm font-semibold text-slate-900">{product.name}</p>
                                     <p className="text-xs text-slate-400">{categoryName}</p>
@@ -4679,39 +4680,39 @@ const AdminPage: React.FC = () => {
                                       ? `${formatCurrency(economics.grossProfit)} ₽`
                                       : '—'}
                                   </div>
-                                </div>
-                                <div className="absolute right-3 top-3">
-                                  <details
-                                    className="relative"
-                                    onClick={(event) => event.stopPropagation()}
-                                  >
-                                    <summary className="cursor-pointer rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-50">
-                                      ⋯
-                                    </summary>
-                                    <div className="absolute right-0 z-10 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-2 text-xs shadow-lg">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDuplicateProduct(product)}
-                                        className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
-                                      >
-                                        Копировать
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleProductPriceChange(product._id, { isActive: false })}
-                                        className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
-                                      >
-                                        Архивировать
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteProduct(product._id)}
-                                        className="w-full rounded-lg px-2 py-1 text-left text-red-600 hover:bg-red-50"
-                                      >
-                                        Удалить
-                                      </button>
-                                    </div>
-                                  </details>
+                                  <div className="flex justify-end">
+                                    <details
+                                      className="relative"
+                                      onClick={(event) => event.stopPropagation()}
+                                    >
+                                      <summary className="cursor-pointer rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-50">
+                                        ⋯
+                                      </summary>
+                                      <div className="absolute right-0 z-10 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-2 text-xs shadow-lg">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDuplicateProduct(product)}
+                                          className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
+                                        >
+                                          Копировать
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleProductPriceChange(product._id, { isActive: false })}
+                                          className="w-full rounded-lg px-2 py-1 text-left text-slate-600 hover:bg-slate-100"
+                                        >
+                                          Архивировать
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteProduct(product._id)}
+                                          className="w-full rounded-lg px-2 py-1 text-left text-red-600 hover:bg-red-50"
+                                        >
+                                          Удалить
+                                        </button>
+                                      </div>
+                                    </details>
+                                  </div>
                                 </div>
                               </div>
                             );
