@@ -1148,7 +1148,8 @@ const AdminPage: React.FC = () => {
 
   const calculateReceiptTotal = useCallback((receipt: StockReceipt) => {
     const sign = receipt.type === 'writeOff' ? -1 : 1;
-    return receipt.items.reduce((sum, item) => sum + sign * item.quantity * item.unitCost, 0);
+    const items = Array.isArray(receipt.items) ? receipt.items : [];
+    return items.reduce((sum, item) => sum + sign * item.quantity * item.unitCost, 0);
   }, []);
 
   const getInventoryItemName = useCallback(
@@ -3319,41 +3320,46 @@ const AdminPage: React.FC = () => {
     });
   };
 
-  const handleSelectStockReceipt = (receipt: StockReceipt) => {
-    if (receipt.type === 'inventory') {
-      notify({ title: 'Инвентаризации нельзя редактировать', type: 'info' });
-      return false;
-    }
+  const handleSelectStockReceipt = useCallback(
+    (receipt: StockReceipt) => {
+      if (receipt.type === 'inventory') {
+        notify({ title: 'Инвентаризации нельзя редактировать', type: 'info' });
+        return false;
+      }
 
-    setSelectedStockReceipt(receipt);
-    setReceiptType(receipt.type === 'writeOff' ? 'writeOff' : 'receipt');
-    setReceiptDate(receipt.occurredAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
-    setReceiptForm({
-      warehouseId: receipt.warehouseId,
-      supplierId: receipt.supplierId ?? '',
-      items:
-        receipt.items.length > 0
-          ? receipt.items.map((item) => ({
-              itemType: item.itemType,
-              itemId: item.itemId,
-              quantity: item.quantity.toString(),
-              unitCost: item.unitCost.toString(),
-              totalCost: formatReceiptValue(item.quantity * item.unitCost),
-              priceSource: 'unitCost',
-            }))
-          : [
-              {
-                itemType: 'ingredient',
-                itemId: '',
-                quantity: '',
-                unitCost: '',
-                totalCost: '',
+      const items = Array.isArray(receipt.items) ? receipt.items : [];
+
+      setSelectedStockReceipt(receipt);
+      setReceiptType(receipt.type === 'writeOff' ? 'writeOff' : 'receipt');
+      setReceiptDate(receipt.occurredAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+      setReceiptForm({
+        warehouseId: receipt.warehouseId,
+        supplierId: receipt.supplierId ?? '',
+        items:
+          items.length > 0
+            ? items.map((item) => ({
+                itemType: item.itemType,
+                itemId: item.itemId,
+                quantity: item.quantity.toString(),
+                unitCost: item.unitCost.toString(),
+                totalCost: formatReceiptValue(item.quantity * item.unitCost),
                 priceSource: 'unitCost',
-              },
-            ],
-    });
-    return true;
-  };
+              }))
+            : [
+                {
+                  itemType: 'ingredient',
+                  itemId: '',
+                  quantity: '',
+                  unitCost: '',
+                  totalCost: '',
+                  priceSource: 'unitCost',
+                },
+              ],
+      });
+      return true;
+    },
+    [formatReceiptValue, notify]
+  );
 
   const handleOpenReceiptDrawer = useCallback(
     (receipt?: StockReceipt) => {
@@ -6172,8 +6178,9 @@ const AdminPage: React.FC = () => {
                       {filteredStockReceipts.map((receipt) => {
                         const total = receiptTotals.totalsMap.get(receipt._id) ?? 0;
                         const isExpanded = expandedReceiptId === receipt._id;
-                        const previewItems = receipt.items.slice(0, 5);
-                        const remainingCount = receipt.items.length - previewItems.length;
+                        const receiptItems = Array.isArray(receipt.items) ? receipt.items : [];
+                        const previewItems = receiptItems.slice(0, 5);
+                        const remainingCount = receiptItems.length - previewItems.length;
 
                         return (
                           <React.Fragment key={receipt._id}>
@@ -6217,7 +6224,9 @@ const AdminPage: React.FC = () => {
                               <td className="px-2 py-2 text-slate-500">
                                 {receipt.supplierId ? supplierMap.get(receipt.supplierId)?.name ?? '—' : 'Не указан'}
                               </td>
-                              <td className="px-2 py-2 text-slate-500">{formatPositionsCount(receipt.items.length)}</td>
+                              <td className="px-2 py-2 text-slate-500">
+                                {formatPositionsCount(receiptItems.length)}
+                              </td>
                               <td className="px-2 py-2 text-right font-semibold text-slate-800">
                                 {formatCurrency(Math.abs(total))} ₽
                               </td>
@@ -6532,7 +6541,9 @@ const AdminPage: React.FC = () => {
                       </button>
                     </div>
                     <div className="mt-3 space-y-2 text-xs text-slate-600">
-                      {mobileReceiptPreview.items.slice(0, 5).map((item, index) => {
+                      {(Array.isArray(mobileReceiptPreview.items) ? mobileReceiptPreview.items : [])
+                        .slice(0, 5)
+                        .map((item, index) => {
                         const unitLabel =
                           item.itemType === 'ingredient'
                             ? ingredientUnitMap[item.itemId] || 'ед.'
@@ -6548,9 +6559,9 @@ const AdminPage: React.FC = () => {
                           </div>
                         );
                       })}
-                      {mobileReceiptPreview.items.length > 5 ? (
+                      {(mobileReceiptPreview.items?.length ?? 0) > 5 ? (
                         <div className="text-[11px] text-slate-400">
-                          + ещё {mobileReceiptPreview.items.length - 5} позиции
+                          + ещё {(mobileReceiptPreview.items?.length ?? 0) - 5} позиции
                         </div>
                       ) : null}
                       <div className="border-t border-slate-200 pt-2 font-semibold text-slate-700">
