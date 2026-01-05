@@ -616,6 +616,11 @@ const AdminPage: React.FC = () => {
   const [receiptSupplierFilter, setReceiptSupplierFilter] = useState('');
   const [receiptAmountMin, setReceiptAmountMin] = useState('');
   const [receiptAmountMax, setReceiptAmountMax] = useState('');
+  const [isReceiptDrawerOpen, setIsReceiptDrawerOpen] = useState(false);
+  const [isReceiptFiltersOpen, setIsReceiptFiltersOpen] = useState(false);
+  const [expandedReceiptId, setExpandedReceiptId] = useState<string | null>(null);
+  const [mobileReceiptPreview, setMobileReceiptPreview] = useState<StockReceipt | null>(null);
+  const [isMobileView, setIsMobileView] = useState(false);
   const [inventoryAuditForm, setInventoryAuditForm] = useState({
     warehouseId: '',
     performedAt: todayInputValue,
@@ -720,6 +725,7 @@ const AdminPage: React.FC = () => {
             ],
     }));
   }, [inventoryAuditForm.items.length, inventoryAuditForm.warehouseId, inventoryItems]);
+
 
   const loadDashboard = useCallback(async (filters?: { from?: string; to?: string }) => {
     try {
@@ -1121,9 +1127,29 @@ const AdminPage: React.FC = () => {
     });
   }, []);
 
+  const formatPositionsCount = useCallback((count: number) => {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    if (mod10 === 1 && mod100 !== 11) {
+      return `${count} позиция`;
+    }
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
+      return `${count} позиции`;
+    }
+    return `${count} позиций`;
+  }, []);
+
+  const formatReceiptValue = useCallback((value: number) => {
+    if (!Number.isFinite(value)) {
+      return '0';
+    }
+    return value.toFixed(4).replace(/\.?0+$/, '');
+  }, []);
+
   const calculateReceiptTotal = useCallback((receipt: StockReceipt) => {
     const sign = receipt.type === 'writeOff' ? -1 : 1;
-    return receipt.items.reduce((sum, item) => sum + sign * item.quantity * item.unitCost, 0);
+    const items = Array.isArray(receipt.items) ? receipt.items : [];
+    return items.reduce((sum, item) => sum + sign * item.quantity * item.unitCost, 0);
   }, []);
 
   const getInventoryItemName = useCallback(
@@ -1305,13 +1331,21 @@ const AdminPage: React.FC = () => {
     return { totalsMap, overall };
   }, [calculateReceiptTotal, filteredStockReceipts]);
 
+  const getReceiptItemTotal = useCallback((item: { quantity: string; unitCost: string; totalCost: string; priceSource: string }) => {
+    const quantityValue = Number(item.quantity || 0);
+    const unitCostValue = Number(item.unitCost || 0);
+    const totalCostValue = Number(item.totalCost || 0);
+
+    if (item.priceSource === 'totalCost' && totalCostValue > 0) {
+      return totalCostValue;
+    }
+
+    return quantityValue * unitCostValue;
+  }, []);
+
   const receiptTotal = useMemo(
-    () =>
-      receiptItems.reduce(
-        (acc, item) => acc + Number(item.quantity || 0) * Number(item.unitCost || 0),
-        0
-      ),
-    [receiptItems]
+    () => receiptItems.reduce((acc, item) => acc + getReceiptItemTotal(item), 0),
+    [getReceiptItemTotal, receiptItems]
   );
 
   const receiptLastTouchedLabel = useMemo(() => {
@@ -1322,6 +1356,99 @@ const AdminPage: React.FC = () => {
 
     return timestamp ? formatDateTime(timestamp) : '—';
   }, [selectedStockReceipt]);
+
+  const receiptDatePresetLabels = useMemo(
+    () => ({
+      today: 'Сегодня',
+      yesterday: 'Вчера',
+      week: '7 дней',
+      month: 'Этот месяц',
+      lastMonth: 'Прошлый месяц',
+      year: 'Этот год',
+      lastYear: 'Прошлый год',
+    }),
+    []
+  );
+
+  const receiptFilterChips = useMemo(() => {
+    const chips: Array<{ id: string; label: string; onClear: () => void }> = [];
+
+    if (receiptDatePreset) {
+      chips.push({
+        id: 'date-preset',
+        label: receiptDatePresetLabels[receiptDatePreset as keyof typeof receiptDatePresetLabels] ?? 'Период',
+        onClear: () => {
+          setReceiptDatePreset('');
+          setReceiptDateFrom('');
+          setReceiptDateTo('');
+        },
+      });
+    }
+
+    if (!receiptDatePreset && (receiptDateFrom || receiptDateTo)) {
+      const labelParts = [];
+      if (receiptDateFrom) {
+        labelParts.push(`с ${receiptDateFrom}`);
+      }
+      if (receiptDateTo) {
+        labelParts.push(`по ${receiptDateTo}`);
+      }
+      chips.push({
+        id: 'date-range',
+        label: labelParts.length ? labelParts.join(' ') : 'Период',
+        onClear: () => {
+          setReceiptDateFrom('');
+          setReceiptDateTo('');
+          setReceiptDatePreset('');
+        },
+      });
+    }
+
+    if (receiptFilter !== 'all') {
+      chips.push({
+        id: 'type',
+        label: receiptTypeLabels[receiptFilter],
+        onClear: () => setReceiptFilter('all'),
+      });
+    }
+
+    if (receiptSupplierFilter) {
+      chips.push({
+        id: 'supplier',
+        label: `Поставщик: ${supplierMap.get(receiptSupplierFilter)?.name ?? receiptSupplierFilter}`,
+        onClear: () => setReceiptSupplierFilter(''),
+      });
+    }
+
+    if (receiptAmountMin) {
+      chips.push({
+        id: 'amount-min',
+        label: `Сумма от ${receiptAmountMin} ₽`,
+        onClear: () => setReceiptAmountMin(''),
+      });
+    }
+
+    if (receiptAmountMax) {
+      chips.push({
+        id: 'amount-max',
+        label: `Сумма до ${receiptAmountMax} ₽`,
+        onClear: () => setReceiptAmountMax(''),
+      });
+    }
+
+    return chips;
+  }, [
+    receiptAmountMax,
+    receiptAmountMin,
+    receiptDateFrom,
+    receiptDatePreset,
+    receiptDatePresetLabels,
+    receiptDateTo,
+    receiptFilter,
+    receiptSupplierFilter,
+    receiptTypeLabels,
+    supplierMap,
+  ]);
 
   const inventoryQuantityLookup = useMemo(() => {
     const map = new Map<string, number>();
@@ -3108,7 +3235,7 @@ const AdminPage: React.FC = () => {
       const unitCostValue = parseNumber(current.unitCost);
       const totalCostValue = parseNumber(current.totalCost);
       const quantityValid = quantityValue !== null && quantityValue > 0;
-      const formatCurrency = (amount: number) => amount.toFixed(2);
+      const formatCurrency = (amount: number) => formatReceiptValue(amount);
 
       if (field === 'unitCost') {
         current.priceSource = 'unitCost';
@@ -3193,6 +3320,99 @@ const AdminPage: React.FC = () => {
     });
   };
 
+  const handleSelectStockReceipt = useCallback(
+    (receipt: StockReceipt) => {
+      if (receipt.type === 'inventory') {
+        notify({ title: 'Инвентаризации нельзя редактировать', type: 'info' });
+        return false;
+      }
+
+      const items = Array.isArray(receipt.items) ? receipt.items : [];
+
+      setSelectedStockReceipt(receipt);
+      setReceiptType(receipt.type === 'writeOff' ? 'writeOff' : 'receipt');
+      setReceiptDate(receipt.occurredAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+      setReceiptForm({
+        warehouseId: receipt.warehouseId,
+        supplierId: receipt.supplierId ?? '',
+        items:
+          items.length > 0
+            ? items.map((item) => ({
+                itemType: item.itemType,
+                itemId: item.itemId,
+                quantity: item.quantity.toString(),
+                unitCost: item.unitCost.toString(),
+                totalCost: formatReceiptValue(item.quantity * item.unitCost),
+                priceSource: 'unitCost',
+              }))
+            : [
+                {
+                  itemType: 'ingredient',
+                  itemId: '',
+                  quantity: '',
+                  unitCost: '',
+                  totalCost: '',
+                  priceSource: 'unitCost',
+                },
+              ],
+      });
+      return true;
+    },
+    [formatReceiptValue, notify]
+  );
+
+  const handleOpenReceiptDrawer = useCallback(
+    (receipt?: StockReceipt) => {
+      if (receipt) {
+        const opened = handleSelectStockReceipt(receipt);
+        if (!opened) {
+          return;
+        }
+      } else {
+        resetReceiptForm(true);
+      }
+      setExpandedReceiptId(null);
+      setMobileReceiptPreview(null);
+      setIsReceiptDrawerOpen(true);
+    },
+    [handleSelectStockReceipt, resetReceiptForm]
+  );
+
+  const handleCloseReceiptDrawer = useCallback(() => {
+    setIsReceiptDrawerOpen(false);
+    setSelectedStockReceipt(null);
+    resetReceiptForm(true);
+  }, [resetReceiptForm]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 640px)');
+    const handleChange = () => setIsMobileView(mediaQuery.matches);
+    handleChange();
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isReceiptDrawerOpen && !mobileReceiptPreview) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      if (mobileReceiptPreview) {
+        setMobileReceiptPreview(null);
+      }
+      if (isReceiptDrawerOpen) {
+        handleCloseReceiptDrawer();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleCloseReceiptDrawer, isReceiptDrawerOpen, mobileReceiptPreview]);
+
   const handleSaveStockReceipt = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!receiptForm.warehouseId) {
@@ -3272,7 +3492,7 @@ const AdminPage: React.FC = () => {
         notify({ title: receiptType === 'writeOff' ? 'Списание сохранено' : 'Поставка сохранена', type: 'success' });
       }
 
-      resetReceiptForm(true);
+      handleCloseReceiptDrawer();
       await loadInventoryData();
       await loadStockReceipts();
       await loadMenuData();
@@ -3280,42 +3500,6 @@ const AdminPage: React.FC = () => {
       const message = extractErrorMessage(error, 'Не удалось сохранить документ');
       notify({ title: message, type: 'error' });
     }
-  };
-
-  const handleSelectStockReceipt = (receipt: StockReceipt) => {
-    setSelectedStockReceipt(receipt);
-
-    if (receipt.type === 'inventory') {
-      notify({ title: 'Инвентаризации нельзя редактировать', type: 'info' });
-      return;
-    }
-
-    setReceiptType(receipt.type === 'writeOff' ? 'writeOff' : 'receipt');
-    setReceiptDate(receipt.occurredAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
-    setReceiptForm({
-      warehouseId: receipt.warehouseId,
-      supplierId: receipt.supplierId ?? '',
-      items:
-        receipt.items.length > 0
-          ? receipt.items.map((item) => ({
-              itemType: item.itemType,
-              itemId: item.itemId,
-              quantity: item.quantity.toString(),
-              unitCost: item.unitCost.toString(),
-              totalCost: (item.quantity * item.unitCost).toFixed(2),
-              priceSource: 'unitCost',
-            }))
-          : [
-              {
-                itemType: 'ingredient',
-                itemId: '',
-                quantity: '',
-                unitCost: '',
-                totalCost: '',
-                priceSource: 'unitCost',
-              },
-            ],
-    });
   };
 
   const handleDeleteStockReceipt = async (receiptId: string) => {
@@ -3328,7 +3512,7 @@ const AdminPage: React.FC = () => {
       await api.delete(`/api/inventory/receipts/${receiptId}`);
       notify({ title: 'Документ удалён', type: 'success' });
       if (selectedStockReceipt?._id === receiptId) {
-        resetReceiptForm();
+        handleCloseReceiptDrawer();
       }
       await loadInventoryData();
       await loadStockReceipts();
@@ -5824,201 +6008,43 @@ const AdminPage: React.FC = () => {
           ) : null}
 
           {inventoryTab === 'documents' ? (
-            <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-              <Card title="Поставка / списание">
-                <form onSubmit={handleSaveStockReceipt} className="space-y-3 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
-                    <span>
-                      {selectedStockReceipt
-                        ? `Редактирование: ${receiptTypeLabels[selectedStockReceipt.type]}`
-                        : 'Новый документ склада'}
-                    </span>
-                    {selectedStockReceipt ? (
-                      <button
-                        type="button"
-                        onClick={() => resetReceiptForm()}
-                        className="font-semibold text-slate-600 hover:text-slate-800"
-                      >
-                        Очистить форму
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <select
-                      value={receiptType}
-                      onChange={(event) => setReceiptType(event.target.value as typeof receiptType)}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+            <section className="relative">
+              <Card
+                title="Документы склада"
+                actions={
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void loadStockReceipts()}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                     >
-                      <option value="receipt">Поставка</option>
-                      <option value="writeOff">Списание</option>
-                    </select>
-                    <input
-                      type="date"
-                      value={receiptDate}
-                      max={todayInputValue}
-                      onChange={(event) => setReceiptDate(event.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                    />
+                      Обновить список
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenReceiptDrawer()}
+                      className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-soft hover:bg-emerald-500"
+                    >
+                      Создать документ
+                    </button>
                   </div>
-                  <select
-                    value={receiptForm.warehouseId}
-                    onChange={(event) =>
-                      setReceiptForm((prev) => ({ ...prev, warehouseId: event.target.value }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                  >
-                    <option value="">Выберите склад</option>
-                    {warehouses.map((warehouse) => (
-                      <option key={warehouse._id} value={warehouse._id}>
-                        {warehouse.name}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={receiptForm.supplierId ?? ''}
-                    onChange={(event) => setReceiptForm((prev) => ({ ...prev, supplierId: event.target.value }))}
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                  >
-                    <option value="">Поставщик (опционально)</option>
-                    {suppliers.map((supplier) => (
-                      <option key={supplier._id} value={supplier._id}>
-                        {supplier.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="space-y-3 rounded-2xl bg-slate-50 p-3">
-                    <div className="flex items-center justify-between text-[11px] uppercase text-slate-400">
-                      <span>Позиции документа</span>
-                      <button
-                        type="button"
-                        onClick={addReceiptItemRow}
-                        className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
-                      >
-                        + Добавить
-                      </button>
-                    </div>
-                    <div className="space-y-2">
-                      {receiptItems.map((item, index) => (
-                        <div key={`${item.itemId}-${index}`} className="rounded-2xl bg-white p-3 shadow-soft">
-                          <div className="grid gap-2 md:grid-cols-2">
-                            <select
-                              value={item.itemType}
-                              onChange={(event) =>
-                                handleReceiptItemChange(index, 'itemType', event.target.value as 'ingredient' | 'product')
-                              }
-                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                            >
-                              <option value="ingredient">Ингредиент</option>
-                              <option value="product">Продукт</option>
-                            </select>
-                            <select
-                              value={item.itemId}
-                              onChange={(event) => handleReceiptItemChange(index, 'itemId', event.target.value)}
-                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                            >
-                              <option value="">Выберите позицию</option>
-                              {item.itemType === 'ingredient'
-                                ? ingredients.map((ingredient) => (
-                                    <option key={ingredient._id} value={ingredient._id}>
-                                      {ingredient.name}
-                                    </option>
-                                  ))
-                                : products.map((product) => (
-                                    <option key={product._id} value={product._id}>
-                                      {product.name}
-                                    </option>
-                                  ))}
-                            </select>
-                          </div>
-                          <div className="grid gap-2 md:grid-cols-4">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={item.quantity}
-                                onChange={(event) => handleReceiptItemChange(index, 'quantity', event.target.value)}
-                                className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                                placeholder="Количество"
-                              />
-                              <span className="text-xs text-slate-500">
-                                {item.itemType === 'ingredient'
-                                  ? ingredientUnitMap[item.itemId] || 'ед.'
-                                  : defaultProductUnit}
-                              </span>
-                            </div>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.unitCost}
-                              onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
-                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                              placeholder="Цена за ед."
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.totalCost}
-                              onChange={(event) => handleReceiptItemChange(index, 'totalCost', event.target.value)}
-                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                              placeholder="Общая сумма"
-                            />
-                            <div className="flex items-center justify-end">
-                              {receiptItems.length > 1 ? (
-                                <button
-                                  type="button"
-                                  onClick={() => removeReceiptItemRow(index)}
-                                  className="h-10 w-10 rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100"
-                                  aria-label="Удалить позицию"
-                                >
-                                  ✕
-                                </button>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500">Итого</span>
-                      <span className="text-lg font-semibold text-slate-800">{receiptTotal.toFixed(2)} ₽</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="space-x-2 text-[11px] text-slate-500">
-                      <span>Последний ввод:</span>
-                      <span className="font-semibold text-slate-700">{receiptLastTouchedLabel}</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {selectedStockReceipt && selectedStockReceipt.type !== 'inventory' ? (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteStockReceipt(selectedStockReceipt._id)}
-                          className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                        >
-                          Удалить
-                        </button>
-                      ) : null}
-                      <button
-                        type="submit"
-                        className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
-                      >
-                        {selectedStockReceipt ? 'Обновить документ' : 'Сохранить документ'}
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              </Card>
-              <Card title="Документы склада">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <span>Показать:</span>
+                }
+              >
+                <p className="text-sm text-slate-600">Просмотр и анализ складских документов</p>
+
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsReceiptFiltersOpen((prev) => !prev)}
+                      className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-600 hover:bg-slate-200"
+                    >
+                      Фильтры {isReceiptFiltersOpen ? '▴' : '▾'}
+                    </button>
                     <select
                       value={receiptFilter}
                       onChange={(event) => setReceiptFilter(event.target.value as typeof receiptFilter)}
-                      className="rounded-xl border border-slate-200 px-3 py-1"
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs"
                     >
                       <option value="all">Все</option>
                       <option value="receipt">Поставки</option>
@@ -6026,177 +6052,542 @@ const AdminPage: React.FC = () => {
                       <option value="inventory">Инвентаризации</option>
                     </select>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void loadStockReceipts()}
-                    className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
-                  >
-                    Обновить список
-                  </button>
+                  <span className="text-xs text-slate-500">Всего: {filteredStockReceipts.length}</span>
                 </div>
-                <div className="mt-3 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
-                  <label className="flex flex-col gap-1 text-slate-600">
-                    <span className="text-[11px] uppercase text-slate-400">Период с</span>
-                    <input
-                      type="date"
-                      value={receiptDateFrom}
-                      max={todayInputValue}
-                      onChange={(event) => {
-                        setReceiptDatePreset('');
-                        setReceiptDateFrom(event.target.value);
-                      }}
-                      className="rounded-2xl border border-slate-200 px-3 py-2"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 text-slate-600">
-                    <span className="text-[11px] uppercase text-slate-400">Период по</span>
-                    <input
-                      type="date"
-                      value={receiptDateTo}
-                      max={todayInputValue}
-                      onChange={(event) => {
-                        setReceiptDatePreset('');
-                        setReceiptDateTo(event.target.value);
-                      }}
-                      className="rounded-2xl border border-slate-200 px-3 py-2"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 text-slate-600">
-                    <span className="text-[11px] uppercase text-slate-400">Поставщик</span>
-                    <select
-                      value={receiptSupplierFilter}
-                      onChange={(event) => setReceiptSupplierFilter(event.target.value)}
-                      className="rounded-2xl border border-slate-200 px-3 py-2"
-                    >
-                      <option value="">Все поставщики</option>
-                      {suppliers.map((supplier) => (
-                        <option key={supplier._id} value={supplier._id}>
-                          {supplier.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="flex flex-col gap-1 text-slate-600">
-                      <span className="text-[11px] uppercase text-slate-400">Сумма от</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={receiptAmountMin}
-                        onChange={(event) => setReceiptAmountMin(event.target.value)}
-                        className="rounded-2xl border border-slate-200 px-3 py-2"
-                        placeholder="0"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1 text-slate-600">
-                      <span className="text-[11px] uppercase text-slate-400">Сумма до</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={receiptAmountMax}
-                        onChange={(event) => setReceiptAmountMax(event.target.value)}
-                        className="rounded-2xl border border-slate-200 px-3 py-2"
-                        placeholder="∞"
-                      />
-                    </label>
+
+                {receiptFilterChips.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {receiptFilterChips.map((chip) => (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={chip.onClear}
+                        className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                      >
+                        {chip.label}
+                        <span className="text-[10px]">✕</span>
+                      </button>
+                    ))}
                   </div>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                  <span className="font-semibold text-slate-700">Быстрый выбор:</span>
-                  {[{ id: 'today', label: 'Сегодня' }, { id: 'yesterday', label: 'Вчера' }, { id: 'week', label: '7 дней' }, { id: 'month', label: 'Этот месяц' }, { id: 'lastMonth', label: 'Прошлый месяц' }, { id: 'year', label: 'Этот год' }, { id: 'lastYear', label: 'Прошлый год' }].map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => applyReceiptDatePreset(preset.id)}
-                      className={`rounded-full px-3 py-1 font-semibold transition ${
-                        receiptDatePreset === preset.id
-                          ? 'bg-emerald-600 text-white shadow-soft'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 overflow-x-auto">
+                ) : null}
+
+                {isReceiptFiltersOpen ? (
+                  <div className="mt-4 space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 text-sm">
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <label className="flex flex-col gap-1 text-slate-600">
+                        <span className="text-[11px] uppercase text-slate-400">Период с</span>
+                        <input
+                          type="date"
+                          value={receiptDateFrom}
+                          max={todayInputValue}
+                          onChange={(event) => {
+                            setReceiptDatePreset('');
+                            setReceiptDateFrom(event.target.value);
+                          }}
+                          className="rounded-2xl border border-slate-200 px-3 py-2"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-slate-600">
+                        <span className="text-[11px] uppercase text-slate-400">Период по</span>
+                        <input
+                          type="date"
+                          value={receiptDateTo}
+                          max={todayInputValue}
+                          onChange={(event) => {
+                            setReceiptDatePreset('');
+                            setReceiptDateTo(event.target.value);
+                          }}
+                          className="rounded-2xl border border-slate-200 px-3 py-2"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-slate-600">
+                        <span className="text-[11px] uppercase text-slate-400">Поставщик</span>
+                        <select
+                          value={receiptSupplierFilter}
+                          onChange={(event) => setReceiptSupplierFilter(event.target.value)}
+                          className="rounded-2xl border border-slate-200 px-3 py-2"
+                        >
+                          <option value="">Все поставщики</option>
+                          {suppliers.map((supplier) => (
+                            <option key={supplier._id} value={supplier._id}>
+                              {supplier.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="flex flex-col gap-1 text-slate-600">
+                          <span className="text-[11px] uppercase text-slate-400">Сумма от</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={receiptAmountMin}
+                            onChange={(event) => setReceiptAmountMin(event.target.value)}
+                            className="rounded-2xl border border-slate-200 px-3 py-2"
+                            placeholder="0"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-slate-600">
+                          <span className="text-[11px] uppercase text-slate-400">Сумма до</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={receiptAmountMax}
+                            onChange={(event) => setReceiptAmountMax(event.target.value)}
+                            className="rounded-2xl border border-slate-200 px-3 py-2"
+                            placeholder="∞"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                      <span className="font-semibold text-slate-700">Быстрый выбор:</span>
+                      {Object.entries(receiptDatePresetLabels).map(([id, label]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => applyReceiptDatePreset(id)}
+                          className={`rounded-full px-3 py-1 font-semibold transition ${
+                            receiptDatePreset === id
+                              ? 'bg-emerald-600 text-white shadow-soft'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-4 overflow-x-auto">
                   <table className="min-w-full text-left text-sm">
                     <thead>
-                      <tr className="text-xs uppercase text-slate-400">
-                        <th className="px-3 py-2">Дата</th>
-                        <th className="px-3 py-2">Тип</th>
-                        <th className="px-3 py-2">Склад</th>
-                        <th className="px-3 py-2">Поставщик</th>
-                        <th className="px-3 py-2 text-right">Сумма</th>
-                        <th className="px-3 py-2 text-right">Действия</th>
+                      <tr className="text-[11px] uppercase tracking-wide text-slate-400">
+                        <th className="px-2 py-2" />
+                        <th className="px-2 py-2">Дата и время</th>
+                        <th className="px-2 py-2">Тип</th>
+                        <th className="px-2 py-2">Склад</th>
+                        <th className="px-2 py-2">Поставщик</th>
+                        <th className="px-2 py-2">Позиции</th>
+                        <th className="px-2 py-2 text-right">Сумма</th>
+                        <th className="px-2 py-2 text-right">Действия</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredStockReceipts.map((receipt) => (
-                        <tr key={receipt._id} className="transition hover:bg-slate-50">
-                          <td className="px-3 py-2 text-slate-500">
-                            <div>{formatDateTime(receipt.occurredAt)}</div>
-                            {receipt.createdAt ? (
-                              <div className="text-[11px] text-slate-400">Создано: {formatDateTime(receipt.createdAt)}</div>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-2 font-semibold text-slate-800">
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs ${
-                                receipt.type === 'receipt'
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : receipt.type === 'writeOff'
-                                    ? 'bg-orange-50 text-orange-700'
-                                    : 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {receiptTypeLabels[receipt.type]}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-slate-500">{warehouseMap.get(receipt.warehouseId)?.name ?? '—'}</td>
-                          <td className="px-3 py-2 text-slate-500">
-                            {receipt.supplierId ? supplierMap.get(receipt.supplierId)?.name ?? '—' : 'Не указан'}
-                          </td>
-                          <td className="px-3 py-2 text-right font-semibold text-slate-700">
-                            {receipt.items.reduce((acc, item) => acc + item.quantity * item.unitCost, 0).toFixed(2)} ₽
-                          </td>
-                          <td className="px-3 py-2 text-right text-xs">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleSelectStockReceipt(receipt)}
-                                className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-600 shadow-inner transition hover:bg-emerald-50"
-                              >
-                                Редактировать
-                              </button>
-                              {receipt.type !== 'inventory' ? (
+                      {filteredStockReceipts.map((receipt) => {
+                        const total = receiptTotals.totalsMap.get(receipt._id) ?? 0;
+                        const isExpanded = expandedReceiptId === receipt._id;
+                        const receiptItems = Array.isArray(receipt.items) ? receipt.items : [];
+                        const previewItems = receiptItems.slice(0, 5);
+                        const remainingCount = receiptItems.length - previewItems.length;
+
+                        return (
+                          <React.Fragment key={receipt._id}>
+                            <tr className="transition hover:bg-slate-50">
+                              <td className="px-2 py-2">
                                 <button
                                   type="button"
-                                  onClick={() => handleDeleteStockReceipt(receipt._id)}
-                                  className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-600 transition hover:bg-slate-200"
+                                  onClick={() => {
+                                    if (isMobileView) {
+                                      setMobileReceiptPreview(receipt);
+                                      return;
+                                    }
+                                    setExpandedReceiptId((prev) => (prev === receipt._id ? null : receipt._id));
+                                  }}
+                                  className="text-slate-400 hover:text-slate-600"
+                                  aria-label="Показать состав"
                                 >
-                                  Удалить
+                                  {isExpanded ? '▾' : '▸'}
                                 </button>
-                              ) : null}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                              </td>
+                              <td className="px-2 py-2 text-slate-600">
+                                <span className="whitespace-nowrap">{formatReceiptDateTime(receipt.occurredAt)}</span>
+                              </td>
+                              <td className="px-2 py-2">
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
+                                    receipt.type === 'receipt'
+                                      ? 'bg-emerald-50 text-emerald-700'
+                                      : receipt.type === 'writeOff'
+                                        ? 'bg-red-50 text-red-600'
+                                        : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  {receipt.type === 'receipt' ? '⬆' : receipt.type === 'writeOff' ? '⬇' : '🧾'}
+                                  {receiptTypeLabels[receipt.type]}
+                                </span>
+                              </td>
+                              <td className="px-2 py-2 text-slate-500">
+                                {warehouseMap.get(receipt.warehouseId)?.name ?? '—'}
+                              </td>
+                              <td className="px-2 py-2 text-slate-500">
+                                {receipt.supplierId ? supplierMap.get(receipt.supplierId)?.name ?? '—' : 'Не указан'}
+                              </td>
+                              <td className="px-2 py-2 text-slate-500">
+                                {formatPositionsCount(receiptItems.length)}
+                              </td>
+                              <td className="px-2 py-2 text-right font-semibold text-slate-800">
+                                {formatCurrency(Math.abs(total))} ₽
+                              </td>
+                              <td className="px-2 py-2 text-right text-xs">
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenReceiptDrawer(receipt)}
+                                    className="rounded-full bg-white px-2 py-1 text-sm shadow-inner transition hover:bg-slate-50"
+                                    aria-label="Редактировать"
+                                  >
+                                    ✏️
+                                  </button>
+                                  {receipt.type !== 'inventory' ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteStockReceipt(receipt._id)}
+                                      className="rounded-full bg-red-50 px-2 py-1 text-sm text-red-600 transition hover:bg-red-100"
+                                      aria-label="Удалить"
+                                    >
+                                      🗑
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </td>
+                            </tr>
+                            {isExpanded ? (
+                              <tr className="bg-slate-50/70">
+                                <td colSpan={8} className="px-4 py-3 text-xs text-slate-600">
+                                  <div className="space-y-1">
+                                    <p className="text-[11px] uppercase text-slate-400">Состав документа</p>
+                                    <div className="space-y-1">
+                                      {previewItems.map((item, index) => {
+                                        const unitLabel =
+                                          item.itemType === 'ingredient'
+                                            ? ingredientUnitMap[item.itemId] || 'ед.'
+                                            : defaultProductUnit;
+                                        const totalValue = item.quantity * item.unitCost;
+                                        return (
+                                          <div key={`${item.itemId}-${index}`} className="flex flex-wrap items-center gap-2">
+                                            <span className="font-semibold text-slate-700">
+                                              {getInventoryItemName(item.itemType, item.itemId)}
+                                            </span>
+                                            <span>
+                                              — {item.quantity} {unitLabel} × {formatCurrency(item.unitCost)} ₽ ={' '}
+                                              {formatCurrency(totalValue)} ₽
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                      {remainingCount > 0 ? (
+                                        <div className="text-[11px] text-slate-400">+ ещё {remainingCount} позиции</div>
+                                      ) : null}
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-2">
+                                      <span className="font-semibold text-slate-700">
+                                        Итого: {formatCurrency(Math.abs(total))} ₽
+                                      </span>
+                                      <div className="flex gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenReceiptDrawer(receipt)}
+                                          className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-600 shadow-inner"
+                                        >
+                                          Редактировать
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setExpandedReceiptId(null)}
+                                          className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500"
+                                        >
+                                          Закрыть
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : null}
+                          </React.Fragment>
+                        );
+                      })}
                     </tbody>
                     <tfoot>
                       <tr className="text-sm font-semibold text-slate-700">
-                        <td className="px-3 py-2" colSpan={4}>
+                        <td className="px-2 py-2" colSpan={6}>
                           Всего документов: {filteredStockReceipts.length}
                         </td>
-                        <td className="px-3 py-2 text-right" colSpan={2}>
-                          Сумма: {filteredStockReceipts
-                            .reduce((acc, receipt) => acc + receipt.items.reduce((sum, item) => sum + item.quantity * item.unitCost, 0), 0)
-                            .toFixed(2)} ₽
+                        <td className="px-2 py-2 text-right" colSpan={2}>
+                          Сумма: {formatCurrency(Math.abs(receiptTotals.overall))} ₽
                         </td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
               </Card>
+
+              {isReceiptDrawerOpen ? (
+                <div className="fixed inset-0 z-50 flex">
+                  <div
+                    className="absolute inset-0 bg-slate-900/30"
+                    onClick={handleCloseReceiptDrawer}
+                    aria-hidden="true"
+                  />
+                  <div className="relative ml-auto flex h-full w-full flex-col bg-white shadow-xl sm:w-[38%] sm:max-w-[520px]">
+                    <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {selectedStockReceipt ? 'Редактирование поставки' : 'Новая поставка'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleCloseReceiptDrawer}
+                        className="inline-flex h-8 items-center justify-center rounded-full border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto px-4 py-4">
+                      <form id="receipt-drawer-form" onSubmit={handleSaveStockReceipt} className="space-y-4 text-sm">
+                        <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                          <p className="text-[11px] uppercase text-slate-400">Тип и дата</p>
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <select
+                              value={receiptType}
+                              onChange={(event) => setReceiptType(event.target.value as typeof receiptType)}
+                              className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                            >
+                              <option value="receipt">Поставка</option>
+                              <option value="writeOff">Списание</option>
+                            </select>
+                            <input
+                              type="date"
+                              value={receiptDate}
+                              max={todayInputValue}
+                              onChange={(event) => setReceiptDate(event.target.value)}
+                              className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                          <p className="text-[11px] uppercase text-slate-400">Контекст</p>
+                          <select
+                            value={receiptForm.warehouseId}
+                            onChange={(event) =>
+                              setReceiptForm((prev) => ({ ...prev, warehouseId: event.target.value }))
+                            }
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                          >
+                            <option value="">Выберите склад</option>
+                            {warehouses.map((warehouse) => (
+                              <option key={warehouse._id} value={warehouse._id}>
+                                {warehouse.name}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={receiptForm.supplierId ?? ''}
+                            onChange={(event) =>
+                              setReceiptForm((prev) => ({ ...prev, supplierId: event.target.value }))
+                            }
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                          >
+                            <option value="">Поставщик (опционально)</option>
+                            {suppliers.map((supplier) => (
+                              <option key={supplier._id} value={supplier._id}>
+                                {supplier.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between text-[11px] uppercase text-slate-400">
+                            <span>Позиции документа</span>
+                            <button
+                              type="button"
+                              onClick={addReceiptItemRow}
+                              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                            >
+                              + Добавить позицию
+                            </button>
+                          </div>
+                          <div className="space-y-2">
+                            {receiptItems.map((item, index) => (
+                              <div
+                                key={`${item.itemId}-${index}`}
+                                className="grid items-center gap-2 rounded-2xl border border-slate-100 bg-white p-3 text-xs sm:grid-cols-[1fr_1.2fr_1fr_0.8fr_0.8fr_auto]"
+                              >
+                                <select
+                                  value={item.itemType}
+                                  onChange={(event) =>
+                                    handleReceiptItemChange(
+                                      index,
+                                      'itemType',
+                                      event.target.value as 'ingredient' | 'product'
+                                    )
+                                  }
+                                  className="rounded-xl border border-slate-200 px-2 py-2"
+                                >
+                                  <option value="ingredient">Ингредиент</option>
+                                  <option value="product">Продукт</option>
+                                </select>
+                                <select
+                                  value={item.itemId}
+                                  onChange={(event) => handleReceiptItemChange(index, 'itemId', event.target.value)}
+                                  className="rounded-xl border border-slate-200 px-2 py-2"
+                                >
+                                  <option value="">Выберите позицию</option>
+                                  {item.itemType === 'ingredient'
+                                    ? ingredients.map((ingredient) => (
+                                        <option key={ingredient._id} value={ingredient._id}>
+                                          {ingredient.name}
+                                        </option>
+                                      ))
+                                    : products.map((product) => (
+                                        <option key={product._id} value={product._id}>
+                                          {product.name}
+                                        </option>
+                                      ))}
+                                </select>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={item.quantity}
+                                    onChange={(event) => handleReceiptItemChange(index, 'quantity', event.target.value)}
+                                    className="w-full rounded-xl border border-slate-200 px-2 py-2"
+                                    placeholder="Количество"
+                                  />
+                                  <span className="text-[11px] text-slate-500">
+                                    {item.itemType === 'ingredient'
+                                      ? ingredientUnitMap[item.itemId] || 'ед.'
+                                      : defaultProductUnit}
+                                  </span>
+                                </div>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.unitCost}
+                                  onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
+                                  className="rounded-xl border border-slate-200 px-2 py-2"
+                                  placeholder="Цена"
+                                />
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.totalCost}
+                                  onChange={(event) => handleReceiptItemChange(index, 'totalCost', event.target.value)}
+                                  className="rounded-xl border border-slate-200 px-2 py-2"
+                                  placeholder="Сумма"
+                                />
+                                {receiptItems.length > 1 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeReceiptItemRow(index)}
+                                    className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-200"
+                                  >
+                                    ×
+                                  </button>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </form>
+                    </div>
+                    <div className="sticky bottom-0 border-t border-slate-200 bg-white px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] uppercase text-slate-400">Итоговая сумма</p>
+                          <p className="text-lg font-semibold text-slate-800">{formatCurrency(receiptTotal)} ₽</p>
+                          <p className="text-[11px] text-slate-400">Последнее изменение: {receiptLastTouchedLabel}</p>
+                        </div>
+                        <button
+                          type="submit"
+                          form="receipt-drawer-form"
+                          className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-soft hover:bg-emerald-500"
+                        >
+                          Сохранить документ
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {mobileReceiptPreview ? (
+                <div className="fixed inset-0 z-50 flex items-end sm:hidden">
+                  <div
+                    className="absolute inset-0 bg-slate-900/30"
+                    onClick={() => setMobileReceiptPreview(null)}
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full rounded-t-3xl bg-white p-4 shadow-xl">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">Состав документа</p>
+                        <p className="text-xs text-slate-500">
+                          {formatReceiptDateTime(mobileReceiptPreview.occurredAt)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMobileReceiptPreview(null)}
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
+                      >
+                        Закрыть
+                      </button>
+                    </div>
+                    <div className="mt-3 space-y-2 text-xs text-slate-600">
+                      {(Array.isArray(mobileReceiptPreview.items) ? mobileReceiptPreview.items : [])
+                        .slice(0, 5)
+                        .map((item, index) => {
+                        const unitLabel =
+                          item.itemType === 'ingredient'
+                            ? ingredientUnitMap[item.itemId] || 'ед.'
+                            : defaultProductUnit;
+                        const totalValue = item.quantity * item.unitCost;
+                        return (
+                          <div key={`${item.itemId}-${index}`}>
+                            <span className="font-semibold text-slate-700">
+                              {getInventoryItemName(item.itemType, item.itemId)}
+                            </span>{' '}
+                            — {item.quantity} {unitLabel} × {formatCurrency(item.unitCost)} ₽ ={' '}
+                            {formatCurrency(totalValue)} ₽
+                          </div>
+                        );
+                      })}
+                      {(mobileReceiptPreview.items?.length ?? 0) > 5 ? (
+                        <div className="text-[11px] text-slate-400">
+                          + ещё {(mobileReceiptPreview.items?.length ?? 0) - 5} позиции
+                        </div>
+                      ) : null}
+                      <div className="border-t border-slate-200 pt-2 font-semibold text-slate-700">
+                        Итого:{' '}
+                        {formatCurrency(Math.abs(receiptTotals.totalsMap.get(mobileReceiptPreview._id) ?? 0))} ₽
+                      </div>
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReceiptDrawer(mobileReceiptPreview)}
+                        className="flex-1 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        Редактировать
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMobileReceiptPreview(null)}
+                        className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600"
+                      >
+                        Закрыть
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
