@@ -90,6 +90,9 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd ${{ secrets.APP_DIR }}
-            npm install --legacy-peer-deps || true
-            npm run build || true
-            pm2 reload ${{ secrets.PM2_APP_NAME }} --update-env || pm2 start dist/app.js --name ${{ secrets.PM2_APP_NAME }}
+            pm2 stop all
+            pm2 delete all
+            npm install --legacy-peer-deps
+            npm run build
+            pm2 start dist/index.js --name ${{ secrets.PM2_APP_NAME }}
+            pm2 save
