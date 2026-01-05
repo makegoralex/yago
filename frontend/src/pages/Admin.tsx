@@ -1160,7 +1160,13 @@ const AdminPage: React.FC = () => {
   }, []);
 
   const receiptItemOptions = useMemo(() => {
-    const options: Array<{ id: string; type: 'ingredient' | 'product'; name: string; typeLabel: string }> = [];
+    const options: Array<{
+      id: string;
+      type: 'ingredient' | 'product';
+      name: string;
+      typeLabel: string;
+      displayValue: string;
+    }> = [];
 
     for (const ingredient of ingredients) {
       options.push({
@@ -1168,17 +1174,20 @@ const AdminPage: React.FC = () => {
         type: 'ingredient',
         name: ingredient.name,
         typeLabel: 'Ингредиент',
+        displayValue: `И ${ingredient.name}`,
       });
     }
 
     for (const product of products) {
       const categoryName = categoryMap.get(product.categoryId)?.name ?? '';
       const typeLabel = categoryName.toLowerCase().includes('полуфаб') ? 'Полуфабрикат' : 'Товар';
+      const displayValue = `П ${product.name}`;
       options.push({
         id: product._id,
         type: 'product',
         name: product.name,
         typeLabel,
+        displayValue,
       });
     }
 
@@ -1186,18 +1195,25 @@ const AdminPage: React.FC = () => {
   }, [categoryMap, ingredients, products]);
 
   const receiptItemOptionLookup = useMemo(() => {
-    const lookup = new Map<string, { id: string; type: 'ingredient' | 'product'; name: string }>();
+    const lookup = new Map<
+      string,
+      { id: string; type: 'ingredient' | 'product'; name: string; displayValue: string }
+    >();
     for (const option of receiptItemOptions) {
-      const key = option.name.trim().toLowerCase();
-      if (!lookup.has(key)) {
-        lookup.set(key, option);
+      const nameKey = option.name.trim().toLowerCase();
+      const displayKey = option.displayValue.trim().toLowerCase();
+      if (!lookup.has(nameKey)) {
+        lookup.set(nameKey, option);
+      }
+      if (!lookup.has(displayKey)) {
+        lookup.set(displayKey, option);
       }
     }
     return lookup;
   }, [receiptItemOptions]);
 
   const receiptItemOptionById = useMemo(() => {
-    const lookup = new Map<string, { name: string }>();
+    const lookup = new Map<string, { name: string; displayValue: string }>();
     for (const option of receiptItemOptions) {
       lookup.set(`${option.type}:${option.id}`, option);
     }
@@ -3336,13 +3352,16 @@ const AdminPage: React.FC = () => {
       setReceiptForm((prev) => {
         const items = [...prev.items];
         const current = { ...items[index] };
-        current.search = value;
 
         if (match) {
           current.itemId = match.id;
           current.itemType = match.type;
-        } else if (!trimmed) {
-          current.itemId = '';
+          current.search = match.displayValue;
+        } else {
+          current.search = value;
+          if (!trimmed) {
+            current.itemId = '';
+          }
         }
 
         items[index] = current;
@@ -3429,7 +3448,9 @@ const AdminPage: React.FC = () => {
             ? items.map((item) => ({
                 itemType: item.itemType,
                 itemId: item.itemId,
-                search: getInventoryItemName(item.itemType, item.itemId),
+                search:
+                  receiptItemOptionById.get(`${item.itemType}:${item.itemId}`)?.displayValue ??
+                  getInventoryItemName(item.itemType, item.itemId),
                 quantity: item.quantity.toString(),
                 unitCost: item.unitCost.toString(),
                 totalCost: formatReceiptValue(item.quantity * item.unitCost),
@@ -3449,7 +3470,7 @@ const AdminPage: React.FC = () => {
       });
       return true;
     },
-    [formatReceiptValue, notify]
+    [formatReceiptValue, getInventoryItemName, notify, receiptItemOptionById]
   );
 
   const handleOpenReceiptDrawer = useCallback(
@@ -6523,7 +6544,15 @@ const AdminPage: React.FC = () => {
                         </div>
                         <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white">
                           <div className="min-h-0 flex-1 overflow-y-auto">
-                            <table className="w-full text-xs">
+                            <table className="w-full table-fixed text-xs">
+                              <colgroup>
+                                <col className="w-[46%]" />
+                                <col className="w-[22%]" />
+                                <col className="w-[8%]" />
+                                <col className="w-[12%]" />
+                                <col className="w-[12%]" />
+                                <col className="w-[44px]" />
+                              </colgroup>
                               <thead className="sticky top-0 bg-slate-50 text-[11px] uppercase text-slate-400">
                                 <tr>
                                   <th className="px-3 py-2 text-left">Позиция</th>
@@ -6531,7 +6560,7 @@ const AdminPage: React.FC = () => {
                                   <th className="px-3 py-2 text-left">Ед.</th>
                                   <th className="px-3 py-2 text-left">Цена</th>
                                   <th className="px-3 py-2 text-left">Сумма</th>
-                                  <th className="px-3 py-2 text-right">Удалить</th>
+                                  <th className="px-3 py-2 text-right" aria-label="Удалить позицию" />
                                 </tr>
                               </thead>
                               <tbody>
@@ -6540,7 +6569,7 @@ const AdminPage: React.FC = () => {
                                   const optionLabel =
                                     item.search && item.search.trim().length > 0
                                       ? item.search
-                                      : receiptItemOptionById.get(optionKey)?.name ??
+                                      : receiptItemOptionById.get(optionKey)?.displayValue ??
                                         (item.itemId ? getInventoryItemName(item.itemType, item.itemId) : '');
 
                                   return (
@@ -6576,7 +6605,7 @@ const AdminPage: React.FC = () => {
                                             onChange={(event) =>
                                               handleReceiptItemChange(index, 'quantity', event.target.value)
                                             }
-                                            className="min-w-[64px] rounded-xl border border-slate-200 px-2 py-2"
+                                            className="w-16 rounded-xl border border-slate-200 px-2 py-2 text-center"
                                             placeholder="0"
                                           />
                                           <button
@@ -6601,7 +6630,7 @@ const AdminPage: React.FC = () => {
                                           step="0.01"
                                           value={item.unitCost}
                                           onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
-                                          className="w-full rounded-xl border border-slate-200 px-2 py-2"
+                                          className="w-24 rounded-xl border border-slate-200 px-2 py-2"
                                           placeholder="Цена"
                                         />
                                       </td>
@@ -6614,7 +6643,7 @@ const AdminPage: React.FC = () => {
                                           onChange={(event) =>
                                             handleReceiptItemChange(index, 'totalCost', event.target.value)
                                           }
-                                          className="w-full rounded-xl border border-slate-200 px-2 py-2"
+                                          className="w-24 rounded-xl border border-slate-200 px-2 py-2"
                                           placeholder="Сумма"
                                         />
                                       </td>
@@ -6639,7 +6668,7 @@ const AdminPage: React.FC = () => {
                           {receiptItemOptions.map((option) => (
                             <option
                               key={`${option.type}-${option.id}`}
-                              value={option.name}
+                              value={option.displayValue}
                               label={option.typeLabel}
                             />
                           ))}
