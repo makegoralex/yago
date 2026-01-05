@@ -595,6 +595,7 @@ const AdminPage: React.FC = () => {
       {
         itemType: 'ingredient' as 'ingredient' | 'product',
         itemId: '',
+        search: '',
         quantity: '',
         unitCost: '',
         totalCost: '',
@@ -621,6 +622,7 @@ const AdminPage: React.FC = () => {
   const [expandedReceiptId, setExpandedReceiptId] = useState<string | null>(null);
   const [mobileReceiptPreview, setMobileReceiptPreview] = useState<StockReceipt | null>(null);
   const [isMobileView, setIsMobileView] = useState(false);
+  const [pendingReceiptFocusIndex, setPendingReceiptFocusIndex] = useState<number | null>(null);
   const [inventoryAuditForm, setInventoryAuditForm] = useState({
     warehouseId: '',
     performedAt: todayInputValue,
@@ -1046,6 +1048,7 @@ const AdminPage: React.FC = () => {
     [ingredients]
   );
   const productMap = useMemo(() => new Map(products.map((product) => [product._id, product])), [products]);
+  const categoryMap = useMemo(() => new Map(categories.map((category) => [category._id, category])), [categories]);
   const markupThresholds = useMemo(() => ({ warning: 300, danger: 100 }), []);
 
   const getProductPrice = useCallback((product: Product) => {
@@ -1155,6 +1158,51 @@ const AdminPage: React.FC = () => {
     const items = Array.isArray(receipt.items) ? receipt.items : [];
     return items.reduce((sum, item) => sum + sign * item.quantity * item.unitCost, 0);
   }, []);
+
+  const receiptItemOptions = useMemo(() => {
+    const options: Array<{ id: string; type: 'ingredient' | 'product'; name: string; typeLabel: string }> = [];
+
+    for (const ingredient of ingredients) {
+      options.push({
+        id: ingredient._id,
+        type: 'ingredient',
+        name: ingredient.name,
+        typeLabel: 'Ингредиент',
+      });
+    }
+
+    for (const product of products) {
+      const categoryName = categoryMap.get(product.categoryId)?.name ?? '';
+      const typeLabel = categoryName.toLowerCase().includes('полуфаб') ? 'Полуфабрикат' : 'Товар';
+      options.push({
+        id: product._id,
+        type: 'product',
+        name: product.name,
+        typeLabel,
+      });
+    }
+
+    return options.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  }, [categoryMap, ingredients, products]);
+
+  const receiptItemOptionLookup = useMemo(() => {
+    const lookup = new Map<string, { id: string; type: 'ingredient' | 'product'; name: string }>();
+    for (const option of receiptItemOptions) {
+      const key = option.name.trim().toLowerCase();
+      if (!lookup.has(key)) {
+        lookup.set(key, option);
+      }
+    }
+    return lookup;
+  }, [receiptItemOptions]);
+
+  const receiptItemOptionById = useMemo(() => {
+    const lookup = new Map<string, { name: string }>();
+    for (const option of receiptItemOptions) {
+      lookup.set(`${option.type}:${option.id}`, option);
+    }
+    return lookup;
+  }, [receiptItemOptions]);
 
   const getInventoryItemName = useCallback(
     (itemType: 'ingredient' | 'product', itemId: string): string => {
@@ -1351,6 +1399,19 @@ const AdminPage: React.FC = () => {
     () => receiptItems.reduce((acc, item) => acc + getReceiptItemTotal(item), 0),
     [getReceiptItemTotal, receiptItems]
   );
+
+  const formatDateTime = (value?: string) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '—';
+    }
+
+    return date.toLocaleString('ru-RU', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  };
 
   const receiptLastTouchedLabel = useMemo(() => {
     const timestamp =
@@ -1913,19 +1974,6 @@ const AdminPage: React.FC = () => {
     totalPointsIssued: summary.totalPointsIssued,
     totalPointsRedeemed: summary.totalPointsRedeemed,
   }), [summary.totalPointsIssued, summary.totalPointsRedeemed]);
-
-  const formatDateTime = (value?: string) => {
-    if (!value) return '—';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return '—';
-    }
-
-    return date.toLocaleString('ru-RU', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  };
 
   const formatBillingDate = (value?: string | null) =>
     value ? new Date(value).toLocaleDateString('ru-RU') : '—';
@@ -3280,6 +3328,40 @@ const AdminPage: React.FC = () => {
     });
   };
 
+  const handleReceiptItemSearchChange = useCallback(
+    (index: number, value: string) => {
+      const trimmed = value.trim();
+      const match = trimmed ? receiptItemOptionLookup.get(trimmed.toLowerCase()) : undefined;
+
+      setReceiptForm((prev) => {
+        const items = [...prev.items];
+        const current = { ...items[index] };
+        current.search = value;
+
+        if (match) {
+          current.itemId = match.id;
+          current.itemType = match.type;
+        } else if (!trimmed) {
+          current.itemId = '';
+        }
+
+        items[index] = current;
+        return { ...prev, items };
+      });
+    },
+    [receiptItemOptionLookup]
+  );
+
+  const adjustReceiptItemQuantity = useCallback(
+    (index: number, delta: number) => {
+      const currentValue = Number(receiptItems[index]?.quantity || 0);
+      const nextValue = Math.max(0, currentValue + delta);
+      const formatted = nextValue > 0 ? formatReceiptValue(nextValue) : '';
+      handleReceiptItemChange(index, 'quantity', formatted);
+    },
+    [formatReceiptValue, handleReceiptItemChange, receiptItems]
+  );
+
   const addReceiptItemRow = () => {
     setReceiptForm((prev) => ({
       ...prev,
@@ -3288,6 +3370,7 @@ const AdminPage: React.FC = () => {
         {
           itemType: 'ingredient' as 'ingredient' | 'product',
           itemId: '',
+          search: '',
           quantity: '',
           unitCost: '',
           totalCost: '',
@@ -3295,6 +3378,7 @@ const AdminPage: React.FC = () => {
         },
       ],
     }));
+    setPendingReceiptFocusIndex(receiptItems.length);
   };
 
   const removeReceiptItemRow = (index: number) => {
@@ -3315,6 +3399,7 @@ const AdminPage: React.FC = () => {
         {
           itemType: 'ingredient',
           itemId: '',
+          search: '',
           quantity: '',
           unitCost: '',
           totalCost: '',
@@ -3344,6 +3429,7 @@ const AdminPage: React.FC = () => {
             ? items.map((item) => ({
                 itemType: item.itemType,
                 itemId: item.itemId,
+                search: getInventoryItemName(item.itemType, item.itemId),
                 quantity: item.quantity.toString(),
                 unitCost: item.unitCost.toString(),
                 totalCost: formatReceiptValue(item.quantity * item.unitCost),
@@ -3353,6 +3439,7 @@ const AdminPage: React.FC = () => {
                 {
                   itemType: 'ingredient',
                   itemId: '',
+                  search: '',
                   quantity: '',
                   unitCost: '',
                   totalCost: '',
@@ -3395,6 +3482,20 @@ const AdminPage: React.FC = () => {
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
+
+  const receiptItemSearchRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  useEffect(() => {
+    if (pendingReceiptFocusIndex === null) {
+      return;
+    }
+
+    const target = receiptItemSearchRefs.current[pendingReceiptFocusIndex];
+    if (target) {
+      target.focus();
+    }
+    setPendingReceiptFocusIndex(null);
+  }, [pendingReceiptFocusIndex, receiptItems.length]);
 
   useEffect(() => {
     if (!isReceiptDrawerOpen && !mobileReceiptPreview) {
@@ -6336,7 +6437,7 @@ const AdminPage: React.FC = () => {
                     onClick={handleCloseReceiptDrawer}
                     aria-hidden="true"
                   />
-                  <div className="relative ml-auto flex h-full w-full flex-col bg-white shadow-xl sm:w-[38%] sm:max-w-[520px]">
+                  <div className="relative ml-auto flex h-full w-full flex-col overflow-hidden bg-white shadow-xl sm:w-[38%] sm:max-w-[520px]">
                     <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
                       <p className="text-sm font-semibold text-slate-800">
                         {selectedStockReceipt ? 'Редактирование поставки' : 'Новая поставка'}
@@ -6349,8 +6450,12 @@ const AdminPage: React.FC = () => {
                         ✕
                       </button>
                     </div>
-                    <div className="flex-1 overflow-y-auto px-4 py-4">
-                      <form id="receipt-drawer-form" onSubmit={handleSaveStockReceipt} className="space-y-4 text-sm">
+                    <form
+                      id="receipt-drawer-form"
+                      onSubmit={handleSaveStockReceipt}
+                      className="flex min-h-0 flex-1 flex-col text-sm"
+                    >
+                      <div className="flex-none space-y-4 px-4 py-4">
                         <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
                           <p className="text-[11px] uppercase text-slate-400">Тип и дата</p>
                           <div className="grid gap-2 md:grid-cols-2">
@@ -6403,105 +6508,144 @@ const AdminPage: React.FC = () => {
                             ))}
                           </select>
                         </div>
+                      </div>
 
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-[11px] uppercase text-slate-400">
-                            <span>Позиции документа</span>
-                            <button
-                              type="button"
-                              onClick={addReceiptItemRow}
-                              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
-                            >
-                              + Добавить позицию
-                            </button>
-                          </div>
-                          <div className="space-y-2">
-                            {receiptItems.map((item, index) => (
-                              <div
-                                key={`${item.itemId}-${index}`}
-                                className="grid items-center gap-2 rounded-2xl border border-slate-100 bg-white p-3 text-xs sm:grid-cols-[1fr_1.2fr_1fr_0.8fr_0.8fr_auto]"
-                              >
-                                <select
-                                  value={item.itemType}
-                                  onChange={(event) =>
-                                    handleReceiptItemChange(
-                                      index,
-                                      'itemType',
-                                      event.target.value as 'ingredient' | 'product'
-                                    )
-                                  }
-                                  className="rounded-xl border border-slate-200 px-2 py-2"
-                                >
-                                  <option value="ingredient">Ингредиент</option>
-                                  <option value="product">Продукт</option>
-                                </select>
-                                <select
-                                  value={item.itemId}
-                                  onChange={(event) => handleReceiptItemChange(index, 'itemId', event.target.value)}
-                                  className="rounded-xl border border-slate-200 px-2 py-2"
-                                >
-                                  <option value="">Выберите позицию</option>
-                                  {item.itemType === 'ingredient'
-                                    ? ingredients.map((ingredient) => (
-                                        <option key={ingredient._id} value={ingredient._id}>
-                                          {ingredient.name}
-                                        </option>
-                                      ))
-                                    : products.map((product) => (
-                                        <option key={product._id} value={product._id}>
-                                          {product.name}
-                                        </option>
-                                      ))}
-                                </select>
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={item.quantity}
-                                    onChange={(event) => handleReceiptItemChange(index, 'quantity', event.target.value)}
-                                    className="w-full rounded-xl border border-slate-200 px-2 py-2"
-                                    placeholder="Количество"
-                                  />
-                                  <span className="text-[11px] text-slate-500">
-                                    {item.itemType === 'ingredient'
-                                      ? ingredientUnitMap[item.itemId] || 'ед.'
-                                      : defaultProductUnit}
-                                  </span>
-                                </div>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={item.unitCost}
-                                  onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
-                                  className="rounded-xl border border-slate-200 px-2 py-2"
-                                  placeholder="Цена"
-                                />
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={item.totalCost}
-                                  onChange={(event) => handleReceiptItemChange(index, 'totalCost', event.target.value)}
-                                  className="rounded-xl border border-slate-200 px-2 py-2"
-                                  placeholder="Сумма"
-                                />
-                                {receiptItems.length > 1 ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => removeReceiptItemRow(index)}
-                                    className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-200"
-                                  >
-                                    ×
-                                  </button>
-                                ) : null}
-                              </div>
-                            ))}
+                      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
+                        <div className="flex items-center justify-between text-[11px] uppercase text-slate-400">
+                          <span>Позиции документа</span>
+                          <button
+                            type="button"
+                            onClick={addReceiptItemRow}
+                            className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                          >
+                            + Добавить позицию
+                          </button>
+                        </div>
+                        <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white">
+                          <div className="min-h-0 flex-1 overflow-y-auto">
+                            <table className="w-full text-xs">
+                              <thead className="sticky top-0 bg-slate-50 text-[11px] uppercase text-slate-400">
+                                <tr>
+                                  <th className="px-3 py-2 text-left">Позиция</th>
+                                  <th className="px-3 py-2 text-left">Кол-во</th>
+                                  <th className="px-3 py-2 text-left">Ед.</th>
+                                  <th className="px-3 py-2 text-left">Цена</th>
+                                  <th className="px-3 py-2 text-left">Сумма</th>
+                                  <th className="px-3 py-2 text-right">Удалить</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {receiptItems.map((item, index) => {
+                                  const optionKey = `${item.itemType}:${item.itemId}`;
+                                  const optionLabel =
+                                    item.search && item.search.trim().length > 0
+                                      ? item.search
+                                      : receiptItemOptionById.get(optionKey)?.name ??
+                                        (item.itemId ? getInventoryItemName(item.itemType, item.itemId) : '');
+
+                                  return (
+                                    <tr key={`${item.itemId}-${index}`} className="border-t border-slate-100">
+                                      <td className="px-3 py-2">
+                                        <input
+                                          ref={(element) => {
+                                            receiptItemSearchRefs.current[index] = element;
+                                          }}
+                                          type="text"
+                                          list="receipt-item-options"
+                                          value={optionLabel}
+                                          onChange={(event) => handleReceiptItemSearchChange(index, event.target.value)}
+                                          placeholder="Поиск позиции"
+                                          className="w-full rounded-xl border border-slate-200 px-2 py-2"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => adjustReceiptItemQuantity(index, -1)}
+                                            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
+                                            aria-label="Уменьшить количество"
+                                          >
+                                            −
+                                          </button>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={item.quantity}
+                                            onChange={(event) =>
+                                              handleReceiptItemChange(index, 'quantity', event.target.value)
+                                            }
+                                            className="min-w-[64px] rounded-xl border border-slate-200 px-2 py-2"
+                                            placeholder="0"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => adjustReceiptItemQuantity(index, 1)}
+                                            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
+                                            aria-label="Увеличить количество"
+                                          >
+                                            +
+                                          </button>
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2 text-[11px] text-slate-500">
+                                        {item.itemType === 'ingredient'
+                                          ? ingredientUnitMap[item.itemId] || 'ед.'
+                                          : defaultProductUnit}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          value={item.unitCost}
+                                          onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
+                                          className="w-full rounded-xl border border-slate-200 px-2 py-2"
+                                          placeholder="Цена"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          value={item.totalCost}
+                                          onChange={(event) =>
+                                            handleReceiptItemChange(index, 'totalCost', event.target.value)
+                                          }
+                                          className="w-full rounded-xl border border-slate-200 px-2 py-2"
+                                          placeholder="Сумма"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2 text-right">
+                                        <button
+                                          type="button"
+                                          onClick={() => removeReceiptItemRow(index)}
+                                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-500 hover:bg-slate-200"
+                                          aria-label="Удалить позицию"
+                                        >
+                                          ×
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
-                      </form>
-                    </div>
+                        <datalist id="receipt-item-options">
+                          {receiptItemOptions.map((option) => (
+                            <option
+                              key={`${option.type}-${option.id}`}
+                              value={option.name}
+                              label={option.typeLabel}
+                            />
+                          ))}
+                        </datalist>
+                      </div>
+                    </form>
                     <div className="sticky bottom-0 border-t border-slate-200 bg-white px-4 py-3">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
