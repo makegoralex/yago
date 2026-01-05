@@ -1352,6 +1352,19 @@ const AdminPage: React.FC = () => {
     [getReceiptItemTotal, receiptItems]
   );
 
+  const formatDateTime = (value?: string) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '—';
+    }
+
+    return date.toLocaleString('ru-RU', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  };
+
   const receiptLastTouchedLabel = useMemo(() => {
     const timestamp =
       selectedStockReceipt?.updatedAt ??
@@ -1913,19 +1926,6 @@ const AdminPage: React.FC = () => {
     totalPointsIssued: summary.totalPointsIssued,
     totalPointsRedeemed: summary.totalPointsRedeemed,
   }), [summary.totalPointsIssued, summary.totalPointsRedeemed]);
-
-  const formatDateTime = (value?: string) => {
-    if (!value) return '—';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return '—';
-    }
-
-    return date.toLocaleString('ru-RU', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  };
 
   const formatBillingDate = (value?: string | null) =>
     value ? new Date(value).toLocaleDateString('ru-RU') : '—';
