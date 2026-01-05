@@ -602,7 +602,7 @@ const AdminPage: React.FC = () => {
       },
     ],
   });
-  const receiptItems = receiptForm.items;
+  const receiptItems = receiptForm?.items ?? [];
   const [receiptType, setReceiptType] = useState<'receipt' | 'writeOff'>('receipt');
   const [receiptDate, setReceiptDate] = useState(() => todayInputValue);
   const [stockReceipts, setStockReceipts] = useState<StockReceipt[]>([]);
@@ -987,8 +987,12 @@ const AdminPage: React.FC = () => {
           >(response);
 
           const normalizedReceipts = normalizeReceiptPayload(payload ?? response?.data);
+          const sanitizedReceipts = normalizedReceipts.map((receipt) => ({
+            ...receipt,
+            items: Array.isArray(receipt.items) ? receipt.items : [],
+          }));
 
-          setStockReceipts(normalizedReceipts);
+          setStockReceipts(sanitizedReceipts);
           lastError = undefined;
           break;
         } catch (error) {
