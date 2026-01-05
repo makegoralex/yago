@@ -6178,9 +6178,9 @@ const AdminPage: React.FC = () => {
                       {filteredStockReceipts.map((receipt) => {
                         const total = receiptTotals.totalsMap.get(receipt._id) ?? 0;
                         const isExpanded = expandedReceiptId === receipt._id;
-                        const receiptItems = Array.isArray(receipt.items) ? receipt.items : [];
-                        const previewItems = receiptItems.slice(0, 5);
-                        const remainingCount = receiptItems.length - previewItems.length;
+                        const receiptLineItems = Array.isArray(receipt.items) ? receipt.items : [];
+                        const previewItems = receiptLineItems.slice(0, 5);
+                        const remainingCount = receiptLineItems.length - previewItems.length;
 
                         return (
                           <React.Fragment key={receipt._id}>
@@ -6225,7 +6225,7 @@ const AdminPage: React.FC = () => {
                                 {receipt.supplierId ? supplierMap.get(receipt.supplierId)?.name ?? '—' : 'Не указан'}
                               </td>
                               <td className="px-2 py-2 text-slate-500">
-                                {formatPositionsCount(receiptItems.length)}
+                                {formatPositionsCount(receiptLineItems.length)}
                               </td>
                               <td className="px-2 py-2 text-right font-semibold text-slate-800">
                                 {formatCurrency(Math.abs(total))} ₽
@@ -6260,15 +6260,16 @@ const AdminPage: React.FC = () => {
                                     <p className="text-[11px] uppercase text-slate-400">Состав документа</p>
                                     <div className="space-y-1">
                                       {previewItems.map((item, index) => {
+                                        const itemId = item.itemId ?? '';
                                         const unitLabel =
                                           item.itemType === 'ingredient'
-                                            ? ingredientUnitMap[item.itemId] || 'ед.'
+                                            ? ingredientUnitMap[itemId] || 'ед.'
                                             : defaultProductUnit;
                                         const totalValue = item.quantity * item.unitCost;
                                         return (
-                                          <div key={`${item.itemId}-${index}`} className="flex flex-wrap items-center gap-2">
+                                          <div key={`${itemId}-${index}`} className="flex flex-wrap items-center gap-2">
                                             <span className="font-semibold text-slate-700">
-                                              {getInventoryItemName(item.itemType, item.itemId)}
+                                              {getInventoryItemName(item.itemType, itemId)}
                                             </span>
                                             <span>
                                               — {item.quantity} {unitLabel} × {formatCurrency(item.unitCost)} ₽ ={' '}
@@ -6544,15 +6545,16 @@ const AdminPage: React.FC = () => {
                       {(Array.isArray(mobileReceiptPreview.items) ? mobileReceiptPreview.items : [])
                         .slice(0, 5)
                         .map((item, index) => {
+                        const itemId = item.itemId ?? '';
                         const unitLabel =
                           item.itemType === 'ingredient'
-                            ? ingredientUnitMap[item.itemId] || 'ед.'
+                            ? ingredientUnitMap[itemId] || 'ед.'
                             : defaultProductUnit;
                         const totalValue = item.quantity * item.unitCost;
                         return (
-                          <div key={`${item.itemId}-${index}`}>
+                          <div key={`${itemId}-${index}`}>
                             <span className="font-semibold text-slate-700">
-                              {getInventoryItemName(item.itemType, item.itemId)}
+                              {getInventoryItemName(item.itemType, itemId)}
                             </span>{' '}
                             — {item.quantity} {unitLabel} × {formatCurrency(item.unitCost)} ₽ ={' '}
                             {formatCurrency(totalValue)} ₽
