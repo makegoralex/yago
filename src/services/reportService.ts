@@ -47,6 +47,7 @@ export const getSummaryReport = async (
   const [orderStats] = await OrderModel.aggregate<{
     totalOrders: number;
     totalRevenue: number;
+    totalPointsRedeemed: number;
     takeawayOrders: number;
     deliveryOrders: number;
   }>([
@@ -56,6 +57,7 @@ export const getSummaryReport = async (
         _id: null,
         totalOrders: { $sum: 1 },
         totalRevenue: { $sum: '$total' },
+        totalPointsRedeemed: { $sum: '$manualDiscount' },
         takeawayOrders: {
           $sum: {
             $cond: [{ $eq: ['$orderTag', 'takeaway'] }, 1, 0],
@@ -72,7 +74,6 @@ export const getSummaryReport = async (
 
   const [customerStats] = await CustomerModel.aggregate<{
     totalCustomers: number;
-    totalPointsBalance: number;
     totalSpent: number;
   }>([
     { $match: { organizationId } },
@@ -80,7 +81,6 @@ export const getSummaryReport = async (
       $group: {
         _id: null,
         totalCustomers: { $sum: 1 },
-        totalPointsBalance: { $sum: '$points' },
         totalSpent: { $sum: '$totalSpent' },
       },
     },
@@ -92,11 +92,8 @@ export const getSummaryReport = async (
 
   const totalCustomers = customerStats?.totalCustomers ?? 0;
   const totalSpent = customerStats?.totalSpent ?? 0;
-  const totalPointsBalance = customerStats?.totalPointsBalance ?? 0;
   const totalPointsIssued = roundTwoDecimals(totalSpent * 0.05);
-  const totalPointsRedeemed = roundTwoDecimals(
-    Math.max(totalPointsIssued - totalPointsBalance, 0)
-  );
+  const totalPointsRedeemed = roundTwoDecimals(orderStats?.totalPointsRedeemed ?? 0);
   const takeawayOrders = orderStats?.takeawayOrders ?? 0;
   const deliveryOrders = orderStats?.deliveryOrders ?? 0;
 
