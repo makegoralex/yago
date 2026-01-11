@@ -898,18 +898,25 @@ router.post(
         : undefined,
     }));
 
-    await PrintJobModel.create({
-      status: 'pending',
-      payload: {
-        orderId: order._id as Types.ObjectId,
-        organizationId,
-        registerId: order.registerId,
-        cashierId: order.cashierId as Types.ObjectId,
-        paymentMethod,
-        total: order.total,
-        items,
-      },
-    });
+    try {
+      await PrintJobModel.create({
+        status: 'pending',
+        payload: {
+          orderId: order._id as Types.ObjectId,
+          organizationId,
+          registerId: order.registerId,
+          cashierId: order.cashierId as Types.ObjectId,
+          paymentMethod,
+          total: order.total,
+          items,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to create print job for paid order', {
+        orderId: order._id?.toString(),
+        error,
+      });
+    }
 
     await deductInventoryForOrder(order);
 
