@@ -900,6 +900,7 @@ router.post(
 
     await PrintJobModel.create({
       status: 'pending',
+      registerId: order.registerId,
       payload: {
         orderId: order._id as Types.ObjectId,
         organizationId,
