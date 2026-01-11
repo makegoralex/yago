@@ -20,6 +20,7 @@ export const appConfig = {
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET ?? '',
   bcryptSaltRounds: parseNumber(process.env.BCRYPT_SALT_ROUNDS, 10),
   frontendDistPath: process.env.FRONTEND_DIST_PATH,
+  printJobToken: process.env.PRINT_JOB_TOKEN ?? '',
 };
 
 export const validateConfig = (): void => {
