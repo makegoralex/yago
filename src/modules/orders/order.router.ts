@@ -23,6 +23,7 @@ import {
 import { WarehouseModel } from '../inventory/warehouse.model';
 import { adjustInventoryQuantity } from '../inventory/inventoryCost.service';
 import { calculateOrderTotals } from '../discounts/discount.service';
+import { PrintJobModel } from '../printing/printJob.model';
 import { ShiftDocument, ShiftModel } from '../shifts/shift.model';
 import { orderSchemas, type OrderItemsBody, type OrderPaymentBody, type StartOrderBody } from '../../validation/orderSchemas';
 
@@ -880,6 +881,35 @@ router.post(
     order.receiptId = undefined;
 
     await order.save();
+
+    const paymentMethod = order.payment?.method === 'card' ? 'card' : 'cash';
+    const items = order.items.map((item) => ({
+      name: item.name,
+      qty: item.qty,
+      price: item.price,
+      modifiers: item.modifiersApplied?.length
+        ? item.modifiersApplied.map((modifier) => ({
+            groupName: modifier.groupName,
+            options: modifier.options.map((option) => ({
+              name: option.name,
+              price: option.priceChange,
+            })),
+          }))
+        : undefined,
+    }));
+
+    await PrintJobModel.create({
+      status: 'pending',
+      payload: {
+        orderId: order._id as Types.ObjectId,
+        organizationId,
+        registerId: order.registerId,
+        cashierId: order.cashierId as Types.ObjectId,
+        paymentMethod,
+        total: order.total,
+        items,
+      },
+    });
 
     await deductInventoryForOrder(order);
 
