@@ -42,7 +42,7 @@ const SettingsPage: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate('/pos')}
-          className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 transition hover:border-primary/40 hover:text-primary"
+          className="h-10 rounded-lg bg-primary px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-dark"
         >
           Вернуться в кассу
         </button>
