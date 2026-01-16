@@ -2186,23 +2186,6 @@ const AdminPage: React.FC = () => {
     return () => window.clearTimeout(focusTimer);
   }, [activeTab, loyaltySection]);
 
-  useEffect(() => {
-    if (!isLoyaltyPanelOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setSelectedCustomer(null);
-        setIsCreatingCustomer(false);
-        setIsEditingCustomer(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLoyaltyPanelOpen]);
-
   const loyaltySummary = useMemo<LoyaltyPointSummary>(() => ({
     totalPointsIssued: summary.totalPointsIssued,
     totalPointsRedeemed: summary.totalPointsRedeemed,
@@ -2283,6 +2266,23 @@ const AdminPage: React.FC = () => {
   }, [customers]);
 
   const isLoyaltyPanelOpen = Boolean(selectedCustomer || isCreatingCustomer);
+
+  useEffect(() => {
+    if (!isLoyaltyPanelOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedCustomer(null);
+        setIsCreatingCustomer(false);
+        setIsEditingCustomer(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLoyaltyPanelOpen]);
 
   const formatBillingDate = (value?: string | null) =>
     value ? new Date(value).toLocaleDateString('ru-RU') : '—';
