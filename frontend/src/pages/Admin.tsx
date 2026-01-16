@@ -2630,6 +2630,7 @@ const AdminPage: React.FC = () => {
   }, [newProduct, newProductModifierIds.length, productIngredients]);
 
   const isEditorOpen = isCreatingProduct || Boolean(selectedProduct);
+  const categoryEditorFormId = 'category-editor-form';
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const actionMenuButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -2719,6 +2720,12 @@ const AdminPage: React.FC = () => {
         : ''
     );
   };
+
+  const handleCloseCategoryEditor = useCallback(() => {
+    setSelectedCategory(null);
+    setCategoryEditName('');
+    setCategorySortOrder('');
+  }, []);
 
   const canDiscardProductChanges = useCallback(() => {
     if (productEditDirty || (isCreatingProduct && hasNewProductChanges)) {
@@ -3798,26 +3805,7 @@ const AdminPage: React.FC = () => {
   }, []);
 
   const receiptItemSearchRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const receiptSearchBlurTimeoutRef = useRef<number | null>(null);
-
-  const clearReceiptSearchBlurTimeout = useCallback(() => {
-    if (receiptSearchBlurTimeoutRef.current === null) {
-      return;
-    }
-    window.clearTimeout(receiptSearchBlurTimeoutRef.current);
-    receiptSearchBlurTimeoutRef.current = null;
-  }, []);
-
-  const scheduleReceiptSearchClose = useCallback(
-    (index: number) => {
-      clearReceiptSearchBlurTimeout();
-      receiptSearchBlurTimeoutRef.current = window.setTimeout(() => {
-        setActiveReceiptSearchIndex((current) => (current === index ? null : current));
-        receiptSearchBlurTimeoutRef.current = null;
-      }, 150);
-    },
-    [clearReceiptSearchBlurTimeout]
-  );
+  const receiptSearchDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const updateReceiptSearchPosition = useCallback(
     (index: number) => {
@@ -3866,6 +3854,38 @@ const AdminPage: React.FC = () => {
       window.removeEventListener('scroll', updatePosition, true);
     };
   }, [activeReceiptSearchIndex, updateReceiptSearchPosition]);
+
+  useEffect(() => {
+    if (activeReceiptSearchIndex === null) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const dropdown = receiptSearchDropdownRef.current;
+      const input = receiptItemSearchRefs.current[activeReceiptSearchIndex];
+      if (dropdown?.contains(event.target as Node) || input?.contains(event.target as Node)) {
+        return;
+      }
+      setActiveReceiptSearchIndex(null);
+    };
+
+    const handleFocusIn = (event: FocusEvent) => {
+      const dropdown = receiptSearchDropdownRef.current;
+      const input = receiptItemSearchRefs.current[activeReceiptSearchIndex];
+      if (dropdown?.contains(event.target as Node) || input?.contains(event.target as Node)) {
+        return;
+      }
+      setActiveReceiptSearchIndex(null);
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('focusin', handleFocusIn);
+
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('focusin', handleFocusIn);
+    };
+  }, [activeReceiptSearchIndex]);
 
   useEffect(() => {
     if (pendingReceiptFocusIndex === null) {
@@ -5192,32 +5212,51 @@ const AdminPage: React.FC = () => {
                   ))}
                 </ul>
                 {selectedCategory ? (
-                  <form onSubmit={handleUpdateCategory} className="mt-4 space-y-3 text-sm">
-                    <div className="grid gap-2">
-                      <label className="text-xs font-semibold uppercase text-slate-400">Название</label>
-                      <input
-                        type="text"
-                        value={categoryEditName}
-                        onChange={(event) => setCategoryEditName(event.target.value)}
-                        className="rounded-2xl border border-slate-200 px-3 py-2"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <label className="text-xs font-semibold uppercase text-slate-400">Порядок</label>
-                      <input
-                        type="number"
-                        value={categorySortOrder}
-                        onChange={(event) => setCategorySortOrder(event.target.value)}
-                        className="rounded-2xl border border-slate-200 px-3 py-2"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
-                    >
-                      Сохранить изменения
-                    </button>
-                  </form>
+                  <AdminDrawer
+                    isOpen={Boolean(selectedCategory)}
+                    title={`Категория: ${selectedCategory.name}`}
+                    onClose={handleCloseCategoryEditor}
+                    widthClassName="max-w-[400px]"
+                    footer={
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCloseCategoryEditor}
+                          className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600"
+                        >
+                          Отмена
+                        </button>
+                        <button
+                          type="submit"
+                          form={categoryEditorFormId}
+                          className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white"
+                        >
+                          Сохранить
+                        </button>
+                      </div>
+                    }
+                  >
+                    <form id={categoryEditorFormId} onSubmit={handleUpdateCategory} className="space-y-4 text-sm">
+                      <div className="grid gap-2">
+                        <label className="text-xs font-semibold uppercase text-slate-400">Название</label>
+                        <input
+                          type="text"
+                          value={categoryEditName}
+                          onChange={(event) => setCategoryEditName(event.target.value)}
+                          className="rounded-2xl border border-slate-200 px-3 py-2"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <label className="text-xs font-semibold uppercase text-slate-400">Порядок</label>
+                        <input
+                          type="number"
+                          value={categorySortOrder}
+                          onChange={(event) => setCategorySortOrder(event.target.value)}
+                          className="rounded-2xl border border-slate-200 px-3 py-2"
+                        />
+                      </div>
+                    </form>
+                  </AdminDrawer>
                 ) : (
                   <p className="mt-4 text-xs text-slate-400">Выберите категорию для редактирования</p>
                 )}
@@ -6932,17 +6971,21 @@ const AdminPage: React.FC = () => {
                                           value={optionLabel}
                                           onChange={(event) => handleReceiptItemSearchChange(index, event.target.value)}
                                           onFocus={() => {
-                                            clearReceiptSearchBlurTimeout();
                                             setActiveReceiptSearchIndex(index);
                                             updateReceiptSearchPosition(index);
                                           }}
-                                          onBlur={() => scheduleReceiptSearchClose(index)}
+                                          onKeyDown={(event) => {
+                                            if (event.key === 'Escape') {
+                                              setActiveReceiptSearchIndex(null);
+                                            }
+                                          }}
                                           placeholder="Поиск позиции"
                                           className="w-full rounded-xl border border-slate-200 px-2 py-2"
                                         />
                                         {activeReceiptSearchIndex === index && receiptSearchPosition?.index === index
                                           ? createPortal(
                                               <div
+                                                ref={receiptSearchDropdownRef}
                                                 className="z-50 overflow-y-auto rounded-xl border border-slate-200 bg-white text-xs shadow-lg"
                                                 style={{
                                                   position: 'fixed',
@@ -6951,7 +6994,7 @@ const AdminPage: React.FC = () => {
                                                   width: receiptSearchPosition.width,
                                                   maxHeight: receiptSearchPosition.maxHeight,
                                                 }}
-                                                onMouseDown={clearReceiptSearchBlurTimeout}
+                                                onMouseDown={(event) => event.preventDefault()}
                                                 onWheel={(event) => {
                                                   event.stopPropagation();
                                                 }}
