@@ -60,15 +60,22 @@ function extractBrandingUpdatePayload(body: unknown): Partial<RestaurantBranding
     return null;
   }
 
-  const { name, logoUrl, enableOrderTags, measurementUnits, loyaltyRate } = body as Record<string, unknown>;
+  const { name, logoUrl, enableOrderTags, measurementUnits, loyaltyRate, loyaltyRedeemAllCategories, loyaltyRedeemCategoryIds } =
+    body as Record<string, unknown>;
 
   const parsedEnableOrderTags = parseBoolean(enableOrderTags);
   const parsedLoyaltyRate = parseNumber(loyaltyRate);
+  const parsedRedeemAllCategories = parseBoolean(loyaltyRedeemAllCategories);
 
   const normalizedUnits = Array.isArray(measurementUnits)
     ? measurementUnits
         .map((unit) => (typeof unit === 'string' ? unit : typeof unit === 'number' ? String(unit) : ''))
         .filter((unit) => unit.trim().length > 0)
+    : undefined;
+  const normalizedRedeemCategoryIds = Array.isArray(loyaltyRedeemCategoryIds)
+    ? loyaltyRedeemCategoryIds
+        .map((id) => (typeof id === 'string' ? id.trim() : ''))
+        .filter((id) => Types.ObjectId.isValid(id))
     : undefined;
 
   const updatePayload: Partial<RestaurantBranding> = {
@@ -77,6 +84,9 @@ function extractBrandingUpdatePayload(body: unknown): Partial<RestaurantBranding
     enableOrderTags: typeof parsedEnableOrderTags === 'boolean' ? parsedEnableOrderTags : undefined,
     measurementUnits: normalizedUnits,
     loyaltyRate: typeof parsedLoyaltyRate === 'number' ? parsedLoyaltyRate : undefined,
+    loyaltyRedeemAllCategories:
+      typeof parsedRedeemAllCategories === 'boolean' ? parsedRedeemAllCategories : undefined,
+    loyaltyRedeemCategoryIds: normalizedRedeemCategoryIds,
   };
 
   return Object.values(updatePayload).every((value) => value === undefined) ? null : updatePayload;
@@ -129,7 +139,8 @@ router.put(
 router.patch('/branding', requireRole(['owner', 'superAdmin']), asyncHandler(updateRestaurantBrandingHandler));
 
 async function updateRestaurantBrandingHandler(req: Request, res: Response): Promise<void> {
-  const { name, logoUrl, enableOrderTags, measurementUnits, loyaltyRate, reset } = req.body ?? {};
+  const { name, logoUrl, enableOrderTags, measurementUnits, loyaltyRate, loyaltyRedeemAllCategories, loyaltyRedeemCategoryIds, reset } =
+    req.body ?? {};
   const organizationId = getOrganizationObjectId(req);
 
   if (!organizationId) {
@@ -149,6 +160,8 @@ async function updateRestaurantBrandingHandler(req: Request, res: Response): Pro
     enableOrderTags,
     measurementUnits,
     loyaltyRate,
+    loyaltyRedeemAllCategories,
+    loyaltyRedeemCategoryIds,
   });
 
   if (!updatePayload) {
