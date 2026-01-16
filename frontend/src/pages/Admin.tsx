@@ -672,6 +672,7 @@ const AdminPage: React.FC = () => {
   const [mobileReceiptPreview, setMobileReceiptPreview] = useState<StockReceipt | null>(null);
   const [isMobileView, setIsMobileView] = useState(false);
   const [pendingReceiptFocusIndex, setPendingReceiptFocusIndex] = useState<number | null>(null);
+  const [activeReceiptSearchIndex, setActiveReceiptSearchIndex] = useState<number | null>(null);
   const [inventoryAuditForm, setInventoryAuditForm] = useState({
     warehouseId: '',
     performedAt: todayInputValue,
@@ -1205,12 +1206,20 @@ const AdminPage: React.FC = () => {
     return `${count} позиций`;
   }, []);
 
-  const formatReceiptValue = useCallback((value: number) => {
-    if (!Number.isFinite(value)) {
-      return '0';
-    }
-    return value.toFixed(4).replace(/\.?0+$/, '');
+  const roundReceiptCost = useCallback((value: number) => {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
   }, []);
+
+  const formatReceiptValue = useCallback(
+    (value: number) => {
+      if (!Number.isFinite(value)) {
+        return '0';
+      }
+      const rounded = roundReceiptCost(value);
+      return rounded.toFixed(2).replace(/\.?0+$/, '');
+    },
+    [roundReceiptCost]
+  );
 
   const calculateReceiptTotal = useCallback((receipt: StockReceipt) => {
     const sign = receipt.type === 'writeOff' ? -1 : 1;
@@ -1278,6 +1287,30 @@ const AdminPage: React.FC = () => {
     }
     return lookup;
   }, [receiptItemOptions]);
+
+  const receiptItemSearchLimit = 25;
+  const filterReceiptItemOptions = useCallback(
+    (query: string) => {
+      const normalized = query.trim().toLowerCase();
+      if (!normalized) {
+        return receiptItemOptions.slice(0, receiptItemSearchLimit);
+      }
+
+      return receiptItemOptions
+        .filter((option) => {
+          const name = option.name.toLowerCase();
+          const display = option.displayValue.toLowerCase();
+          const typeLabel = option.typeLabel.toLowerCase();
+          return (
+            name.includes(normalized) ||
+            display.includes(normalized) ||
+            typeLabel.includes(normalized)
+          );
+        })
+        .slice(0, receiptItemSearchLimit);
+    },
+    [receiptItemOptions]
+  );
 
   const getInventoryItemName = useCallback(
     (itemType: 'ingredient' | 'product', itemId: string): string => {
@@ -3652,9 +3685,7 @@ const AdminPage: React.FC = () => {
           current.search = match.displayValue;
         } else {
           current.search = value;
-          if (!trimmed) {
-            current.itemId = '';
-          }
+          current.itemId = '';
         }
 
         items[index] = current;
@@ -3662,6 +3693,24 @@ const AdminPage: React.FC = () => {
       });
     },
     [receiptItemOptionLookup]
+  );
+
+  const handleSelectReceiptOption = useCallback(
+    (index: number, option: { id: string; type: 'ingredient' | 'product'; displayValue: string }) => {
+      setReceiptForm((prev) => {
+        const items = [...prev.items];
+        items[index] = {
+          ...items[index],
+          itemId: option.id,
+          itemType: option.type,
+          search: option.displayValue,
+        };
+        return { ...prev, items };
+      });
+      setActiveReceiptSearchIndex(null);
+      setPendingReceiptFocusIndex(index);
+    },
+    []
   );
 
   const adjustReceiptItemQuantity = useCallback(
@@ -3798,6 +3847,26 @@ const AdminPage: React.FC = () => {
   }, []);
 
   const receiptItemSearchRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const receiptSearchBlurTimeoutRef = useRef<number | null>(null);
+
+  const clearReceiptSearchBlurTimeout = useCallback(() => {
+    if (receiptSearchBlurTimeoutRef.current === null) {
+      return;
+    }
+    window.clearTimeout(receiptSearchBlurTimeoutRef.current);
+    receiptSearchBlurTimeoutRef.current = null;
+  }, []);
+
+  const scheduleReceiptSearchClose = useCallback(
+    (index: number) => {
+      clearReceiptSearchBlurTimeout();
+      receiptSearchBlurTimeoutRef.current = window.setTimeout(() => {
+        setActiveReceiptSearchIndex((current) => (current === index ? null : current));
+        receiptSearchBlurTimeoutRef.current = null;
+      }, 150);
+    },
+    [clearReceiptSearchBlurTimeout]
+  );
 
   useEffect(() => {
     if (pendingReceiptFocusIndex === null) {
@@ -3861,7 +3930,7 @@ const AdminPage: React.FC = () => {
         itemType: entry.itemType,
         itemId: entry.itemId,
         quantity: entry.quantity ? Number(entry.quantity) : 0,
-        unitCost: entry.unitCost ? Number(entry.unitCost) : 0,
+        unitCost: entry.unitCost ? roundReceiptCost(Number(entry.unitCost)) : 0,
       }))
       .filter((entry) => entry.itemId && entry.quantity > 0);
 
@@ -6874,21 +6943,60 @@ const AdminPage: React.FC = () => {
                                       ? item.search
                                       : receiptItemOptionById.get(optionKey)?.displayValue ??
                                         (item.itemId ? getInventoryItemName(item.itemType, item.itemId) : '');
+                                  const filteredOptions = filterReceiptItemOptions(optionLabel);
 
                                   return (
                                     <tr key={`${item.itemId}-${index}`} className="border-t border-slate-100">
                                       <td className="px-3 py-2">
-                                        <input
-                                          ref={(element) => {
-                                            receiptItemSearchRefs.current[index] = element;
-                                          }}
-                                          type="text"
-                                          list="receipt-item-options"
-                                          value={optionLabel}
-                                          onChange={(event) => handleReceiptItemSearchChange(index, event.target.value)}
-                                          placeholder="Поиск позиции"
-                                          className="w-full rounded-xl border border-slate-200 px-2 py-2"
-                                        />
+                                        <div className="relative">
+                                          <input
+                                            ref={(element) => {
+                                              receiptItemSearchRefs.current[index] = element;
+                                            }}
+                                            type="text"
+                                            list="receipt-item-options"
+                                            value={optionLabel}
+                                            onChange={(event) =>
+                                              handleReceiptItemSearchChange(index, event.target.value)
+                                            }
+                                            onFocus={() => {
+                                              clearReceiptSearchBlurTimeout();
+                                              setActiveReceiptSearchIndex(index);
+                                            }}
+                                            onBlur={() => scheduleReceiptSearchClose(index)}
+                                            placeholder="Поиск позиции"
+                                            className="w-full rounded-xl border border-slate-200 px-2 py-2"
+                                          />
+                                          {activeReceiptSearchIndex === index ? (
+                                            <div
+                                              className="absolute left-0 right-0 z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white text-xs shadow-lg"
+                                              onMouseDown={clearReceiptSearchBlurTimeout}
+                                            >
+                                              {filteredOptions.length ? (
+                                                filteredOptions.map((option) => (
+                                                  <button
+                                                    key={`${option.type}-${option.id}`}
+                                                    type="button"
+                                                    onMouseDown={(event) => {
+                                                      event.preventDefault();
+                                                      handleSelectReceiptOption(index, option);
+                                                    }}
+                                                    className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-emerald-50"
+                                                  >
+                                                    <span className="font-semibold text-slate-700">{option.name}</span>
+                                                    <span className="text-[10px] uppercase text-slate-400">
+                                                      {option.typeLabel}
+                                                    </span>
+                                                  </button>
+                                                ))
+                                              ) : (
+                                                <div className="px-3 py-2 text-[11px] text-slate-400">
+                                                  Ничего не найдено
+                                                </div>
+                                              )}
+                                            </div>
+                                          ) : null}
+                                        </div>
                                       </td>
                                       <td className="px-3 py-2">
                                         <div className="flex items-center gap-1">
