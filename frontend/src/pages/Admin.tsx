@@ -1944,6 +1944,9 @@ const AdminPage: React.FC = () => {
     }
 
     if (activeTab === 'loyalty') {
+      if (!menuLoading && categories.length === 0) {
+        void loadMenuData();
+      }
       if (!customersLoading && customers.length === 0) {
         void loadCustomers();
       }
