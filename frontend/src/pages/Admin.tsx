@@ -285,6 +285,17 @@ type Customer = {
   email?: string;
   points: number;
   totalSpent: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type LoyaltyOperation = {
+  id: string;
+  date: string;
+  type: 'earn' | 'redeem';
+  amount: number;
+  before: number;
+  after: number;
 };
 
 type ModifierIngredientDelta = {
@@ -334,6 +345,35 @@ const formatHistoryTime = (value: string): string =>
 
 const normalizeCustomerHeader = (value: unknown): string =>
   typeof value === 'string' ? value.trim().toLowerCase() : '';
+
+const normalizePhoneValue = (value?: string | null): string =>
+  typeof value === 'string' ? value.replace(/\D/g, '') : '';
+
+const highlightMatch = (value: string, query: string): React.ReactNode => {
+  if (!query) {
+    return value;
+  }
+
+  const lowerValue = value.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const matchIndex = lowerValue.indexOf(lowerQuery);
+
+  if (matchIndex === -1) {
+    return value;
+  }
+
+  const before = value.slice(0, matchIndex);
+  const match = value.slice(matchIndex, matchIndex + query.length);
+  const after = value.slice(matchIndex + query.length);
+
+  return (
+    <>
+      {before}
+      <mark className="rounded bg-amber-100 px-1 text-slate-900">{match}</mark>
+      {after}
+    </>
+  );
+};
 
 const mapReceiptHistoryOrder = (payload: any): ReceiptHistoryOrder => {
   const id = payload?._id ?? payload?.id ?? `${Date.now()}-${Math.random()}`;
@@ -468,7 +508,18 @@ const AdminPage: React.FC = () => {
   const [menuSection, setMenuSection] = useState<'products' | 'categories' | 'ingredients' | 'modifiers'>(
     'products'
   );
-  const [loyaltySection, setLoyaltySection] = useState<'settings' | 'guests'>('settings');
+  const [loyaltySection, setLoyaltySection] = useState<'settings' | 'guests'>('guests');
+  const [loyaltySearch, setLoyaltySearch] = useState('');
+  const [loyaltySort, setLoyaltySort] = useState<'revenue' | 'points' | 'lastVisit'>('revenue');
+  const [loyaltyFilter, setLoyaltyFilter] = useState<'all' | 'withPoints' | 'zeroPoints' | 'top'>('all');
+  const [loyaltyView, setLoyaltyView] = useState<'list' | 'grid'>('list');
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+  const [customerOperations, setCustomerOperations] = useState<Record<string, LoyaltyOperation[]>>({});
+  const [loyaltyActionAmount, setLoyaltyActionAmount] = useState('');
+  const [loyaltyActionResult, setLoyaltyActionResult] = useState<string | null>(null);
+  const [isEditingCustomer, setIsEditingCustomer] = useState(false);
+  const [newCustomerForm, setNewCustomerForm] = useState({ name: '', phone: '', email: '' });
+  const loyaltySearchRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     setIsNavOpen(false);
   }, [activeTab]);
@@ -1892,6 +1943,103 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const handleDownloadCustomersTemplate = () => {
+    const header = ['Имя', 'Телефон', 'Email', 'Баллы', 'Выручка'];
+    const worksheet = XLSX.utils.aoa_to_sheet([header]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Шаблон');
+    XLSX.writeFile(workbook, 'guests-template.xlsx', { bookType: 'xlsx' });
+  };
+
+  const handleStartCreateCustomer = (phoneValue?: string) => {
+    setSelectedCustomer(null);
+    setIsCreatingCustomer(true);
+    setIsEditingCustomer(true);
+    setLoyaltyActionResult(null);
+    setLoyaltyActionAmount('');
+    setNewCustomerForm({
+      name: '',
+      phone: phoneValue ?? '',
+      email: '',
+    });
+  };
+
+  const handleCreateCustomer = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newCustomerForm.name.trim() || !newCustomerForm.phone.trim()) {
+      notify({ title: 'Введите имя и телефон гостя', type: 'info' });
+      return;
+    }
+
+    try {
+      const response = await api.post('/api/customers', {
+        name: newCustomerForm.name.trim(),
+        phone: newCustomerForm.phone.trim(),
+        email: newCustomerForm.email.trim() || undefined,
+      });
+      const createdCustomer = getResponseData<Customer>(response);
+      if (createdCustomer) {
+        setCustomers((prev) => [createdCustomer, ...prev]);
+        handleSelectCustomer(createdCustomer);
+      }
+      setIsCreatingCustomer(false);
+      notify({ title: 'Гость добавлен', type: 'success' });
+    } catch (error) {
+      console.error('Не удалось создать гостя', error);
+      notify({ title: extractErrorMessage(error, 'Не удалось создать гостя'), type: 'error' });
+    }
+  };
+
+  const handleAdjustCustomerPoints = async (mode: 'earn' | 'redeem') => {
+    if (!selectedCustomer) {
+      return;
+    }
+
+    const amount = Number(loyaltyActionAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      notify({ title: 'Введите количество баллов', type: 'info' });
+      return;
+    }
+
+    const before = selectedCustomer.points;
+    const after = mode === 'redeem' ? Math.max(before - amount, 0) : before + amount;
+
+    try {
+      await api.put(`/api/customers/${selectedCustomer._id}`, {
+        name: selectedCustomer.name,
+        phone: selectedCustomer.phone ?? '',
+        email: selectedCustomer.email ?? undefined,
+        points: after,
+        totalSpent: selectedCustomer.totalSpent,
+      });
+
+      const updatedCustomer = { ...selectedCustomer, points: after };
+      setSelectedCustomer(updatedCustomer);
+      setCustomers((prev) =>
+        prev.map((item) => (item._id === selectedCustomer._id ? { ...item, points: after } : item))
+      );
+      setCustomerEditForm((prev) => ({ ...prev, points: after.toString() }));
+      setCustomerOperations((prev) => {
+        const nextOperation: LoyaltyOperation = {
+          id: `${selectedCustomer._id}-${Date.now()}`,
+          date: new Date().toISOString(),
+          type: mode,
+          amount,
+          before,
+          after,
+        };
+        const existing = prev[selectedCustomer._id] ?? [];
+        return { ...prev, [selectedCustomer._id]: [nextOperation, ...existing].slice(0, 10) };
+      });
+      setLoyaltyActionResult(`Было ${before} → Стало ${after}`);
+      setLoyaltyActionAmount('');
+      notify({ title: mode === 'redeem' ? 'Баллы списаны' : 'Баллы начислены', type: 'success' });
+    } catch (error) {
+      console.error('Не удалось обновить баллы гостя', error);
+      notify({ title: extractErrorMessage(error, 'Не удалось обновить баллы гостя'), type: 'error' });
+    }
+  };
+
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
@@ -2026,10 +2174,115 @@ const AdminPage: React.FC = () => {
     selectedProduct?._id,
   ]);
 
+  useEffect(() => {
+    if (activeTab !== 'loyalty' || loyaltySection !== 'guests') {
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      loyaltySearchRef.current?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [activeTab, loyaltySection]);
+
   const loyaltySummary = useMemo<LoyaltyPointSummary>(() => ({
     totalPointsIssued: summary.totalPointsIssued,
     totalPointsRedeemed: summary.totalPointsRedeemed,
   }), [summary.totalPointsIssued, summary.totalPointsRedeemed]);
+
+  const loyaltyRateValue = Number(loyaltyRateDraft);
+  const loyaltyRateNormalized = Number.isFinite(loyaltyRateValue) ? loyaltyRateValue : loyaltyRate;
+  const loyaltyExampleBase = 100;
+  const loyaltyExampleCheck = 420;
+  const loyaltyExamplePerHundred = (loyaltyExampleBase * loyaltyRateNormalized) / 100;
+  const loyaltyExamplePoints = Math.round((loyaltyExampleCheck * loyaltyRateNormalized) / 100);
+
+  const loyaltySearchValue = loyaltySearch.trim();
+  const loyaltySearchDigits = normalizePhoneValue(loyaltySearchValue);
+
+  const loyaltyCustomersFiltered = useMemo(() => {
+    const lowerSearch = loyaltySearchValue.toLowerCase();
+    const matchesSearch = (customer: Customer) => {
+      if (!lowerSearch && !loyaltySearchDigits) {
+        return true;
+      }
+
+      const nameMatch = customer.name.toLowerCase().includes(lowerSearch);
+      const emailMatch = (customer.email ?? '').toLowerCase().includes(lowerSearch);
+      const phoneDigits = normalizePhoneValue(customer.phone);
+      let phoneMatch = false;
+
+      if (loyaltySearchDigits) {
+        phoneMatch =
+          loyaltySearchDigits.length === 4
+            ? phoneDigits.endsWith(loyaltySearchDigits)
+            : phoneDigits.includes(loyaltySearchDigits);
+      }
+
+      return nameMatch || emailMatch || phoneMatch;
+    };
+
+    let filtered = customers.filter(matchesSearch);
+
+    if (loyaltyFilter === 'withPoints') {
+      filtered = filtered.filter((customer) => customer.points > 0);
+    }
+    if (loyaltyFilter === 'zeroPoints') {
+      filtered = filtered.filter((customer) => customer.points === 0);
+    }
+    if (loyaltyFilter === 'top') {
+      filtered = [...filtered].sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 10);
+    }
+
+    const sorted = [...filtered].sort((a, b) => {
+      if (loyaltySort === 'points') {
+        return b.points - a.points;
+      }
+      if (loyaltySort === 'lastVisit') {
+        const aDate = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const bDate = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        return bDate - aDate;
+      }
+      return b.totalSpent - a.totalSpent;
+    });
+
+    return sorted;
+  }, [customers, loyaltyFilter, loyaltySearchDigits, loyaltySearchValue, loyaltySort]);
+
+  const loyaltyStats = useMemo(() => {
+    const totalGuests = customers.length;
+    const totalRevenue = customers.reduce((sum, customer) => sum + customer.totalSpent, 0);
+    const activeGuests = customers.filter((customer) => customer.points > 0);
+    const activeRevenue = activeGuests.reduce((sum, customer) => sum + customer.totalSpent, 0);
+    const averageActiveCheck = activeGuests.length > 0 ? activeRevenue / activeGuests.length : 0;
+
+    return {
+      totalGuests,
+      totalRevenue,
+      activeGuestsCount: activeGuests.length,
+      averageActiveCheck,
+    };
+  }, [customers]);
+
+  const isLoyaltyPanelOpen = Boolean(selectedCustomer || isCreatingCustomer);
+
+  useEffect(() => {
+    if (!isLoyaltyPanelOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedCustomer(null);
+        setIsCreatingCustomer(false);
+        setIsEditingCustomer(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLoyaltyPanelOpen]);
 
   const formatBillingDate = (value?: string | null) =>
     value ? new Date(value).toLocaleDateString('ru-RU') : '—';
@@ -3866,6 +4119,10 @@ const AdminPage: React.FC = () => {
 
   const handleSelectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
+    setIsCreatingCustomer(false);
+    setIsEditingCustomer(false);
+    setLoyaltyActionResult(null);
+    setLoyaltyActionAmount('');
     setCustomerEditForm({
       name: customer.name,
       phone: customer.phone ?? '',
@@ -3893,6 +4150,19 @@ const AdminPage: React.FC = () => {
         totalSpent: customerEditForm.totalSpent ? Number(customerEditForm.totalSpent) : undefined,
       });
       notify({ title: 'Клиент обновлён', type: 'success' });
+      setSelectedCustomer((prev) =>
+        prev
+          ? {
+              ...prev,
+              name: customerEditForm.name.trim(),
+              phone: customerEditForm.phone.trim(),
+              email: customerEditForm.email.trim() || undefined,
+              points: customerEditForm.points ? Number(customerEditForm.points) : prev.points,
+              totalSpent: customerEditForm.totalSpent ? Number(customerEditForm.totalSpent) : prev.totalSpent,
+            }
+          : prev
+      );
+      setIsEditingCustomer(false);
       void loadCustomers();
     } catch (error) {
       notify({ title: 'Не удалось обновить клиента', type: 'error' });
@@ -3913,6 +4183,7 @@ const AdminPage: React.FC = () => {
       await api.delete(`/api/customers/${selectedCustomer._id}`);
       setCustomers((prev) => prev.filter((item) => item._id !== selectedCustomer._id));
       setSelectedCustomer(null);
+      setIsEditingCustomer(false);
       notify({ title: 'Гость удалён', type: 'success' });
     } catch (error) {
       console.error('Не удалось удалить гостя', error);
@@ -7021,172 +7292,434 @@ const AdminPage: React.FC = () => {
         </div>
       ) : null}
       {activeTab === 'loyalty' ? (
-        <div className="lg:flex lg:items-start lg:gap-6">
-          <aside className="mb-4 w-full lg:mb-0 lg:w-64">
-            <Card title="Раздел лояльности">
-              <div className="mt-2 flex flex-col gap-2">
-                {[
-                  { id: 'settings', label: 'Настройки', description: 'Процент начисления баллов' },
-                  { id: 'guests', label: 'Гости', description: 'Список гостей и их баллы' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setLoyaltySection(item.id as typeof loyaltySection)}
-                    className={`flex flex-col rounded-xl border px-3 py-2 text-left transition hover:border-emerald-300 ${
-                      loyaltySection === item.id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'
-                    }`}
-                  >
-                    <span className="text-sm font-semibold text-slate-800">{item.label}</span>
-                    <span className="text-xs text-slate-500">{item.description}</span>
-                  </button>
-                ))}
-              </div>
-            </Card>
-          </aside>
-          <div className="flex-1 space-y-6">
-            {loyaltySection === 'settings' ? (
-              <section className="grid gap-6 lg:grid-cols-2">
-                <Card title="Начисление баллов">
-                  <form onSubmit={handleSaveLoyaltyRate} className="space-y-4 text-sm">
-                    <label className="block text-slate-600">
-                      <span className="mb-1 block text-xs uppercase text-slate-400">Процент от суммы чека</span>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.1"
-                        value={loyaltyRateDraft}
-                        onChange={(event) => setLoyaltyRateDraft(event.target.value)}
-                        className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                        placeholder="Например, 5"
-                      />
-                    </label>
-                    <p className="text-xs text-slate-500">
-                      Гость получит указанную долю от суммы оплаченного чека в виде баллов. Сейчас: {loyaltyRate}%.
-                    </p>
-                    <button
-                      type="submit"
-                      className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                      disabled={savingLoyaltyRate}
-                    >
-                      {savingLoyaltyRate ? 'Сохранение…' : 'Сохранить настройку'}
-                    </button>
-                  </form>
-                </Card>
-                <Card title="Списание баллов по категориям">
-                  <form onSubmit={handleSaveLoyaltyCategories} className="space-y-4 text-sm">
-                    <label className="flex items-center gap-2 text-sm text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={loyaltyRedeemAllDraft}
-                        onChange={(event) => {
-                          const nextValue = event.target.checked;
-                          setLoyaltyRedeemAllDraft(nextValue);
-                          if (nextValue) {
-                            setLoyaltyRedeemCategoryDraft([]);
-                          }
-                        }}
-                        className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-200"
-                      />
-                      <span>Все категории</span>
-                    </label>
-                    <div className="grid gap-2">
-                      {sortedCategories.length === 0 ? (
-                        <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-                          Категории ещё не созданы.
-                        </p>
-                      ) : (
-                        sortedCategories.map((category) => {
-                          const checked = loyaltyRedeemCategoryDraft.includes(category._id);
-                          return (
-                            <label key={category._id} className="flex items-center gap-2 text-sm text-slate-600">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                disabled={loyaltyRedeemAllDraft}
-                                onChange={() => handleToggleLoyaltyCategory(category._id)}
-                                className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-200 disabled:opacity-60"
-                              />
-                              <span>{category.name}</span>
-                            </label>
-                          );
-                        })
-                      )}
-                    </div>
-                    <button
-                      type="submit"
-                      className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                      disabled={savingLoyaltyCategories}
-                    >
-                      {savingLoyaltyCategories ? 'Сохранение…' : 'Сохранить настройку'}
-                    </button>
-                  </form>
-                </Card>
-                <Card title="Баллы лояльности">
-                  <div className="rounded-2xl bg-emerald-50 p-6 text-emerald-700">
-                    <p className="text-sm">Начислено</p>
-                    <p className="text-3xl font-bold">{loyaltySummary.totalPointsIssued.toFixed(0)} баллов</p>
-                    <p className="mt-4 text-sm">Использовано: {loyaltySummary.totalPointsRedeemed.toFixed(0)} баллов</p>
-                  </div>
-                </Card>
-              </section>
-            ) : null}
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { id: 'guests', label: 'Гости', description: 'Список гостей и их баллы' },
+              { id: 'settings', label: 'Правила начисления', description: 'Процент начисления баллов' },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setLoyaltySection(item.id as typeof loyaltySection)}
+                className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                  loyaltySection === item.id
+                    ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
 
-            {loyaltySection === 'guests' ? (
-              <section className="grid gap-6 lg:grid-cols-2">
-                <Card
-                  title="Гости"
-                  actions={
-                    <div className="flex flex-wrap items-center gap-2">
+          {loyaltySection === 'settings' ? (
+            <section className="grid gap-6 lg:grid-cols-2">
+              <Card title="Начисление баллов">
+                <form onSubmit={handleSaveLoyaltyRate} className="space-y-4 text-sm">
+                  <label className="block text-slate-600">
+                    <span className="mb-1 block text-xs uppercase text-slate-400">Процент от суммы чека</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={loyaltyRateDraft}
+                      onChange={(event) => setLoyaltyRateDraft(event.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                      placeholder="Например, 5"
+                    />
+                  </label>
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 p-4 text-xs text-emerald-700">
+                    <p className="font-semibold">Живой пример</p>
+                    <p className="mt-1">
+                      Гость получает {loyaltyExamplePerHundred.toFixed(1).replace('.0', '')} балла за каждые{' '}
+                      {loyaltyExampleBase} ₽.
+                    </p>
+                    <p className="mt-1">
+                      Пример: чек {loyaltyExampleCheck} ₽ → {loyaltyExamplePoints} баллов.
+                    </p>
+                  </div>
+                  <button
+                    type="submit"
+                    className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    disabled={savingLoyaltyRate}
+                  >
+                    {savingLoyaltyRate ? 'Сохранение…' : 'Сохранить настройку'}
+                  </button>
+                </form>
+              </Card>
+              <Card title="Списание баллов по категориям">
+                <form onSubmit={handleSaveLoyaltyCategories} className="space-y-4 text-sm">
+                  <label className="flex items-center gap-2 text-sm text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={loyaltyRedeemAllDraft}
+                      onChange={(event) => {
+                        const nextValue = event.target.checked;
+                        setLoyaltyRedeemAllDraft(nextValue);
+                        if (nextValue) {
+                          setLoyaltyRedeemCategoryDraft([]);
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-200"
+                    />
+                    <span>Все категории</span>
+                  </label>
+                  <div className="grid gap-2">
+                    {sortedCategories.length === 0 ? (
+                      <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+                        Категории ещё не созданы.
+                      </p>
+                    ) : (
+                      sortedCategories.map((category) => {
+                        const checked = loyaltyRedeemCategoryDraft.includes(category._id);
+                        return (
+                          <label key={category._id} className="flex items-center gap-2 text-sm text-slate-600">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={loyaltyRedeemAllDraft}
+                              onChange={() => handleToggleLoyaltyCategory(category._id)}
+                              className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-200 disabled:opacity-60"
+                            />
+                            <span>{category.name}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                  <button
+                    type="submit"
+                    className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    disabled={savingLoyaltyCategories}
+                  >
+                    {savingLoyaltyCategories ? 'Сохранение…' : 'Сохранить настройку'}
+                  </button>
+                </form>
+              </Card>
+              <Card title="Баллы лояльности">
+                <div className="rounded-2xl bg-emerald-50 p-6 text-emerald-700">
+                  <p className="text-sm">Начислено</p>
+                  <p className="text-3xl font-bold">{loyaltySummary.totalPointsIssued.toFixed(0)} баллов</p>
+                  <p className="mt-4 text-sm">Использовано: {loyaltySummary.totalPointsRedeemed.toFixed(0)} баллов</p>
+                </div>
+              </Card>
+            </section>
+          ) : null}
+
+          {loyaltySection === 'guests' ? (
+            <section className="space-y-4">
+              <div className="sticky top-4 z-20 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-soft backdrop-blur">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                    <span className="text-sm text-slate-400">🔍</span>
+                    <input
+                      ref={loyaltySearchRef}
+                      type="search"
+                      value={loyaltySearch}
+                      onChange={(event) => setLoyaltySearch(event.target.value)}
+                      className="w-full bg-transparent text-sm text-slate-700 outline-none"
+                      placeholder="Поиск по имени, телефону или email"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleStartCreateCustomer()}
+                    className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    Добавить гостя
+                  </button>
+                  <details className="relative">
+                    <summary className="cursor-pointer list-none rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:border-emerald-300">
+                      Ещё
+                    </summary>
+                    <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-slate-200 bg-white p-2 text-sm shadow-lg">
+                      <label className="block w-full cursor-pointer rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100">
+                        Импорт XLSX
+                        <input type="file" accept=".xlsx" onChange={handleImportCustomers} className="sr-only" />
+                      </label>
                       <button
                         type="button"
                         onClick={handleExportCustomersExcel}
                         disabled={customersLoading || customers.length === 0}
-                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-emerald-300 disabled:opacity-60"
+                        className="w-full rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-50"
                       >
                         Экспорт XLSX
                       </button>
-                      <label className="cursor-pointer rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-emerald-300">
-                        Импорт XLSX
-                        <input type="file" accept=".xlsx" onChange={handleImportCustomers} className="sr-only" />
-                      </label>
+                      <button
+                        type="button"
+                        onClick={handleDownloadCustomersTemplate}
+                        className="w-full rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100"
+                      >
+                        Скачать шаблон XLSX
+                      </button>
                     </div>
-                  }
-                >
-                  {customersLoading ? (
-                    <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
-                  ) : (
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="md:col-span-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-                        Формат импорта XLSX: «Имя», «Телефон», «Email», «Баллы», «Выручка».
-                      </div>
-                      <ul className="space-y-3 text-sm">
-                        {customers.map((customer) => (
-                          <li
-                            key={customer._id}
-                            onClick={() => handleSelectCustomer(customer)}
-                            className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-emerald-300 ${
-                              selectedCustomer?._id === customer._id ? 'ring-2 ring-emerald-400' : ''
+                  </details>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+                  <span>Найдено: {loyaltyCustomersFiltered.length}</span>
+                  <span>Поддерживается поиск по последним 4 цифрам телефона.</span>
+                </div>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-soft">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-2 text-xs text-slate-500">
+                        Сортировка:
+                        <select
+                          value={loyaltySort}
+                          onChange={(event) => setLoyaltySort(event.target.value as typeof loyaltySort)}
+                          className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600"
+                        >
+                          <option value="revenue">по выручке</option>
+                          <option value="points">по баллам</option>
+                          <option value="lastVisit">по последнему визиту</option>
+                        </select>
+                      </label>
+                      <div className="flex flex-wrap items-center gap-1 text-xs">
+                        {[
+                          { id: 'all', label: 'Все' },
+                          { id: 'withPoints', label: 'Есть баллы' },
+                          { id: 'zeroPoints', label: '0 баллов' },
+                          { id: 'top', label: 'Топ-гости' },
+                        ].map((filter) => (
+                          <button
+                            key={filter.id}
+                            type="button"
+                            onClick={() => setLoyaltyFilter(filter.id as typeof loyaltyFilter)}
+                            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                              loyaltyFilter === filter.id
+                                ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
+                                : 'border-slate-200 text-slate-500 hover:border-emerald-300'
                             }`}
                           >
-                            <div className="flex items-center justify-between">
+                            {filter.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setLoyaltyView('list')}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                          loyaltyView === 'list'
+                            ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
+                            : 'border-slate-200 text-slate-500 hover:border-emerald-300'
+                        }`}
+                      >
+                        Список
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLoyaltyView('grid')}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                          loyaltyView === 'grid'
+                            ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
+                            : 'border-slate-200 text-slate-500 hover:border-emerald-300'
+                        }`}
+                      >
+                        Сетка
+                      </button>
+                    </div>
+                  </div>
+
+                  {customersLoading ? (
+                    <div className="grid gap-2">
+                      {Array.from({ length: 6 }).map((_, index) => (
+                        <div key={index} className="h-16 animate-pulse rounded-2xl bg-slate-200/60" />
+                      ))}
+                    </div>
+                  ) : loyaltyCustomersFiltered.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                      <p className="font-semibold text-slate-700">Не найдено</p>
+                      <p className="mt-1">Проверьте номер или имя гостя.</p>
+                      <button
+                        type="button"
+                        onClick={() => handleStartCreateCustomer(loyaltySearchDigits || '')}
+                        className="mt-3 rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white"
+                      >
+                        Создать гостя с этим номером
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      className={
+                        loyaltyView === 'grid'
+                          ? 'grid gap-3 sm:grid-cols-1 lg:grid-cols-2'
+                          : 'flex flex-col gap-2'
+                      }
+                    >
+                      {loyaltyCustomersFiltered.map((customer) => {
+                        const pointsMuted = customer.points === 0;
+                        const phoneQuery = loyaltySearchDigits || loyaltySearchValue;
+                        return (
+                          <button
+                            key={customer._id}
+                            type="button"
+                            onClick={() => handleSelectCustomer(customer)}
+                            className={`w-full rounded-2xl border px-3 py-3 text-left text-sm transition hover:border-emerald-300 ${
+                              selectedCustomer?._id === customer._id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
                               <div>
-                                <p className="text-sm font-semibold text-slate-800">{customer.name}</p>
-                                <p className="text-xs text-slate-400">{customer.phone || 'Телефон не указан'}</p>
+                                <p className="text-sm font-semibold text-slate-800">
+                                  {highlightMatch(customer.name, loyaltySearchValue)}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {customer.phone
+                                    ? highlightMatch(customer.phone, phoneQuery)
+                                    : 'Телефон не указан'}
+                                </p>
+                                {customer.email ? (
+                                  <p className="text-[11px] text-slate-400">
+                                    {highlightMatch(customer.email, loyaltySearchValue)}
+                                  </p>
+                                ) : null}
                               </div>
                               <div className="text-right text-xs text-slate-500">
-                                <p>{customer.totalSpent.toFixed(2)} ₽</p>
-                                <p>{customer.points} баллов</p>
+                                <p className="font-semibold text-slate-700">{customer.totalSpent.toFixed(2)} ₽</p>
+                                <p className={pointsMuted ? 'text-slate-400' : 'text-emerald-600'}>
+                                  {customer.points} баллов
+                                </p>
                               </div>
                             </div>
-                          </li>
-                        ))}
-                      </ul>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="hidden lg:block">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
+                    <div className="flex items-start justify-between gap-4">
                       <div>
-                        {selectedCustomer ? (
+                        <p className="text-xs uppercase text-slate-400">
+                          {selectedCustomer ? 'Гость' : isCreatingCustomer ? 'Новый гость' : 'Аналитика базы'}
+                        </p>
+                        <p className="text-lg font-semibold text-slate-900">
+                          {selectedCustomer ? selectedCustomer.name : isCreatingCustomer ? 'Добавить гостя' : 'Быстрая сводка'}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {selectedCustomer
+                            ? selectedCustomer.phone || 'Телефон не указан'
+                            : 'Найдите гостя по телефону или добавьте нового.'}
+                        </p>
+                      </div>
+                      {isLoyaltyPanelOpen ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomer(null);
+                            setIsCreatingCustomer(false);
+                            setIsEditingCustomer(false);
+                          }}
+                          className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:border-slate-300"
+                        >
+                          ✕
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {selectedCustomer ? (
+                      <div className="mt-4 space-y-4 text-sm">
+                        <div className="rounded-2xl bg-slate-900 p-4 text-white">
+                          <p className="text-xs text-slate-300">Баланс баллов</p>
+                          <p className="text-3xl font-semibold">{selectedCustomer.points}</p>
+                          {loyaltyActionResult ? (
+                            <p className="mt-2 text-xs text-emerald-200">{loyaltyActionResult}</p>
+                          ) : null}
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={loyaltyActionAmount}
+                            onChange={(event) => setLoyaltyActionAmount(event.target.value)}
+                            className="rounded-2xl border border-slate-200 px-4 py-2"
+                            placeholder="Сколько баллов?"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustCustomerPoints('earn')}
+                            className="rounded-2xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-white"
+                          >
+                            Начислить
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustCustomerPoints('redeem')}
+                            className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600"
+                          >
+                            Списать
+                          </button>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                          <p className="font-semibold text-slate-700">Показатели гостя</p>
+                          <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                            <div>
+                              <p className="text-slate-400">Выручка</p>
+                              <p className="font-semibold text-slate-700">{selectedCustomer.totalSpent.toFixed(2)} ₽</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-400">Средний чек</p>
+                              <p className="font-semibold text-slate-700">{summary.avgCheck.toFixed(2)} ₽</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-400">Последний визит</p>
+                              <p className="font-semibold text-slate-700">
+                                {formatDateTime(selectedCustomer.updatedAt ?? selectedCustomer.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs uppercase text-slate-400">История операций</p>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingCustomer((prev) => !prev)}
+                              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:border-emerald-300"
+                            >
+                              {isEditingCustomer ? 'Скрыть редактирование' : 'Редактировать контакт'}
+                            </button>
+                          </div>
+                          <div className="space-y-2">
+                            {(customerOperations[selectedCustomer._id] ?? []).length ? (
+                              (customerOperations[selectedCustomer._id] ?? []).map((operation) => (
+                                <div
+                                  key={operation.id}
+                                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <p className="font-semibold text-slate-700">
+                                      {operation.type === 'earn' ? 'Начисление' : 'Списание'} · {operation.amount} баллов
+                                    </p>
+                                    <p className="text-slate-400">{formatDateTime(operation.date)}</p>
+                                  </div>
+                                  <p className="text-slate-500">
+                                    Было {operation.before} → Стало {operation.after}
+                                  </p>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-slate-400">Пока нет операций. Начислите или спишите баллы.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {isEditingCustomer ? (
                           <form onSubmit={handleUpdateCustomer} className="space-y-3 text-sm">
-                            <p className="text-xs uppercase text-slate-400">Карточка гостя</p>
+                            <p className="text-xs uppercase text-slate-400">Контакты гостя</p>
                             <input
                               type="text"
                               value={customerEditForm.name}
@@ -7214,35 +7747,11 @@ const AdminPage: React.FC = () => {
                               className="w-full rounded-2xl border border-slate-200 px-4 py-2"
                               placeholder="Email"
                             />
-                            <div className="grid gap-3 md:grid-cols-2">
-                              <input
-                                type="number"
-                                min="0"
-                                step="1"
-                                value={customerEditForm.points}
-                                onChange={(event) =>
-                                  setCustomerEditForm((prev) => ({ ...prev, points: event.target.value }))
-                                }
-                                className="rounded-2xl border border-slate-200 px-4 py-2"
-                                placeholder="Баллы"
-                              />
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={customerEditForm.totalSpent}
-                                onChange={(event) =>
-                                  setCustomerEditForm((prev) => ({ ...prev, totalSpent: event.target.value }))
-                                }
-                                className="rounded-2xl border border-slate-200 px-4 py-2"
-                                placeholder="Выручка"
-                              />
-                            </div>
                             <button
                               type="submit"
                               className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
                             >
-                              Сохранить гостя
+                              Сохранить контакты
                             </button>
                             <button
                               type="button"
@@ -7252,18 +7761,301 @@ const AdminPage: React.FC = () => {
                               Удалить гостя
                             </button>
                           </form>
-                        ) : (
-                          <p className="text-xs text-slate-400">
-                            Выберите гостя, чтобы управлять баллами и контактами.
-                          </p>
-                        )}
+                        ) : null}
                       </div>
+                    ) : isCreatingCustomer ? (
+                      <form onSubmit={handleCreateCustomer} className="mt-4 space-y-3 text-sm">
+                        <p className="text-xs uppercase text-slate-400">Контактные данные</p>
+                        <input
+                          type="text"
+                          value={newCustomerForm.name}
+                          onChange={(event) => setNewCustomerForm((prev) => ({ ...prev, name: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                          placeholder="Имя"
+                        />
+                        <input
+                          type="tel"
+                          value={newCustomerForm.phone}
+                          onChange={(event) => setNewCustomerForm((prev) => ({ ...prev, phone: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                          placeholder="Телефон"
+                        />
+                        <input
+                          type="email"
+                          value={newCustomerForm.email}
+                          onChange={(event) => setNewCustomerForm((prev) => ({ ...prev, email: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                          placeholder="Email"
+                        />
+                        <button
+                          type="submit"
+                          className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
+                        >
+                          Создать гостя
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="mt-4 space-y-3 text-sm text-slate-600">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-xs uppercase text-slate-400">Кол-во гостей</p>
+                            <p className="text-lg font-semibold text-slate-800">{loyaltyStats.totalGuests}</p>
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-xs uppercase text-slate-400">Суммарная выручка</p>
+                            <p className="text-lg font-semibold text-slate-800">
+                              {loyaltyStats.totalRevenue.toFixed(2)} ₽
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-xs uppercase text-slate-400">Активных</p>
+                            <p className="text-lg font-semibold text-slate-800">{loyaltyStats.activeGuestsCount}</p>
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-xs uppercase text-slate-400">Средний чек лояльных</p>
+                            <p className="text-lg font-semibold text-slate-800">
+                              {loyaltyStats.averageActiveCheck.toFixed(2)} ₽
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          Найдите гостя по телефону или добавьте нового, чтобы начислить или списать баллы.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {isLoyaltyPanelOpen ? (
+                <div className="fixed inset-0 z-40 flex items-start justify-center bg-slate-900/40 p-4 lg:hidden">
+                  <div className="mt-8 w-full max-w-lg rounded-3xl bg-white p-6 shadow-xl">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs uppercase text-slate-400">
+                          {selectedCustomer ? 'Гость' : isCreatingCustomer ? 'Новый гость' : 'Аналитика базы'}
+                        </p>
+                        <p className="text-lg font-semibold text-slate-900">
+                          {selectedCustomer ? selectedCustomer.name : isCreatingCustomer ? 'Добавить гостя' : 'Быстрая сводка'}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {selectedCustomer
+                            ? selectedCustomer.phone || 'Телефон не указан'
+                            : 'Найдите гостя по телефону или добавьте нового.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomer(null);
+                          setIsCreatingCustomer(false);
+                          setIsEditingCustomer(false);
+                        }}
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:border-slate-300"
+                      >
+                        ✕
+                      </button>
                     </div>
-                  )}
-                </Card>
-              </section>
-            ) : null}
-          </div>
+                    {selectedCustomer ? (
+                      <div className="mt-4 space-y-4 text-sm">
+                        <div className="rounded-2xl bg-slate-900 p-4 text-white">
+                          <p className="text-xs text-slate-300">Баланс баллов</p>
+                          <p className="text-3xl font-semibold">{selectedCustomer.points}</p>
+                          {loyaltyActionResult ? (
+                            <p className="mt-2 text-xs text-emerald-200">{loyaltyActionResult}</p>
+                          ) : null}
+                        </div>
+                        <div className="grid gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={loyaltyActionAmount}
+                            onChange={(event) => setLoyaltyActionAmount(event.target.value)}
+                            className="rounded-2xl border border-slate-200 px-4 py-2"
+                            placeholder="Сколько баллов?"
+                          />
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustCustomerPoints('earn')}
+                              className="rounded-2xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-white"
+                            >
+                              Начислить
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustCustomerPoints('redeem')}
+                              className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600"
+                            >
+                              Списать
+                            </button>
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                          <p className="font-semibold text-slate-700">Показатели гостя</p>
+                          <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                            <div>
+                              <p className="text-slate-400">Выручка</p>
+                              <p className="font-semibold text-slate-700">{selectedCustomer.totalSpent.toFixed(2)} ₽</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-400">Средний чек</p>
+                              <p className="font-semibold text-slate-700">{summary.avgCheck.toFixed(2)} ₽</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-400">Последний визит</p>
+                              <p className="font-semibold text-slate-700">
+                                {formatDateTime(selectedCustomer.updatedAt ?? selectedCustomer.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs uppercase text-slate-400">История операций</p>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingCustomer((prev) => !prev)}
+                              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:border-emerald-300"
+                            >
+                              {isEditingCustomer ? 'Скрыть редактирование' : 'Редактировать контакт'}
+                            </button>
+                          </div>
+                          <div className="space-y-2">
+                            {(customerOperations[selectedCustomer._id] ?? []).length ? (
+                              (customerOperations[selectedCustomer._id] ?? []).map((operation) => (
+                                <div
+                                  key={operation.id}
+                                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <p className="font-semibold text-slate-700">
+                                      {operation.type === 'earn' ? 'Начисление' : 'Списание'} · {operation.amount} баллов
+                                    </p>
+                                    <p className="text-slate-400">{formatDateTime(operation.date)}</p>
+                                  </div>
+                                  <p className="text-slate-500">
+                                    Было {operation.before} → Стало {operation.after}
+                                  </p>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-slate-400">Пока нет операций. Начислите или спишите баллы.</p>
+                            )}
+                          </div>
+                        </div>
+                        {isEditingCustomer ? (
+                          <form onSubmit={handleUpdateCustomer} className="space-y-3 text-sm">
+                            <p className="text-xs uppercase text-slate-400">Контакты гостя</p>
+                            <input
+                              type="text"
+                              value={customerEditForm.name}
+                              onChange={(event) =>
+                                setCustomerEditForm((prev) => ({ ...prev, name: event.target.value }))
+                              }
+                              className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                              placeholder="Имя"
+                            />
+                            <input
+                              type="tel"
+                              value={customerEditForm.phone}
+                              onChange={(event) =>
+                                setCustomerEditForm((prev) => ({ ...prev, phone: event.target.value }))
+                              }
+                              className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                              placeholder="Телефон"
+                            />
+                            <input
+                              type="email"
+                              value={customerEditForm.email}
+                              onChange={(event) =>
+                                setCustomerEditForm((prev) => ({ ...prev, email: event.target.value }))
+                              }
+                              className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                              placeholder="Email"
+                            />
+                            <button
+                              type="submit"
+                              className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
+                            >
+                              Сохранить контакты
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleDeleteCustomer}
+                              className="w-full rounded-2xl border border-red-200 bg-red-50 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                            >
+                              Удалить гостя
+                            </button>
+                          </form>
+                        ) : null}
+                      </div>
+                    ) : isCreatingCustomer ? (
+                      <form onSubmit={handleCreateCustomer} className="mt-4 space-y-3 text-sm">
+                        <p className="text-xs uppercase text-slate-400">Контактные данные</p>
+                        <input
+                          type="text"
+                          value={newCustomerForm.name}
+                          onChange={(event) => setNewCustomerForm((prev) => ({ ...prev, name: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                          placeholder="Имя"
+                        />
+                        <input
+                          type="tel"
+                          value={newCustomerForm.phone}
+                          onChange={(event) => setNewCustomerForm((prev) => ({ ...prev, phone: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                          placeholder="Телефон"
+                        />
+                        <input
+                          type="email"
+                          value={newCustomerForm.email}
+                          onChange={(event) => setNewCustomerForm((prev) => ({ ...prev, email: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-4 py-2"
+                          placeholder="Email"
+                        />
+                        <button
+                          type="submit"
+                          className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white"
+                        >
+                          Создать гостя
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="mt-4 space-y-3 text-sm text-slate-600">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-xs uppercase text-slate-400">Кол-во гостей</p>
+                            <p className="text-lg font-semibold text-slate-800">{loyaltyStats.totalGuests}</p>
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-xs uppercase text-slate-400">Суммарная выручка</p>
+                            <p className="text-lg font-semibold text-slate-800">
+                              {loyaltyStats.totalRevenue.toFixed(2)} ₽
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-xs uppercase text-slate-400">Активных</p>
+                            <p className="text-lg font-semibold text-slate-800">{loyaltyStats.activeGuestsCount}</p>
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-xs uppercase text-slate-400">Средний чек лояльных</p>
+                            <p className="text-lg font-semibold text-slate-800">
+                              {loyaltyStats.averageActiveCheck.toFixed(2)} ₽
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          Найдите гостя по телефону или добавьте нового, чтобы начислить или списать баллы.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
         </div>
       ) : null}
 
