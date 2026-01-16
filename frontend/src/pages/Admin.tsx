@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 import * as XLSX from 'xlsx';
@@ -438,9 +439,27 @@ const FISCAL_TAX_SYSTEM_OPTIONS: Array<{ value: string; label: string }> = [
 ];
 
 const formatInputDate = (date: Date): string => date.toISOString().slice(0, 10);
+const formatInputDateTime = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  const hours = `${date.getHours()}`.padStart(2, '0');
+  const minutes = `${date.getMinutes()}`.padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 const parseDateInput = (value: string): Date => {
   const [year, month, day] = value.split('-').map(Number);
   return new Date(year, month - 1, day, 0, 0, 0, 0);
+};
+const parseDateTimeInput = (value: string): Date => {
+  const [datePart, timePart] = value.split('T');
+  if (!datePart || !timePart) {
+    return new Date(value);
+  }
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hours, minutes] = timePart.split(':').map(Number);
+  return new Date(year, month - 1, day, hours || 0, minutes || 0, 0, 0);
 };
 
 const startOfDay = (value: Date): Date => {
@@ -524,6 +543,7 @@ const AdminPage: React.FC = () => {
     setIsNavOpen(false);
   }, [activeTab]);
   const todayInputValue = useMemo(() => formatInputDate(new Date()), []);
+  const nowInputValue = useMemo(() => formatInputDateTime(new Date()), []);
   const inventoryTabs = useMemo(
     () => [
       { id: 'warehouses' as const, label: 'Склады', description: 'Локации и сводка' },
@@ -654,7 +674,7 @@ const AdminPage: React.FC = () => {
   });
   const receiptItems = receiptForm?.items ?? [];
   const [receiptType, setReceiptType] = useState<'receipt' | 'writeOff'>('receipt');
-  const [receiptDate, setReceiptDate] = useState(() => todayInputValue);
+  const [receiptDate, setReceiptDate] = useState(() => nowInputValue);
   const [stockReceipts, setStockReceipts] = useState<StockReceipt[]>([]);
   const [stockReceiptsLoading, setStockReceiptsLoading] = useState(false);
   const [stockReceiptsError, setStockReceiptsError] = useState<string | null>(null);
@@ -672,6 +692,14 @@ const AdminPage: React.FC = () => {
   const [mobileReceiptPreview, setMobileReceiptPreview] = useState<StockReceipt | null>(null);
   const [isMobileView, setIsMobileView] = useState(false);
   const [pendingReceiptFocusIndex, setPendingReceiptFocusIndex] = useState<number | null>(null);
+  const [activeReceiptSearchIndex, setActiveReceiptSearchIndex] = useState<number | null>(null);
+  const [receiptSearchPosition, setReceiptSearchPosition] = useState<{
+    index: number;
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const [inventoryAuditForm, setInventoryAuditForm] = useState({
     warehouseId: '',
     performedAt: todayInputValue,
@@ -1205,12 +1233,20 @@ const AdminPage: React.FC = () => {
     return `${count} позиций`;
   }, []);
 
-  const formatReceiptValue = useCallback((value: number) => {
-    if (!Number.isFinite(value)) {
-      return '0';
-    }
-    return value.toFixed(4).replace(/\.?0+$/, '');
+  const roundReceiptCost = useCallback((value: number) => {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
   }, []);
+
+  const formatReceiptValue = useCallback(
+    (value: number) => {
+      if (!Number.isFinite(value)) {
+        return '0';
+      }
+      const rounded = roundReceiptCost(value);
+      return rounded.toFixed(2).replace(/\.?0+$/, '');
+    },
+    [roundReceiptCost]
+  );
 
   const calculateReceiptTotal = useCallback((receipt: StockReceipt) => {
     const sign = receipt.type === 'writeOff' ? -1 : 1;
@@ -1278,6 +1314,30 @@ const AdminPage: React.FC = () => {
     }
     return lookup;
   }, [receiptItemOptions]);
+
+  const receiptItemSearchLimit = 25;
+  const filterReceiptItemOptions = useCallback(
+    (query: string) => {
+      const normalized = query.trim().toLowerCase();
+      if (!normalized) {
+        return receiptItemOptions.slice(0, receiptItemSearchLimit);
+      }
+
+      return receiptItemOptions
+        .filter((option) => {
+          const name = option.name.toLowerCase();
+          const display = option.displayValue.toLowerCase();
+          const typeLabel = option.typeLabel.toLowerCase();
+          return (
+            name.includes(normalized) ||
+            display.includes(normalized) ||
+            typeLabel.includes(normalized)
+          );
+        })
+        .slice(0, receiptItemSearchLimit);
+    },
+    [receiptItemOptions]
+  );
 
   const getInventoryItemName = useCallback(
     (itemType: 'ingredient' | 'product', itemId: string): string => {
@@ -3652,9 +3712,7 @@ const AdminPage: React.FC = () => {
           current.search = match.displayValue;
         } else {
           current.search = value;
-          if (!trimmed) {
-            current.itemId = '';
-          }
+          current.itemId = '';
         }
 
         items[index] = current;
@@ -3662,6 +3720,24 @@ const AdminPage: React.FC = () => {
       });
     },
     [receiptItemOptionLookup]
+  );
+
+  const handleSelectReceiptOption = useCallback(
+    (index: number, option: { id: string; type: 'ingredient' | 'product'; displayValue: string }) => {
+      setReceiptForm((prev) => {
+        const items = [...prev.items];
+        items[index] = {
+          ...items[index],
+          itemId: option.id,
+          itemType: option.type,
+          search: option.displayValue,
+        };
+        return { ...prev, items };
+      });
+      setActiveReceiptSearchIndex(null);
+      setPendingReceiptFocusIndex(index);
+    },
+    []
   );
 
   const adjustReceiptItemQuantity = useCallback(
@@ -3703,7 +3779,7 @@ const AdminPage: React.FC = () => {
   const resetReceiptForm = (preserveWarehouse = false) => {
     setSelectedStockReceipt(null);
     setReceiptType('receipt');
-    setReceiptDate(formatInputDate(new Date()));
+    setReceiptDate(formatInputDateTime(new Date()));
     setReceiptForm({
       warehouseId: preserveWarehouse ? receiptForm.warehouseId : '',
       supplierId: '',
@@ -3732,7 +3808,9 @@ const AdminPage: React.FC = () => {
 
       setSelectedStockReceipt(receipt);
       setReceiptType(receipt.type === 'writeOff' ? 'writeOff' : 'receipt');
-      setReceiptDate(receipt.occurredAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+      setReceiptDate(
+        receipt.occurredAt ? formatInputDateTime(new Date(receipt.occurredAt)) : formatInputDateTime(new Date())
+      );
       setReceiptForm({
         warehouseId: receipt.warehouseId,
         supplierId: receipt.supplierId ?? '',
@@ -3798,6 +3876,74 @@ const AdminPage: React.FC = () => {
   }, []);
 
   const receiptItemSearchRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const receiptSearchBlurTimeoutRef = useRef<number | null>(null);
+
+  const clearReceiptSearchBlurTimeout = useCallback(() => {
+    if (receiptSearchBlurTimeoutRef.current === null) {
+      return;
+    }
+    window.clearTimeout(receiptSearchBlurTimeoutRef.current);
+    receiptSearchBlurTimeoutRef.current = null;
+  }, []);
+
+  const scheduleReceiptSearchClose = useCallback(
+    (index: number) => {
+      clearReceiptSearchBlurTimeout();
+      receiptSearchBlurTimeoutRef.current = window.setTimeout(() => {
+        setActiveReceiptSearchIndex((current) => (current === index ? null : current));
+        receiptSearchBlurTimeoutRef.current = null;
+      }, 150);
+    },
+    [clearReceiptSearchBlurTimeout]
+  );
+
+  const updateReceiptSearchPosition = useCallback(
+    (index: number) => {
+      const target = receiptItemSearchRefs.current[index];
+      if (!target) {
+        return;
+      }
+      const rect = target.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const gap = 6;
+      const spaceBelow = Math.max(0, viewportHeight - rect.bottom - gap);
+      const spaceAbove = Math.max(0, rect.top - gap);
+      const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
+      const availableSpace = openUp ? spaceAbove : spaceBelow;
+      const maxHeight = Math.min(280, availableSpace);
+      if (maxHeight <= 0) {
+        return;
+      }
+      const top = openUp ? Math.max(gap, rect.top - maxHeight - gap) : rect.bottom + gap;
+
+      setReceiptSearchPosition({
+        index,
+        top,
+        left: rect.left,
+        width: rect.width,
+        maxHeight,
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (activeReceiptSearchIndex === null) {
+      setReceiptSearchPosition(null);
+      return;
+    }
+
+    const updatePosition = () => updateReceiptSearchPosition(activeReceiptSearchIndex);
+    updatePosition();
+
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [activeReceiptSearchIndex, updateReceiptSearchPosition]);
 
   useEffect(() => {
     if (pendingReceiptFocusIndex === null) {
@@ -3844,14 +3990,14 @@ const AdminPage: React.FC = () => {
       return;
     }
 
-    const occurredDate = parseDateInput(receiptDate);
+    const occurredDate = parseDateTimeInput(receiptDate);
 
     if (Number.isNaN(occurredDate.getTime())) {
       notify({ title: 'Некорректная дата документа', type: 'info' });
       return;
     }
 
-    if (occurredDate.getTime() > endOfDay(new Date()).getTime()) {
+    if (occurredDate.getTime() > new Date().getTime()) {
       notify({ title: 'Дата документа не может быть в будущем', type: 'info' });
       return;
     }
@@ -3861,7 +4007,7 @@ const AdminPage: React.FC = () => {
         itemType: entry.itemType,
         itemId: entry.itemId,
         quantity: entry.quantity ? Number(entry.quantity) : 0,
-        unitCost: entry.unitCost ? Number(entry.unitCost) : 0,
+        unitCost: entry.unitCost ? roundReceiptCost(Number(entry.unitCost)) : 0,
       }))
       .filter((entry) => entry.itemId && entry.quantity > 0);
 
@@ -6792,9 +6938,9 @@ const AdminPage: React.FC = () => {
                               <option value="writeOff">Списание</option>
                             </select>
                             <input
-                              type="date"
+                              type="datetime-local"
                               value={receiptDate}
-                              max={todayInputValue}
+                              max={nowInputValue}
                               onChange={(event) => setReceiptDate(event.target.value)}
                               className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                             />
@@ -6874,21 +7020,79 @@ const AdminPage: React.FC = () => {
                                       ? item.search
                                       : receiptItemOptionById.get(optionKey)?.displayValue ??
                                         (item.itemId ? getInventoryItemName(item.itemType, item.itemId) : '');
+                                  const filteredOptions = filterReceiptItemOptions(optionLabel);
 
                                   return (
                                     <tr key={`${item.itemId}-${index}`} className="border-t border-slate-100">
                                       <td className="px-3 py-2">
-                                        <input
-                                          ref={(element) => {
-                                            receiptItemSearchRefs.current[index] = element;
-                                          }}
-                                          type="text"
-                                          list="receipt-item-options"
-                                          value={optionLabel}
-                                          onChange={(event) => handleReceiptItemSearchChange(index, event.target.value)}
-                                          placeholder="Поиск позиции"
-                                          className="w-full rounded-xl border border-slate-200 px-2 py-2"
-                                        />
+                                        <div className="relative">
+                                          <input
+                                            ref={(element) => {
+                                              receiptItemSearchRefs.current[index] = element;
+                                            }}
+                                            type="text"
+                                            value={optionLabel}
+                                            onChange={(event) =>
+                                              handleReceiptItemSearchChange(index, event.target.value)
+                                            }
+                                            onFocus={() => {
+                                              clearReceiptSearchBlurTimeout();
+                                              setActiveReceiptSearchIndex(index);
+                                              updateReceiptSearchPosition(index);
+                                            }}
+                                            onBlur={() => scheduleReceiptSearchClose(index)}
+                                            placeholder="Поиск позиции"
+                                            className="w-full rounded-xl border border-slate-200 px-2 py-2"
+                                          />
+                                          {activeReceiptSearchIndex === index &&
+                                          receiptSearchPosition?.index === index
+                                            ? createPortal(
+                                                <div
+                                                  className="z-50 overflow-y-auto rounded-xl border border-slate-200 bg-white text-xs shadow-lg"
+                                                  style={{
+                                                    position: 'fixed',
+                                                    top: receiptSearchPosition.top,
+                                                    left: receiptSearchPosition.left,
+                                                    width: receiptSearchPosition.width,
+                                                    maxHeight: receiptSearchPosition.maxHeight,
+                                                  }}
+                                                  onMouseDown={clearReceiptSearchBlurTimeout}
+                                                  onWheel={(event) => {
+                                                    event.stopPropagation();
+                                                  }}
+                                                  onTouchMove={(event) => {
+                                                    event.stopPropagation();
+                                                  }}
+                                                >
+                                                  {filteredOptions.length ? (
+                                                    filteredOptions.map((option) => (
+                                                      <button
+                                                        key={`${option.type}-${option.id}`}
+                                                        type="button"
+                                                        onMouseDown={(event) => {
+                                                          event.preventDefault();
+                                                          handleSelectReceiptOption(index, option);
+                                                        }}
+                                                        className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-emerald-50"
+                                                      >
+                                                        <span className="font-semibold text-slate-700">
+                                                          {option.name}
+                                                        </span>
+                                                        <span className="text-[10px] uppercase text-slate-400">
+                                                          {option.typeLabel}
+                                                        </span>
+                                                      </button>
+                                                    ))
+                                                  ) : (
+                                                    <div className="px-3 py-2 text-[11px] text-slate-400">
+                                                      Ничего не найдено
+                                                    </div>
+                                                  )}
+                                                </div>,
+                                                document.body
+                                              )
+                                            : null}
+                                        </div>
                                       </td>
                                       <td className="px-3 py-2">
                                         <div className="flex items-center gap-1">
@@ -6967,15 +7171,6 @@ const AdminPage: React.FC = () => {
                             </table>
                           </div>
                         </div>
-                        <datalist id="receipt-item-options">
-                          {receiptItemOptions.map((option) => (
-                            <option
-                              key={`${option.type}-${option.id}`}
-                              value={option.displayValue}
-                              label={option.typeLabel}
-                            />
-                          ))}
-                        </datalist>
                       </div>
                     </form>
                     <div className="sticky bottom-0 border-t border-slate-200 bg-white px-4 py-3">
