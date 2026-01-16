@@ -3861,30 +3861,24 @@ const AdminPage: React.FC = () => {
       return;
     }
 
-    const handlePointerDown = (event: MouseEvent) => {
+    const handlePointerDown = (event: PointerEvent) => {
       const dropdown = receiptSearchDropdownRef.current;
       const input = receiptItemSearchRefs.current[activeReceiptSearchIndex];
-      if (dropdown?.contains(event.target as Node) || input?.contains(event.target as Node)) {
+      const path = event.composedPath ? event.composedPath() : [];
+
+      if (
+        (dropdown && path.includes(dropdown)) ||
+        (input && (path.includes(input) || input.contains(event.target as Node)))
+      ) {
         return;
       }
       setActiveReceiptSearchIndex(null);
     };
 
-    const handleFocusIn = (event: FocusEvent) => {
-      const dropdown = receiptSearchDropdownRef.current;
-      const input = receiptItemSearchRefs.current[activeReceiptSearchIndex];
-      if (dropdown?.contains(event.target as Node) || input?.contains(event.target as Node)) {
-        return;
-      }
-      setActiveReceiptSearchIndex(null);
-    };
-
-    window.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('focusin', handleFocusIn);
+    window.addEventListener('pointerdown', handlePointerDown);
 
     return () => {
-      window.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('focusin', handleFocusIn);
+      window.removeEventListener('pointerdown', handlePointerDown);
     };
   }, [activeReceiptSearchIndex]);
 
