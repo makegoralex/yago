@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth';
 import { useToast } from '../providers/ToastProvider';
 import { useRestaurantStore } from '../store/restaurant';
-import { useTheme } from '../providers/ThemeProvider';
 
 const SettingsPage: React.FC = () => {
   const user = useAuthStore((state) => state.user);
@@ -13,16 +12,11 @@ const SettingsPage: React.FC = () => {
   const restaurantLogo = useRestaurantStore((state) => state.logoUrl);
   const navigate = useNavigate();
   const { notify } = useToast();
-  const { theme, setThemeForScope } = useTheme();
 
   const handleLogout = () => {
     clearSession();
     notify({ title: 'Вы вышли из аккаунта', type: 'info' });
     navigate('/login');
-  };
-
-  const handleThemeToggle = () => {
-    setThemeForScope('pos', theme === 'light' ? 'dark' : 'light');
   };
 
   return (
@@ -61,17 +55,6 @@ const SettingsPage: React.FC = () => {
           <p>Email: {user?.email}</p>
           <p>Роль: {user?.role}</p>
         </div>
-      </section>
-
-      <section className="rounded-3xl bg-white p-6 shadow-soft">
-        <h2 className="text-lg font-semibold text-slate-900">Тема кассы</h2>
-        <button
-          type="button"
-          onClick={handleThemeToggle}
-          className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700"
-        >
-          {theme === 'light' ? 'Переключить на тёмную' : 'Переключить на светлую'}
-        </button>
       </section>
 
       <button
