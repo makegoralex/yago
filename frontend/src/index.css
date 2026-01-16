@@ -11,6 +11,11 @@
   --bg-secondary: #eef2ff;
   --bg-card: #ffffff;
 
+  --accent-primary: #7c3aed;
+  --accent-secondary: #22c55e;
+  --accent-danger: #ef4444;
+  --accent-warning: #f59e0b;
+
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --text-muted: #64748b;

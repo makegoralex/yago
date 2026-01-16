@@ -4157,9 +4157,17 @@ const AdminPage: React.FC = () => {
         <div className="mx-auto flex flex-col gap-3 px-4 py-3 lg:px-8">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-soft">
-                YG
-              </div>
+              {restaurantLogo ? (
+                <img
+                  src={restaurantLogo}
+                  alt={restaurantName || 'Yago POS'}
+                  className="h-10 w-10 rounded-xl border border-slate-200 bg-white object-cover shadow-soft"
+                />
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-soft">
+                  YG
+                </div>
+              )}
               <div className="leading-tight">
                 <p className="text-xs uppercase tracking-wide text-slate-400">Админ-панель</p>
                 <p className="text-sm font-semibold text-slate-900">{restaurantName || 'Yago POS'}</p>
