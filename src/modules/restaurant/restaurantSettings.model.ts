@@ -6,6 +6,8 @@ export interface IRestaurantSettings extends Document {
   enableOrderTags: boolean;
   measurementUnits: string[];
   loyaltyRate: number;
+  loyaltyRedeemAllCategories: boolean;
+  loyaltyRedeemCategoryIds: string[];
   singletonKey: string;
   organizationId: Types.ObjectId;
   createdAt: Date;
@@ -51,6 +53,14 @@ const restaurantSettingsSchema = new Schema<IRestaurantSettings>(
       default: 5,
       min: 0,
       max: 100,
+    },
+    loyaltyRedeemAllCategories: {
+      type: Boolean,
+      default: true,
+    },
+    loyaltyRedeemCategoryIds: {
+      type: [String],
+      default: [],
     },
   },
   { timestamps: true }

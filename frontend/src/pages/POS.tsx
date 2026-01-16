@@ -182,10 +182,33 @@ const POSPage: React.FC = () => {
   const [isShiftPanelOpen, setShiftPanelOpen] = useState(false);
   const [modifierProduct, setModifierProduct] = useState<Product | null>(null);
   const orderTagsEnabled = useRestaurantStore((state) => state.enableOrderTags);
-  const redeemablePoints = useMemo(
-    () => Math.max((customer?.points ?? 0) - manualDiscount, 0),
-    [customer?.points, manualDiscount]
+  const loyaltyRedeemAllCategories = useRestaurantStore((state) => state.loyaltyRedeemAllCategories);
+  const loyaltyRedeemCategoryIds = useRestaurantStore((state) => state.loyaltyRedeemCategoryIds);
+  const redeemablePoints = useMemo(() => Math.max((customer?.points ?? 0) - manualDiscount, 0), [customer?.points, manualDiscount]);
+  const loyaltyCategorySet = useMemo(
+    () => new Set(loyaltyRedeemCategoryIds),
+    [loyaltyRedeemCategoryIds]
   );
+  const loyaltyEligibleSubtotal = useMemo(() => {
+    if (loyaltyRedeemAllCategories) {
+      return subtotal;
+    }
+    if (!loyaltyRedeemCategoryIds.length) {
+      return 0;
+    }
+    const totalEligible = items.reduce((acc, item) => {
+      if (item.categoryId && loyaltyCategorySet.has(item.categoryId)) {
+        return acc + item.total;
+      }
+      return acc;
+    }, 0);
+    return Math.round(totalEligible * 100) / 100;
+  }, [items, loyaltyCategorySet, loyaltyRedeemAllCategories, loyaltyRedeemCategoryIds.length, subtotal]);
+  const maxLoyaltyAmount = useMemo(() => {
+    const minimumPayable = subtotal >= 1 ? 1 : subtotal;
+    const remainingTotal = Math.max(subtotal - discount - minimumPayable, 0);
+    return Math.max(Math.min(remainingTotal, loyaltyEligibleSubtotal), 0);
+  }, [subtotal, discount, loyaltyEligibleSubtotal]);
 
   useEffect(() => {
     void fetchCatalog();
@@ -364,7 +387,7 @@ const POSPage: React.FC = () => {
         setRedeemOpen(false);
         return;
       }
-      await redeemPoints(pointsValue);
+      await redeemPoints(pointsValue, { maxAmount: maxLoyaltyAmount });
       setRedeemOpen(false);
     } catch (error) {
       // ignore
@@ -709,7 +732,7 @@ const POSPage: React.FC = () => {
               orderTag={orderTag}
               onChangeOrderTag={(nextTag) => void handleOrderTagChange(nextTag)}
               onRedeemLoyalty={() => {
-                if (!customer || redeemablePoints <= 0) {
+                if (!customer || redeemablePoints <= 0 || maxLoyaltyAmount <= 0) {
                   return;
                 }
                 setRedeemOpen(true);
@@ -750,7 +773,7 @@ const POSPage: React.FC = () => {
         open={isRedeemOpen}
         onClose={() => setRedeemOpen(false)}
         maxPoints={redeemablePoints}
-        maxAmount={Math.max(subtotal - discount - (subtotal >= 1 ? 1 : subtotal), 0)}
+        maxAmount={maxLoyaltyAmount}
         onSubmit={(value) => handleRedeemConfirm(value)}
         isProcessing={isRedeeming}
       />

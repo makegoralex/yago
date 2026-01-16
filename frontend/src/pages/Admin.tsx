@@ -674,16 +674,26 @@ const AdminPage: React.FC = () => {
   const enableOrderTags = useRestaurantStore((state) => state.enableOrderTags);
   const measurementUnits = useRestaurantStore((state) => state.measurementUnits);
   const loyaltyRate = useRestaurantStore((state) => state.loyaltyRate);
+  const loyaltyRedeemAllCategories = useRestaurantStore((state) => state.loyaltyRedeemAllCategories);
+  const loyaltyRedeemCategoryIds = useRestaurantStore((state) => state.loyaltyRedeemCategoryIds);
   const updateRestaurantBranding = useRestaurantStore((state) => state.updateBranding);
   const resetRestaurantBranding = useRestaurantStore((state) => state.resetBranding);
   const [loyaltyRateDraft, setLoyaltyRateDraft] = useState(loyaltyRate.toString());
   const [savingLoyaltyRate, setSavingLoyaltyRate] = useState(false);
+  const [loyaltyRedeemAllDraft, setLoyaltyRedeemAllDraft] = useState(loyaltyRedeemAllCategories);
+  const [loyaltyRedeemCategoryDraft, setLoyaltyRedeemCategoryDraft] = useState<string[]>(loyaltyRedeemCategoryIds);
+  const [savingLoyaltyCategories, setSavingLoyaltyCategories] = useState(false);
   const [brandingForm, setBrandingForm] = useState({ name: restaurantName, logoUrl: restaurantLogo });
   const [brandingSaving, setBrandingSaving] = useState(false);
 
   useEffect(() => {
     setBrandingForm({ name: restaurantName, logoUrl: restaurantLogo });
   }, [restaurantName, restaurantLogo]);
+
+  useEffect(() => {
+    setLoyaltyRedeemAllDraft(loyaltyRedeemAllCategories);
+    setLoyaltyRedeemCategoryDraft(loyaltyRedeemCategoryIds);
+  }, [loyaltyRedeemAllCategories, loyaltyRedeemCategoryIds]);
   const [discountForm, setDiscountForm] = useState({
     name: '',
     description: '',
@@ -1771,6 +1781,35 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const handleToggleLoyaltyCategory = (categoryId: string) => {
+    setLoyaltyRedeemCategoryDraft((prev) => {
+      const exists = prev.includes(categoryId);
+      if (exists) {
+        return prev.filter((id) => id !== categoryId);
+      }
+      return [...prev, categoryId];
+    });
+  };
+
+  const handleSaveLoyaltyCategories = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    try {
+      setSavingLoyaltyCategories(true);
+      const payload = {
+        loyaltyRedeemAllCategories: loyaltyRedeemAllDraft,
+        loyaltyRedeemCategoryIds: loyaltyRedeemAllDraft ? [] : loyaltyRedeemCategoryDraft,
+      };
+      await updateRestaurantBranding(payload);
+      notify({ title: 'Настройки списания баллов обновлены', type: 'success' });
+    } catch (error) {
+      console.error('Не удалось сохранить настройки списания баллов', error);
+      notify({ title: 'Не удалось сохранить настройки списания баллов', type: 'error' });
+    } finally {
+      setSavingLoyaltyCategories(false);
+    }
+  };
+
   const handleExportCustomersExcel = () => {
     if (!customers.length) {
       notify({ title: 'Нет гостей для выгрузки', type: 'info' });
@@ -1905,6 +1944,9 @@ const AdminPage: React.FC = () => {
     }
 
     if (activeTab === 'loyalty') {
+      if (!menuLoading && categories.length === 0) {
+        void loadMenuData();
+      }
       if (!customersLoading && customers.length === 0) {
         void loadCustomers();
       }
@@ -7029,6 +7071,55 @@ const AdminPage: React.FC = () => {
                       disabled={savingLoyaltyRate}
                     >
                       {savingLoyaltyRate ? 'Сохранение…' : 'Сохранить настройку'}
+                    </button>
+                  </form>
+                </Card>
+                <Card title="Списание баллов по категориям">
+                  <form onSubmit={handleSaveLoyaltyCategories} className="space-y-4 text-sm">
+                    <label className="flex items-center gap-2 text-sm text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={loyaltyRedeemAllDraft}
+                        onChange={(event) => {
+                          const nextValue = event.target.checked;
+                          setLoyaltyRedeemAllDraft(nextValue);
+                          if (nextValue) {
+                            setLoyaltyRedeemCategoryDraft([]);
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-200"
+                      />
+                      <span>Все категории</span>
+                    </label>
+                    <div className="grid gap-2">
+                      {sortedCategories.length === 0 ? (
+                        <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+                          Категории ещё не созданы.
+                        </p>
+                      ) : (
+                        sortedCategories.map((category) => {
+                          const checked = loyaltyRedeemCategoryDraft.includes(category._id);
+                          return (
+                            <label key={category._id} className="flex items-center gap-2 text-sm text-slate-600">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={loyaltyRedeemAllDraft}
+                                onChange={() => handleToggleLoyaltyCategory(category._id)}
+                                className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-200 disabled:opacity-60"
+                              />
+                              <span>{category.name}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                    <button
+                      type="submit"
+                      className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      disabled={savingLoyaltyCategories}
+                    >
+                      {savingLoyaltyCategories ? 'Сохранение…' : 'Сохранить настройку'}
                     </button>
                   </form>
                 </Card>
