@@ -26,6 +26,7 @@ import { calculateOrderTotals } from '../discounts/discount.service';
 import { PrintJobModel } from '../printing/printJob.model';
 import { ShiftDocument, ShiftModel } from '../shifts/shift.model';
 import { orderSchemas, type OrderItemsBody, type OrderPaymentBody, type StartOrderBody } from '../../validation/orderSchemas';
+import { getRestaurantBranding } from '../restaurant/restaurantSettings.service';
 
 const router = Router();
 
@@ -115,6 +116,39 @@ const findOrderForOrganization = (
 };
 
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
+
+const clampManualDiscountByCategories = (
+  manualDiscount: number | undefined,
+  items: OrderItem[],
+  rules: { allCategories: boolean; categoryIds: string[] }
+): number | undefined => {
+  if (typeof manualDiscount !== 'number' || Number.isNaN(manualDiscount) || manualDiscount <= 0) {
+    return manualDiscount;
+  }
+
+  if (rules.allCategories) {
+    return manualDiscount;
+  }
+
+  if (!rules.categoryIds.length) {
+    return 0;
+  }
+
+  const allowedIds = new Set(rules.categoryIds.filter((id) => isValidObjectId(id)));
+  if (!allowedIds.size) {
+    return 0;
+  }
+
+  const eligibleTotal = items.reduce((acc, item) => {
+    const categoryId = item.categoryId?.toString();
+    if (categoryId && allowedIds.has(categoryId)) {
+      return acc + (typeof item.total === 'number' ? item.total : 0);
+    }
+    return acc;
+  }, 0);
+
+  return Math.min(manualDiscount, roundCurrency(eligibleTotal));
+};
 
 const normalizeOrderTag = (value: unknown): OrderTag | null => {
   if (value === undefined || value === null || value === '') {
@@ -744,12 +778,18 @@ router.post(
       return;
     }
 
+    const branding = await getRestaurantBranding(organizationId);
+    const manualDiscount = clampManualDiscountByCategories(payload.manualDiscount, items, {
+      allCategories: branding.loyaltyRedeemAllCategories,
+      categoryIds: branding.loyaltyRedeemCategoryIds,
+    });
+
     let calculation: Awaited<ReturnType<typeof calculateOrderTotals>>;
     try {
       calculation = await calculateOrderTotals({
         items,
         selectedDiscountIds: payload.discountIds,
-        manualDiscount: payload.manualDiscount,
+        manualDiscount,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to calculate totals';

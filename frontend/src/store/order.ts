@@ -125,7 +125,7 @@ type OrderState = {
   setOrderTag: (tag: OrderTag | null) => Promise<void>;
   fetchActiveOrders: () => Promise<void>;
   loadOrder: (orderId: string) => Promise<void>;
-  redeemPoints: (points: number) => Promise<void>;
+  redeemPoints: (points: number, options?: { maxAmount?: number }) => Promise<void>;
   clearDiscount: () => Promise<void>;
   fetchAvailableDiscounts: () => Promise<void>;
   toggleDiscount: (discountId: string) => Promise<void>;
@@ -831,7 +831,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       set({ loading: false });
     }
   },
-  async redeemPoints(points) {
+  async redeemPoints(points, options) {
     const { customer, customerId, orderId, subtotal, discount, manualDiscount } = get();
 
     if (!orderId || !customerId || !customer) {
@@ -844,7 +844,11 @@ export const useOrderStore = create<OrderState>((set, get) => ({
 
     const minimumPayable = subtotal >= 1 ? 1 : subtotal;
     const remainingTotal = Math.max(subtotal - discount - minimumPayable, 0);
-    if (points > remainingTotal) {
+    const cappedMax =
+      typeof options?.maxAmount === 'number' && Number.isFinite(options.maxAmount)
+        ? Math.min(options.maxAmount, remainingTotal)
+        : remainingTotal;
+    if (points > cappedMax) {
       throw new Error('Баллы превышают сумму заказа');
     }
 
