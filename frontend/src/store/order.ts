@@ -842,7 +842,8 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       throw new Error('Укажите количество баллов для списания');
     }
 
-    const remainingTotal = Math.max(subtotal - discount, 0);
+    const minimumPayable = subtotal >= 1 ? 1 : subtotal;
+    const remainingTotal = Math.max(subtotal - discount - minimumPayable, 0);
     if (points > remainingTotal) {
       throw new Error('Баллы превышают сумму заказа');
     }

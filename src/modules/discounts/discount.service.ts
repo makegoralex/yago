@@ -189,6 +189,8 @@ export const calculateOrderTotals = async (
     };
   }
 
+  const minimumPayable = subtotal >= 1 ? 1 : subtotal;
+
   const productTotals = new Map<string, { total: number; name: string }>();
   const categoryTotals = new Map<string, { total: number; name: string }>();
 
@@ -263,7 +265,7 @@ export const calculateOrderTotals = async (
     targetId?: Types.ObjectId,
     targetName?: string
   ): number => {
-    if (base <= 0 || remainingOrder <= 0) {
+    if (base <= 0 || remainingOrder <= minimumPayable) {
       return 0;
     }
 
@@ -274,11 +276,8 @@ export const calculateOrderTotals = async (
       amount = roundCurrency(Math.min(discount.value, base));
     }
 
-    if (amount <= 0) {
-      return 0;
-    }
-
-    amount = Math.min(amount, remainingOrder);
+    const maxDiscount = roundCurrency(Math.max(remainingOrder - minimumPayable, 0));
+    amount = Math.min(amount, maxDiscount);
 
     if (amount <= 0) {
       return 0;
@@ -367,7 +366,7 @@ export const calculateOrderTotals = async (
     }
   }
 
-  const manualAmount = Math.min(manualDiscount, remainingOrder);
+  const manualAmount = Math.min(manualDiscount, Math.max(remainingOrder - minimumPayable, 0));
   if (manualAmount > 0) {
     remainingOrder = roundCurrency(Math.max(remainingOrder - manualAmount, 0));
     totalDiscount = roundCurrency(totalDiscount + manualAmount);
@@ -381,7 +380,7 @@ export const calculateOrderTotals = async (
     });
   }
 
-  const total = roundCurrency(Math.max(subtotal - totalDiscount, 0));
+  const total = roundCurrency(Math.max(subtotal - totalDiscount, minimumPayable));
 
   return {
     subtotal,

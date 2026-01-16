@@ -750,7 +750,7 @@ const POSPage: React.FC = () => {
         open={isRedeemOpen}
         onClose={() => setRedeemOpen(false)}
         maxPoints={redeemablePoints}
-        maxAmount={Math.max(subtotal - discount, 0)}
+        maxAmount={Math.max(subtotal - discount - (subtotal >= 1 ? 1 : subtotal), 0)}
         onSubmit={(value) => handleRedeemConfirm(value)}
         isProcessing={isRedeeming}
       />
