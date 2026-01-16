@@ -21,7 +21,7 @@
   --text-muted: #64748b;
 
   --border-soft: rgba(15, 23, 42, 0.08);
-  --shadow-card: 0 10px 30px rgba(15, 23, 42, 0.12);
+  --shadow-card: none;
 
   --color-bg: var(--bg-main);
   --color-bg-card: var(--bg-card);
@@ -46,6 +46,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+*,
+*::before,
+*::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
 a {
   @apply transition-colors;
   color: var(--color-info);
@@ -59,7 +66,7 @@ button {
   @apply focus:outline-none focus-visible:ring-2;
   font-family: var(--font-family);
   border-radius: var(--radius-base);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition: transform 120ms ease;
 }
 
 button:active {
@@ -97,7 +104,7 @@ textarea {
   border: 1px solid var(--color-border);
   border-radius: 10px;
   font-family: var(--font-family);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms ease;
 }
 
 input:focus,
@@ -105,7 +112,6 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--color-info);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-info) 15%, transparent);
 }
 
 .heading-font {

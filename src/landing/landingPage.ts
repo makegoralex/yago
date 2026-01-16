@@ -70,7 +70,6 @@ export const renderLandingPage = (): string => `
         .cta-banner {
           background: linear-gradient(120deg, rgba(90, 208, 255, 0.22), rgba(124, 124, 255, 0.22));
           border: 1px solid rgba(90, 208, 255, 0.4);
-          box-shadow: 0 16px 44px rgba(0, 0, 0, 0.35);
           border-radius: 16px;
           padding: 12px 16px;
           display: flex;
@@ -93,8 +92,7 @@ export const renderLandingPage = (): string => `
           color: var(--text);
           font-weight: 700;
           text-decoration: none;
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
+          transition: transform 0.2s ease;
           display: inline-flex;
           align-items: center;
           gap: 8px;
@@ -102,13 +100,11 @@ export const renderLandingPage = (): string => `
 
         .cta-button:hover {
           transform: translateY(-2px);
-          box-shadow: 0 12px 38px rgba(90, 208, 255, 0.25);
         }
 
         .cta-secondary {
           border-color: rgba(255, 255, 255, 0.25);
           background: rgba(255, 255, 255, 0.04);
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
         }
 
         main {
@@ -122,7 +118,6 @@ export const renderLandingPage = (): string => `
           border: 1px solid rgba(90, 208, 255, 0.18);
           border-radius: 24px;
           padding: 36px;
-          box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
           display: grid;
           gap: 18px;
         }
@@ -178,7 +173,6 @@ export const renderLandingPage = (): string => `
           height: 12px;
           border-radius: 4px;
           background: linear-gradient(135deg, #5ad0ff, #7c7cff);
-          box-shadow: 0 0 16px rgba(90, 208, 255, 0.5);
         }
 
         .features {
@@ -218,7 +212,6 @@ export const renderLandingPage = (): string => `
           border: 1px solid rgba(90, 208, 255, 0.25);
           border-radius: 18px;
           padding: 18px;
-          box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
           display: grid;
           gap: 14px;
         }
@@ -248,7 +241,6 @@ export const renderLandingPage = (): string => `
         .signup-card input:focus {
           outline: none;
           border-color: rgba(90, 208, 255, 0.6);
-          box-shadow: 0 0 0 4px rgba(90, 208, 255, 0.18);
         }
 
         .signup-hint {
