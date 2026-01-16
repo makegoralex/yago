@@ -322,7 +322,9 @@ router.post(
         warehouseId: req.body?.warehouseId,
         supplierId: req.body?.supplierId,
         items: req.body?.items,
+        occurredAt: req.body?.occurredAt,
         createdBy: req.user.id,
+        type: req.body?.type,
         organizationId,
       });
 
