@@ -50,6 +50,36 @@ const POSPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const handlePointerDown = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+
+      if (target.closest('input, textarea, [contenteditable="true"]')) {
+        return;
+      }
+
+      if (target.closest('button, [role="button"], a, [data-keep-focus="true"]')) {
+        return;
+      }
+
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+        activeElement.blur();
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    document.addEventListener('touchstart', handlePointerDown, { passive: true });
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, []);
+
+  useEffect(() => {
     const container = productListRef.current;
     if (!container) {
       return;
