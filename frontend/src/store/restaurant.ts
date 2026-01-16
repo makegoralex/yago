@@ -36,6 +36,21 @@ const defaultBranding: RestaurantPreferences = {
 
 const isBrowser = typeof window !== 'undefined';
 
+const normalizeCategoryIds = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return defaultBranding.loyaltyRedeemCategoryIds;
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .filter((id: unknown): id is string => typeof id === 'string')
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0)
+    )
+  );
+};
+
 const normalizeBranding = (payload: unknown): RestaurantPreferences => {
   const source =
     payload && typeof payload === 'object' && 'branding' in (payload as Record<string, unknown>)
@@ -47,14 +62,8 @@ const normalizeBranding = (payload: unknown): RestaurantPreferences => {
       ? (source as any).loyaltyRedeemAllCategories
       : defaultBranding.loyaltyRedeemAllCategories;
   const loyaltyRedeemCategoryIds =
-    source && typeof source === 'object' && Array.isArray((source as any).loyaltyRedeemCategoryIds)
-      ? Array.from(
-          new Set(
-            (source as any).loyaltyRedeemCategoryIds
-              .map((id: unknown) => (typeof id === 'string' ? id.trim() : ''))
-              .filter((id: string) => id.length > 0)
-          )
-        )
+    source && typeof source === 'object'
+      ? normalizeCategoryIds((source as any).loyaltyRedeemCategoryIds)
       : defaultBranding.loyaltyRedeemCategoryIds;
 
   return {
@@ -123,7 +132,7 @@ const mergeBranding = (
     payload?.loyaltyRedeemAllCategories === true
       ? []
       : Array.isArray(payload?.loyaltyRedeemCategoryIds)
-        ? Array.from(new Set(payload.loyaltyRedeemCategoryIds.map((id) => id.trim()).filter((id) => id.length > 0)))
+        ? normalizeCategoryIds(payload.loyaltyRedeemCategoryIds)
         : current.loyaltyRedeemCategoryIds,
 });
 
