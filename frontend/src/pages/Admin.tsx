@@ -23,6 +23,7 @@ import { useToast } from '../providers/ToastProvider';
 import type { Category, ModifierGroup, Product } from '../store/catalog';
 import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
+import AdminDrawer from '../components/admin/AdminDrawer';
 
 const getResponseData = <T,>(response: { data?: unknown }): T | undefined => {
   if (!response || typeof response !== 'object') {
@@ -2629,9 +2630,6 @@ const AdminPage: React.FC = () => {
   }, [newProduct, newProductModifierIds.length, productIngredients]);
 
   const isEditorOpen = isCreatingProduct || Boolean(selectedProduct);
-  const drawerRef = useRef<HTMLDivElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const menuDrawerTitleId = 'menu-drawer-title';
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const actionMenuButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -3433,82 +3431,6 @@ const AdminPage: React.FC = () => {
     };
   }, [openActionMenuId]);
 
-  useEffect(() => {
-    if (!isEditorOpen) {
-      return;
-    }
-
-    const body = document.body;
-    const originalOverflow = body.style.overflow;
-    const originalPaddingRight = body.style.paddingRight;
-    const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
-
-    body.style.overflow = 'hidden';
-    if (scrollBarWidth > 0) {
-      body.style.paddingRight = `${scrollBarWidth}px`;
-    }
-
-    return () => {
-      body.style.overflow = originalOverflow;
-      body.style.paddingRight = originalPaddingRight;
-    };
-  }, [isEditorOpen]);
-
-  useEffect(() => {
-    if (!isEditorOpen) {
-      return;
-    }
-
-    const drawerElement = drawerRef.current;
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-
-    const getFocusableElements = (container: HTMLElement) =>
-      Array.from(
-        container.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-      );
-
-    const focusableElements = drawerElement ? getFocusableElements(drawerElement) : [];
-    focusableElements[0]?.focus();
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        handleCloseEditor();
-        return;
-      }
-
-      if (event.key !== 'Tab' || !drawerElement) {
-        return;
-      }
-
-      const elements = getFocusableElements(drawerElement);
-      if (elements.length === 0) {
-        event.preventDefault();
-        return;
-      }
-
-      const firstElement = elements[0];
-      const lastElement = elements[elements.length - 1];
-      const activeElement = document.activeElement;
-
-      if (event.shiftKey && activeElement === firstElement) {
-        event.preventDefault();
-        lastElement.focus();
-      } else if (!event.shiftKey && activeElement === lastElement) {
-        event.preventDefault();
-        firstElement.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      previouslyFocusedRef.current?.focus();
-    };
-  }, [handleCloseEditor, isEditorOpen]);
 
   const handleCreateIngredient = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -5763,39 +5685,36 @@ const AdminPage: React.FC = () => {
                   </div>
                 </div>
                 {isEditorOpen ? (
-                  <div className="fixed inset-0 z-50 flex">
-                    <div
-                      className="absolute inset-0 bg-slate-900/30"
-                      onClick={handleCloseEditor}
-                      aria-hidden="true"
-                    />
-                    <div className="relative ml-auto flex h-full w-full max-w-[480px] flex-col bg-white shadow-xl">
-                      <div
-                        ref={drawerRef}
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby={menuDrawerTitleId}
-                        className="flex h-full flex-col"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                          <p id={menuDrawerTitleId} className="text-sm font-semibold text-slate-800">
-                            {menuEditorTitle}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleCloseEditor}
-                            className="relative z-10 inline-flex h-8 items-center justify-center rounded-full border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer pointer-events-auto"
-                          >
-                            Закрыть
-                          </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto px-4 py-4">
-                          <form
-                            id={menuEditorFormId}
-                            onSubmit={isCreatingProduct ? handleCreateProduct : handleUpdateProduct}
-                            className="space-y-4 text-sm"
-                          >
+                  <AdminDrawer
+                    isOpen={isEditorOpen}
+                    title={menuEditorTitle}
+                    onClose={handleCloseEditor}
+                    widthClassName="max-w-[480px]"
+                    bodyClassName="flex-1 overflow-y-auto px-4 py-4"
+                    footer={
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCancelProductEdit}
+                          className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600"
+                        >
+                          Отмена
+                        </button>
+                        <button
+                          type="submit"
+                          form={menuEditorFormId}
+                          className="rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-700"
+                        >
+                          Сохранить
+                        </button>
+                      </div>
+                    }
+                  >
+                    <form
+                      id={menuEditorFormId}
+                      onSubmit={isCreatingProduct ? handleCreateProduct : handleUpdateProduct}
+                      className="space-y-4 text-sm"
+                    >
                             <div className="space-y-2">
                               <label className="text-xs font-semibold uppercase text-slate-400">Название</label>
                               <input
@@ -6081,29 +6000,8 @@ const AdminPage: React.FC = () => {
                                 className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                               />
                             </div>
-                          </form>
-                        </div>
-                        <div className="sticky bottom-0 border-t border-slate-200 bg-white px-4 py-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <button
-                              type="button"
-                              onClick={handleCancelProductEdit}
-                              className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600"
-                            >
-                              Отмена
-                            </button>
-                            <button
-                              type="submit"
-                              form={menuEditorFormId}
-                              className="rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-700"
-                            >
-                              Сохранить
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    </form>
+                  </AdminDrawer>
                 ) : null}
               </div>
             ) : null}
@@ -6901,296 +6799,274 @@ const AdminPage: React.FC = () => {
               </Card>
 
               {isReceiptDrawerOpen ? (
-                <div className="fixed inset-0 z-50 flex">
-                  <div
-                    className="absolute inset-0 bg-slate-900/30"
-                    onClick={handleCloseReceiptDrawer}
-                    aria-hidden="true"
-                  />
-                  <div className="relative ml-auto flex h-full w-full flex-col overflow-hidden bg-white shadow-xl sm:w-[38%] sm:max-w-[520px]">
-                    <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                      <p className="text-sm font-semibold text-slate-800">
-                        {selectedStockReceipt ? 'Редактирование поставки' : 'Новая поставка'}
-                      </p>
+                <AdminDrawer
+                  isOpen={isReceiptDrawerOpen}
+                  title={selectedStockReceipt ? 'Редактирование поставки' : 'Новая поставка'}
+                  onClose={handleCloseReceiptDrawer}
+                  widthClassName="sm:w-[38%] sm:max-w-[520px]"
+                  bodyClassName="flex min-h-0 flex-1 flex-col text-sm"
+                  footer={
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] uppercase text-slate-400">Итоговая сумма</p>
+                        <p className="text-lg font-semibold text-slate-800">{formatCurrency(receiptTotal)} ₽</p>
+                        <p className="text-[11px] text-slate-400">Последнее изменение: {receiptLastTouchedLabel}</p>
+                      </div>
                       <button
-                        type="button"
-                        onClick={handleCloseReceiptDrawer}
-                        className="inline-flex h-8 items-center justify-center rounded-full border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                        type="submit"
+                        form="receipt-drawer-form"
+                        className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-soft hover:bg-emerald-500"
                       >
-                        ✕
+                        Сохранить документ
                       </button>
                     </div>
-                    <form
-                      id="receipt-drawer-form"
-                      onSubmit={handleSaveStockReceipt}
-                      className="flex min-h-0 flex-1 flex-col text-sm"
-                    >
-                      <div className="flex-none space-y-4 px-4 py-4">
-                        <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-                          <p className="text-[11px] uppercase text-slate-400">Тип и дата</p>
-                          <div className="grid gap-2 md:grid-cols-2">
-                            <select
-                              value={receiptType}
-                              onChange={(event) => setReceiptType(event.target.value as typeof receiptType)}
-                              className="w-full rounded-2xl border border-slate-200 px-3 py-2"
-                            >
-                              <option value="receipt">Поставка</option>
-                              <option value="writeOff">Списание</option>
-                            </select>
-                            <input
-                              type="datetime-local"
-                              value={receiptDate}
-                              max={nowInputValue}
-                              onChange={(event) => setReceiptDate(event.target.value)}
-                              className="w-full rounded-2xl border border-slate-200 px-3 py-2"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-                          <p className="text-[11px] uppercase text-slate-400">Контекст</p>
+                  }
+                >
+                  <form
+                    id="receipt-drawer-form"
+                    onSubmit={handleSaveStockReceipt}
+                    className="flex min-h-0 flex-1 flex-col text-sm"
+                  >
+                    <div className="flex-none space-y-4 px-4 py-4">
+                      <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                        <p className="text-[11px] uppercase text-slate-400">Тип и дата</p>
+                        <div className="grid gap-2 md:grid-cols-2">
                           <select
-                            value={receiptForm.warehouseId}
-                            onChange={(event) =>
-                              setReceiptForm((prev) => ({ ...prev, warehouseId: event.target.value }))
-                            }
+                            value={receiptType}
+                            onChange={(event) => setReceiptType(event.target.value as typeof receiptType)}
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                           >
-                            <option value="">Выберите склад</option>
-                            {warehouses.map((warehouse) => (
-                              <option key={warehouse._id} value={warehouse._id}>
-                                {warehouse.name}
-                              </option>
-                            ))}
+                            <option value="receipt">Поставка</option>
+                            <option value="writeOff">Списание</option>
                           </select>
-                          <select
-                            value={receiptForm.supplierId ?? ''}
-                            onChange={(event) =>
-                              setReceiptForm((prev) => ({ ...prev, supplierId: event.target.value }))
-                            }
+                          <input
+                            type="datetime-local"
+                            value={receiptDate}
+                            max={nowInputValue}
+                            onChange={(event) => setReceiptDate(event.target.value)}
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2"
-                          >
-                            <option value="">Поставщик (опционально)</option>
-                            {suppliers.map((supplier) => (
-                              <option key={supplier._id} value={supplier._id}>
-                                {supplier.name}
-                              </option>
-                            ))}
-                          </select>
+                          />
                         </div>
                       </div>
 
-                      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
-                        <div className="flex items-center justify-between text-[11px] uppercase text-slate-400">
-                          <span>Позиции документа</span>
-                          <button
-                            type="button"
-                            onClick={addReceiptItemRow}
-                            className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
-                          >
-                            + Добавить позицию
-                          </button>
-                        </div>
-                        <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white">
-                          <div className="min-h-0 flex-1 overflow-y-auto">
-                            <table className="w-full table-fixed text-xs">
-                              <colgroup>
-                                <col className="w-[46%]" />
-                                <col className="w-[22%]" />
-                                <col className="w-[8%]" />
-                                <col className="w-[12%]" />
-                                <col className="w-[12%]" />
-                                <col className="w-[44px]" />
-                              </colgroup>
-                              <thead className="sticky top-0 bg-slate-50 text-[11px] uppercase text-slate-400">
-                                <tr>
-                                  <th className="px-3 py-2 text-left">Позиция</th>
-                                  <th className="px-3 py-2 text-left">Кол-во</th>
-                                  <th className="px-3 py-2 text-left">Ед.</th>
-                                  <th className="px-3 py-2 text-left">Цена</th>
-                                  <th className="px-3 py-2 text-left">Сумма</th>
-                                  <th className="px-3 py-2 text-right" aria-label="Удалить позицию" />
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {receiptItems.map((item, index) => {
-                                  const optionKey = `${item.itemType}:${item.itemId}`;
-                                  const optionLabel =
-                                    item.search && item.search.trim().length > 0
-                                      ? item.search
-                                      : receiptItemOptionById.get(optionKey)?.displayValue ??
-                                        (item.itemId ? getInventoryItemName(item.itemType, item.itemId) : '');
-                                  const filteredOptions = filterReceiptItemOptions(optionLabel);
-
-                                  return (
-                                    <tr key={`${item.itemId}-${index}`} className="border-t border-slate-100">
-                                      <td className="px-3 py-2">
-                                        <div className="relative">
-                                          <input
-                                            ref={(element) => {
-                                              receiptItemSearchRefs.current[index] = element;
-                                            }}
-                                            type="text"
-                                            value={optionLabel}
-                                            onChange={(event) =>
-                                              handleReceiptItemSearchChange(index, event.target.value)
-                                            }
-                                            onFocus={() => {
-                                              clearReceiptSearchBlurTimeout();
-                                              setActiveReceiptSearchIndex(index);
-                                              updateReceiptSearchPosition(index);
-                                            }}
-                                            onBlur={() => scheduleReceiptSearchClose(index)}
-                                            placeholder="Поиск позиции"
-                                            className="w-full rounded-xl border border-slate-200 px-2 py-2"
-                                          />
-                                          {activeReceiptSearchIndex === index &&
-                                          receiptSearchPosition?.index === index
-                                            ? createPortal(
-                                                <div
-                                                  className="z-50 overflow-y-auto rounded-xl border border-slate-200 bg-white text-xs shadow-lg"
-                                                  style={{
-                                                    position: 'fixed',
-                                                    top: receiptSearchPosition.top,
-                                                    left: receiptSearchPosition.left,
-                                                    width: receiptSearchPosition.width,
-                                                    maxHeight: receiptSearchPosition.maxHeight,
-                                                  }}
-                                                  onMouseDown={clearReceiptSearchBlurTimeout}
-                                                  onWheel={(event) => {
-                                                    event.stopPropagation();
-                                                  }}
-                                                  onTouchMove={(event) => {
-                                                    event.stopPropagation();
-                                                  }}
-                                                >
-                                                  {filteredOptions.length ? (
-                                                    filteredOptions.map((option) => (
-                                                      <button
-                                                        key={`${option.type}-${option.id}`}
-                                                        type="button"
-                                                        onMouseDown={(event) => {
-                                                          event.preventDefault();
-                                                          handleSelectReceiptOption(index, option);
-                                                        }}
-                                                        className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-emerald-50"
-                                                      >
-                                                        <span className="font-semibold text-slate-700">
-                                                          {option.name}
-                                                        </span>
-                                                        <span className="text-[10px] uppercase text-slate-400">
-                                                          {option.typeLabel}
-                                                        </span>
-                                                      </button>
-                                                    ))
-                                                  ) : (
-                                                    <div className="px-3 py-2 text-[11px] text-slate-400">
-                                                      Ничего не найдено
-                                                    </div>
-                                                  )}
-                                                </div>,
-                                                document.body
-                                              )
-                                            : null}
-                                        </div>
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <div className="flex items-center gap-1">
-                                          <button
-                                            type="button"
-                                            onClick={() => adjustReceiptItemQuantity(index, -1)}
-                                            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
-                                            aria-label="Уменьшить количество"
-                                          >
-                                            −
-                                          </button>
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={item.quantity}
-                                            onChange={(event) =>
-                                              handleReceiptItemChange(index, 'quantity', event.target.value)
-                                            }
-                                            className="w-16 rounded-xl border border-slate-200 px-2 py-2 text-center"
-                                            placeholder="0"
-                                          />
-                                          <button
-                                            type="button"
-                                            onClick={() => adjustReceiptItemQuantity(index, 1)}
-                                            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
-                                            aria-label="Увеличить количество"
-                                          >
-                                            +
-                                          </button>
-                                        </div>
-                                      </td>
-                                      <td className="px-3 py-2 text-[11px] text-slate-500">
-                                        {item.itemType === 'ingredient'
-                                          ? ingredientUnitMap[item.itemId] || 'ед.'
-                                          : defaultProductUnit}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                          value={item.unitCost}
-                                          onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
-                                          className="w-24 rounded-xl border border-slate-200 px-2 py-2"
-                                          placeholder="Цена"
-                                        />
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                          value={item.totalCost}
-                                          onChange={(event) =>
-                                            handleReceiptItemChange(index, 'totalCost', event.target.value)
-                                          }
-                                          className="w-24 rounded-xl border border-slate-200 px-2 py-2"
-                                          placeholder="Сумма"
-                                        />
-                                      </td>
-                                      <td className="px-3 py-2 text-right">
-                                        <button
-                                          type="button"
-                                          onClick={() => removeReceiptItemRow(index)}
-                                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-500 hover:bg-slate-200"
-                                          aria-label="Удалить позицию"
-                                        >
-                                          ×
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-                    </form>
-                    <div className="sticky bottom-0 border-t border-slate-200 bg-white px-4 py-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <p className="text-[11px] uppercase text-slate-400">Итоговая сумма</p>
-                          <p className="text-lg font-semibold text-slate-800">{formatCurrency(receiptTotal)} ₽</p>
-                          <p className="text-[11px] text-slate-400">Последнее изменение: {receiptLastTouchedLabel}</p>
-                        </div>
-                        <button
-                          type="submit"
-                          form="receipt-drawer-form"
-                          className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-soft hover:bg-emerald-500"
+                      <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                        <p className="text-[11px] uppercase text-slate-400">Контекст</p>
+                        <select
+                          value={receiptForm.warehouseId}
+                          onChange={(event) => setReceiptForm((prev) => ({ ...prev, warehouseId: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                         >
-                          Сохранить документ
-                        </button>
+                          <option value="">Выберите склад</option>
+                          {warehouses.map((warehouse) => (
+                            <option key={warehouse._id} value={warehouse._id}>
+                              {warehouse.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={receiptForm.supplierId ?? ''}
+                          onChange={(event) => setReceiptForm((prev) => ({ ...prev, supplierId: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                        >
+                          <option value="">Поставщик (опционально)</option>
+                          {suppliers.map((supplier) => (
+                            <option key={supplier._id} value={supplier._id}>
+                              {supplier.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
-                  </div>
-                </div>
+
+                    <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
+                      <div className="flex items-center justify-between text-[11px] uppercase text-slate-400">
+                        <span>Позиции документа</span>
+                        <button
+                          type="button"
+                          onClick={addReceiptItemRow}
+                          className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                        >
+                          + Добавить позицию
+                        </button>
+                      </div>
+                      <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white">
+                        <div className="min-h-0 flex-1 overflow-y-auto">
+                          <table className="w-full table-fixed text-xs">
+                            <colgroup>
+                              <col className="w-[46%]" />
+                              <col className="w-[22%]" />
+                              <col className="w-[8%]" />
+                              <col className="w-[12%]" />
+                              <col className="w-[12%]" />
+                              <col className="w-[44px]" />
+                            </colgroup>
+                            <thead className="sticky top-0 bg-slate-50 text-[11px] uppercase text-slate-400">
+                              <tr>
+                                <th className="px-3 py-2 text-left">Позиция</th>
+                                <th className="px-3 py-2 text-left">Кол-во</th>
+                                <th className="px-3 py-2 text-left">Ед.</th>
+                                <th className="px-3 py-2 text-left">Цена</th>
+                                <th className="px-3 py-2 text-left">Сумма</th>
+                                <th className="px-3 py-2 text-right" aria-label="Удалить позицию" />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {receiptItems.map((item, index) => {
+                                const optionKey = `${item.itemType}:${item.itemId}`;
+                                const optionLabel =
+                                  item.search && item.search.trim().length > 0
+                                    ? item.search
+                                    : receiptItemOptionById.get(optionKey)?.displayValue ??
+                                      (item.itemId ? getInventoryItemName(item.itemType, item.itemId) : '');
+                                const filteredOptions = filterReceiptItemOptions(optionLabel);
+
+                                return (
+                                  <tr key={`${item.itemId}-${index}`} className="border-t border-slate-100">
+                                    <td className="px-3 py-2">
+                                      <div className="relative">
+                                        <input
+                                          ref={(element) => {
+                                            receiptItemSearchRefs.current[index] = element;
+                                          }}
+                                          type="text"
+                                          value={optionLabel}
+                                          onChange={(event) => handleReceiptItemSearchChange(index, event.target.value)}
+                                          onFocus={() => {
+                                            clearReceiptSearchBlurTimeout();
+                                            setActiveReceiptSearchIndex(index);
+                                            updateReceiptSearchPosition(index);
+                                          }}
+                                          onBlur={() => scheduleReceiptSearchClose(index)}
+                                          placeholder="Поиск позиции"
+                                          className="w-full rounded-xl border border-slate-200 px-2 py-2"
+                                        />
+                                        {activeReceiptSearchIndex === index && receiptSearchPosition?.index === index
+                                          ? createPortal(
+                                              <div
+                                                className="z-50 overflow-y-auto rounded-xl border border-slate-200 bg-white text-xs shadow-lg"
+                                                style={{
+                                                  position: 'fixed',
+                                                  top: receiptSearchPosition.top,
+                                                  left: receiptSearchPosition.left,
+                                                  width: receiptSearchPosition.width,
+                                                  maxHeight: receiptSearchPosition.maxHeight,
+                                                }}
+                                                onMouseDown={clearReceiptSearchBlurTimeout}
+                                                onWheel={(event) => {
+                                                  event.stopPropagation();
+                                                }}
+                                                onTouchMove={(event) => {
+                                                  event.stopPropagation();
+                                                }}
+                                              >
+                                                {filteredOptions.length ? (
+                                                  filteredOptions.map((option) => (
+                                                    <button
+                                                      key={`${option.type}-${option.id}`}
+                                                      type="button"
+                                                      onMouseDown={(event) => {
+                                                        event.preventDefault();
+                                                        handleSelectReceiptOption(index, option);
+                                                      }}
+                                                      className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-emerald-50"
+                                                    >
+                                                      <span className="font-semibold text-slate-700">{option.name}</span>
+                                                      <span className="text-[10px] uppercase text-slate-400">
+                                                        {option.typeLabel}
+                                                      </span>
+                                                    </button>
+                                                  ))
+                                                ) : (
+                                                  <div className="px-3 py-2 text-[11px] text-slate-400">
+                                                    Ничего не найдено
+                                                  </div>
+                                                )}
+                                              </div>,
+                                              document.body
+                                            )
+                                          : null}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => adjustReceiptItemQuantity(index, -1)}
+                                          className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
+                                          aria-label="Уменьшить количество"
+                                        >
+                                          −
+                                        </button>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          value={item.quantity}
+                                          onChange={(event) =>
+                                            handleReceiptItemChange(index, 'quantity', event.target.value)
+                                          }
+                                          className="w-16 rounded-xl border border-slate-200 px-2 py-2 text-center"
+                                          placeholder="0"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => adjustReceiptItemQuantity(index, 1)}
+                                          className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
+                                          aria-label="Увеличить количество"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 text-[11px] text-slate-500">
+                                      {item.itemType === 'ingredient'
+                                        ? ingredientUnitMap[item.itemId] || 'ед.'
+                                        : defaultProductUnit}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={item.unitCost}
+                                        onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
+                                        className="w-24 rounded-xl border border-slate-200 px-2 py-2"
+                                        placeholder="Цена"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={item.totalCost}
+                                        onChange={(event) =>
+                                          handleReceiptItemChange(index, 'totalCost', event.target.value)
+                                        }
+                                        className="w-24 rounded-xl border border-slate-200 px-2 py-2"
+                                        placeholder="Сумма"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2 text-right">
+                                      <button
+                                        type="button"
+                                        onClick={() => removeReceiptItemRow(index)}
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-500 hover:bg-slate-200"
+                                        aria-label="Удалить позицию"
+                                      >
+                                        ×
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  </form>
+                </AdminDrawer>
               ) : null}
 
               {mobileReceiptPreview ? (
