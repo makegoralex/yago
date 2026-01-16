@@ -19,7 +19,6 @@ import {
 import type { TooltipProps } from 'recharts';
 import api from '../lib/api';
 import { useToast } from '../providers/ToastProvider';
-import { useTheme } from '../providers/ThemeProvider';
 import type { Category, ModifierGroup, Product } from '../store/catalog';
 import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
@@ -420,7 +419,6 @@ const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { notify } = useToast();
-  const { theme, toggleTheme } = useTheme();
   const {
     billing,
     billingEnabled,
@@ -4188,14 +4186,6 @@ const AdminPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={toggleTheme}
-                className="hidden h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-sm font-semibold text-slate-700 transition hover:border-slate-300 md:inline-flex"
-                aria-pressed={theme === 'dark'}
-              >
-                {theme === 'dark' ? '☀️' : '🌙'}
-              </button>
-              <button
-                type="button"
                 onClick={() => navigate('/pos')}
                 className="hidden items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 sm:inline-flex"
               >
@@ -4210,14 +4200,6 @@ const AdminPage: React.FC = () => {
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
-              </button>
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition hover:border-slate-300 md:hidden"
-                aria-label="Сменить тему"
-              >
-                {theme === 'dark' ? '☀️' : '🌙'}
               </button>
             </div>
           </div>
