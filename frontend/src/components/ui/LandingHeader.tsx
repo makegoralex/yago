@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useTheme } from '../../providers/ThemeProvider';
 
 const navItems = [
   { label: 'О продукте', href: '/#about' },
@@ -24,7 +23,6 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
   ctaHref = '/login',
 }) => {
   const [compact, setCompact] = useState(false);
-  const { setThemeForScope } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -36,10 +34,6 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  useEffect(() => {
-    setThemeForScope('admin', 'light');
-  }, [setThemeForScope]);
 
   useEffect(() => {
     if (!menuOpen) {

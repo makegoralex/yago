@@ -5,45 +5,16 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
-
-  --bg-main: #0b1020;
-  --bg-secondary: #11162a;
-  --bg-card: #151b34;
-
-  --accent-primary: #7c3aed;
-  --accent-secondary: #22c55e;
-  --accent-danger: #ef4444;
-  --accent-warning: #f59e0b;
-
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-
-  --border-soft: rgba(255, 255, 255, 0.06);
-  --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.35);
-
-  --color-bg: var(--bg-main);
-  --color-bg-card: var(--bg-card);
-  --color-border: var(--border-soft);
-  --color-text: var(--text-primary);
-  --color-accent: var(--accent-primary);
-  --color-accent-hover: #6d28d9;
-  --color-danger: var(--accent-danger);
-  --color-info: var(--text-secondary);
-
-  --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: 'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-
-  --radius-base: 12px;
-}
-
-.light {
   color-scheme: light;
 
   --bg-main: #f8fafc;
   --bg-secondary: #eef2ff;
   --bg-card: #ffffff;
+
+  --accent-primary: #7c3aed;
+  --accent-secondary: #22c55e;
+  --accent-danger: #ef4444;
+  --accent-warning: #f59e0b;
 
   --text-primary: #0f172a;
   --text-secondary: #475569;
@@ -60,6 +31,11 @@
   --color-accent-hover: #6d28d9;
   --color-danger: var(--accent-danger);
   --color-info: var(--text-secondary);
+
+  --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --radius-base: 12px;
 }
 
 body {
@@ -252,19 +228,9 @@ body.pos-locked {
   color: var(--text-secondary) !important;
 }
 
-.light .pos-shell {
-  background: var(--bg-main);
-  background-image: none;
-}
-
 .landing-shell {
   background: var(--bg-main);
   color: var(--text-primary);
-}
-
-.light .landing-shell,
-.light .admin-shell {
-  background: var(--bg-main);
 }
 
 .landing-shell .bg-white,
