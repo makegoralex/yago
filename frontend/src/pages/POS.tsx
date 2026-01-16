@@ -145,6 +145,7 @@ const POSPage: React.FC = () => {
   const clearDiscount = useOrderStore((state) => state.clearDiscount);
   const cancelOrder = useOrderStore((state) => state.cancelOrder);
   const cancelReceipt = useOrderStore((state) => state.cancelReceipt);
+  const resetOrder = useOrderStore((state) => state.reset);
   const availableDiscounts = useOrderStore((state) => state.availableDiscounts);
   const appliedDiscounts = useOrderStore((state) => state.appliedDiscounts);
   const selectedDiscountIds = useOrderStore((state) => state.selectedDiscountIds);
@@ -228,6 +229,16 @@ const POSPage: React.FC = () => {
 
     void loadOrder(draftOrder._id);
   }, [isStartingOrder, orderId, activeOrders, loadOrder]);
+
+  useEffect(() => {
+    if (!orderId) {
+      return;
+    }
+
+    if (activeOrders.length === 0 || !activeOrders.some((order) => order._id === orderId)) {
+      resetOrder();
+    }
+  }, [activeOrders, orderId, resetOrder]);
 
   useEffect(() => {
     if (activeSection === 'reports') {
