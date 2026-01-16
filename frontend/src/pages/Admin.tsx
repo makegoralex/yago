@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 import * as XLSX from 'xlsx';
@@ -438,9 +439,27 @@ const FISCAL_TAX_SYSTEM_OPTIONS: Array<{ value: string; label: string }> = [
 ];
 
 const formatInputDate = (date: Date): string => date.toISOString().slice(0, 10);
+const formatInputDateTime = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  const hours = `${date.getHours()}`.padStart(2, '0');
+  const minutes = `${date.getMinutes()}`.padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 const parseDateInput = (value: string): Date => {
   const [year, month, day] = value.split('-').map(Number);
   return new Date(year, month - 1, day, 0, 0, 0, 0);
+};
+const parseDateTimeInput = (value: string): Date => {
+  const [datePart, timePart] = value.split('T');
+  if (!datePart || !timePart) {
+    return new Date(value);
+  }
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hours, minutes] = timePart.split(':').map(Number);
+  return new Date(year, month - 1, day, hours || 0, minutes || 0, 0, 0);
 };
 
 const startOfDay = (value: Date): Date => {
@@ -524,6 +543,7 @@ const AdminPage: React.FC = () => {
     setIsNavOpen(false);
   }, [activeTab]);
   const todayInputValue = useMemo(() => formatInputDate(new Date()), []);
+  const nowInputValue = useMemo(() => formatInputDateTime(new Date()), []);
   const inventoryTabs = useMemo(
     () => [
       { id: 'warehouses' as const, label: 'Склады', description: 'Локации и сводка' },
@@ -654,7 +674,7 @@ const AdminPage: React.FC = () => {
   });
   const receiptItems = receiptForm?.items ?? [];
   const [receiptType, setReceiptType] = useState<'receipt' | 'writeOff'>('receipt');
-  const [receiptDate, setReceiptDate] = useState(() => todayInputValue);
+  const [receiptDate, setReceiptDate] = useState(() => nowInputValue);
   const [stockReceipts, setStockReceipts] = useState<StockReceipt[]>([]);
   const [stockReceiptsLoading, setStockReceiptsLoading] = useState(false);
   const [stockReceiptsError, setStockReceiptsError] = useState<string | null>(null);
@@ -673,6 +693,13 @@ const AdminPage: React.FC = () => {
   const [isMobileView, setIsMobileView] = useState(false);
   const [pendingReceiptFocusIndex, setPendingReceiptFocusIndex] = useState<number | null>(null);
   const [activeReceiptSearchIndex, setActiveReceiptSearchIndex] = useState<number | null>(null);
+  const [receiptSearchPosition, setReceiptSearchPosition] = useState<{
+    index: number;
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const [inventoryAuditForm, setInventoryAuditForm] = useState({
     warehouseId: '',
     performedAt: todayInputValue,
@@ -3752,7 +3779,7 @@ const AdminPage: React.FC = () => {
   const resetReceiptForm = (preserveWarehouse = false) => {
     setSelectedStockReceipt(null);
     setReceiptType('receipt');
-    setReceiptDate(formatInputDate(new Date()));
+    setReceiptDate(formatInputDateTime(new Date()));
     setReceiptForm({
       warehouseId: preserveWarehouse ? receiptForm.warehouseId : '',
       supplierId: '',
@@ -3781,7 +3808,9 @@ const AdminPage: React.FC = () => {
 
       setSelectedStockReceipt(receipt);
       setReceiptType(receipt.type === 'writeOff' ? 'writeOff' : 'receipt');
-      setReceiptDate(receipt.occurredAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+      setReceiptDate(
+        receipt.occurredAt ? formatInputDateTime(new Date(receipt.occurredAt)) : formatInputDateTime(new Date())
+      );
       setReceiptForm({
         warehouseId: receipt.warehouseId,
         supplierId: receipt.supplierId ?? '',
@@ -3868,6 +3897,54 @@ const AdminPage: React.FC = () => {
     [clearReceiptSearchBlurTimeout]
   );
 
+  const updateReceiptSearchPosition = useCallback(
+    (index: number) => {
+      const target = receiptItemSearchRefs.current[index];
+      if (!target) {
+        return;
+      }
+      const rect = target.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const gap = 6;
+      const spaceBelow = Math.max(0, viewportHeight - rect.bottom - gap);
+      const spaceAbove = Math.max(0, rect.top - gap);
+      const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
+      const availableSpace = openUp ? spaceAbove : spaceBelow;
+      const maxHeight = Math.min(280, availableSpace);
+      if (maxHeight <= 0) {
+        return;
+      }
+      const top = openUp ? Math.max(gap, rect.top - maxHeight - gap) : rect.bottom + gap;
+
+      setReceiptSearchPosition({
+        index,
+        top,
+        left: rect.left,
+        width: rect.width,
+        maxHeight,
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (activeReceiptSearchIndex === null) {
+      setReceiptSearchPosition(null);
+      return;
+    }
+
+    const updatePosition = () => updateReceiptSearchPosition(activeReceiptSearchIndex);
+    updatePosition();
+
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [activeReceiptSearchIndex, updateReceiptSearchPosition]);
+
   useEffect(() => {
     if (pendingReceiptFocusIndex === null) {
       return;
@@ -3913,14 +3990,14 @@ const AdminPage: React.FC = () => {
       return;
     }
 
-    const occurredDate = parseDateInput(receiptDate);
+    const occurredDate = parseDateTimeInput(receiptDate);
 
     if (Number.isNaN(occurredDate.getTime())) {
       notify({ title: 'Некорректная дата документа', type: 'info' });
       return;
     }
 
-    if (occurredDate.getTime() > endOfDay(new Date()).getTime()) {
+    if (occurredDate.getTime() > new Date().getTime()) {
       notify({ title: 'Дата документа не может быть в будущем', type: 'info' });
       return;
     }
@@ -6861,9 +6938,9 @@ const AdminPage: React.FC = () => {
                               <option value="writeOff">Списание</option>
                             </select>
                             <input
-                              type="date"
+                              type="datetime-local"
                               value={receiptDate}
-                              max={todayInputValue}
+                              max={nowInputValue}
                               onChange={(event) => setReceiptDate(event.target.value)}
                               className="w-full rounded-2xl border border-slate-200 px-3 py-2"
                             />
@@ -6954,7 +7031,6 @@ const AdminPage: React.FC = () => {
                                               receiptItemSearchRefs.current[index] = element;
                                             }}
                                             type="text"
-                                            list="receipt-item-options"
                                             value={optionLabel}
                                             onChange={(event) =>
                                               handleReceiptItemSearchChange(index, event.target.value)
@@ -6962,40 +7038,60 @@ const AdminPage: React.FC = () => {
                                             onFocus={() => {
                                               clearReceiptSearchBlurTimeout();
                                               setActiveReceiptSearchIndex(index);
+                                              updateReceiptSearchPosition(index);
                                             }}
                                             onBlur={() => scheduleReceiptSearchClose(index)}
                                             placeholder="Поиск позиции"
                                             className="w-full rounded-xl border border-slate-200 px-2 py-2"
                                           />
-                                          {activeReceiptSearchIndex === index ? (
-                                            <div
-                                              className="absolute left-0 right-0 z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white text-xs shadow-lg"
-                                              onMouseDown={clearReceiptSearchBlurTimeout}
-                                            >
-                                              {filteredOptions.length ? (
-                                                filteredOptions.map((option) => (
-                                                  <button
-                                                    key={`${option.type}-${option.id}`}
-                                                    type="button"
-                                                    onMouseDown={(event) => {
-                                                      event.preventDefault();
-                                                      handleSelectReceiptOption(index, option);
-                                                    }}
-                                                    className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-emerald-50"
-                                                  >
-                                                    <span className="font-semibold text-slate-700">{option.name}</span>
-                                                    <span className="text-[10px] uppercase text-slate-400">
-                                                      {option.typeLabel}
-                                                    </span>
-                                                  </button>
-                                                ))
-                                              ) : (
-                                                <div className="px-3 py-2 text-[11px] text-slate-400">
-                                                  Ничего не найдено
-                                                </div>
-                                              )}
-                                            </div>
-                                          ) : null}
+                                          {activeReceiptSearchIndex === index &&
+                                          receiptSearchPosition?.index === index
+                                            ? createPortal(
+                                                <div
+                                                  className="z-50 overflow-y-auto rounded-xl border border-slate-200 bg-white text-xs shadow-lg"
+                                                  style={{
+                                                    position: 'fixed',
+                                                    top: receiptSearchPosition.top,
+                                                    left: receiptSearchPosition.left,
+                                                    width: receiptSearchPosition.width,
+                                                    maxHeight: receiptSearchPosition.maxHeight,
+                                                  }}
+                                                  onMouseDown={clearReceiptSearchBlurTimeout}
+                                                  onWheel={(event) => {
+                                                    event.stopPropagation();
+                                                  }}
+                                                  onTouchMove={(event) => {
+                                                    event.stopPropagation();
+                                                  }}
+                                                >
+                                                  {filteredOptions.length ? (
+                                                    filteredOptions.map((option) => (
+                                                      <button
+                                                        key={`${option.type}-${option.id}`}
+                                                        type="button"
+                                                        onMouseDown={(event) => {
+                                                          event.preventDefault();
+                                                          handleSelectReceiptOption(index, option);
+                                                        }}
+                                                        className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-emerald-50"
+                                                      >
+                                                        <span className="font-semibold text-slate-700">
+                                                          {option.name}
+                                                        </span>
+                                                        <span className="text-[10px] uppercase text-slate-400">
+                                                          {option.typeLabel}
+                                                        </span>
+                                                      </button>
+                                                    ))
+                                                  ) : (
+                                                    <div className="px-3 py-2 text-[11px] text-slate-400">
+                                                      Ничего не найдено
+                                                    </div>
+                                                  )}
+                                                </div>,
+                                                document.body
+                                              )
+                                            : null}
                                         </div>
                                       </td>
                                       <td className="px-3 py-2">
@@ -7075,15 +7171,6 @@ const AdminPage: React.FC = () => {
                             </table>
                           </div>
                         </div>
-                        <datalist id="receipt-item-options">
-                          {receiptItemOptions.map((option) => (
-                            <option
-                              key={`${option.type}-${option.id}`}
-                              value={option.displayValue}
-                              label={option.typeLabel}
-                            />
-                          ))}
-                        </datalist>
                       </div>
                     </form>
                     <div className="sticky bottom-0 border-t border-slate-200 bg-white px-4 py-3">
