@@ -11,6 +11,8 @@ export type RestaurantBranding = {
 type RestaurantPreferences = RestaurantBranding & {
   enableOrderTags: boolean;
   loyaltyRate: number;
+  loyaltyRedeemAllCategories: boolean;
+  loyaltyRedeemCategoryIds: string[];
 };
 
 type RestaurantState = RestaurantPreferences & {
@@ -28,6 +30,8 @@ const defaultBranding: RestaurantPreferences = {
   measurementUnits: ['гр', 'кг', 'мл', 'л', 'шт'],
   enableOrderTags: false,
   loyaltyRate: 5,
+  loyaltyRedeemAllCategories: true,
+  loyaltyRedeemCategoryIds: [],
 };
 
 const isBrowser = typeof window !== 'undefined';
@@ -37,6 +41,21 @@ const normalizeBranding = (payload: unknown): RestaurantPreferences => {
     payload && typeof payload === 'object' && 'branding' in (payload as Record<string, unknown>)
       ? (payload as { branding?: unknown }).branding
       : payload;
+
+  const loyaltyRedeemAllCategories =
+    source && typeof source === 'object' && typeof (source as any).loyaltyRedeemAllCategories === 'boolean'
+      ? (source as any).loyaltyRedeemAllCategories
+      : defaultBranding.loyaltyRedeemAllCategories;
+  const loyaltyRedeemCategoryIds =
+    source && typeof source === 'object' && Array.isArray((source as any).loyaltyRedeemCategoryIds)
+      ? Array.from(
+          new Set(
+            (source as any).loyaltyRedeemCategoryIds
+              .map((id: unknown) => (typeof id === 'string' ? id.trim() : ''))
+              .filter((id: string) => id.length > 0)
+          )
+        )
+      : defaultBranding.loyaltyRedeemCategoryIds;
 
   return {
     name:
@@ -69,6 +88,8 @@ const normalizeBranding = (payload: unknown): RestaurantPreferences => {
       source && typeof source === 'object' && typeof (source as any).loyaltyRate === 'number'
         ? Math.min(Math.max((source as any).loyaltyRate, 0), 100)
         : defaultBranding.loyaltyRate,
+    loyaltyRedeemAllCategories,
+    loyaltyRedeemCategoryIds: loyaltyRedeemAllCategories ? [] : loyaltyRedeemCategoryIds,
   };
 };
 
@@ -94,6 +115,16 @@ const mergeBranding = (
     typeof payload?.loyaltyRate === 'number'
       ? Math.min(Math.max(Number(payload.loyaltyRate.toFixed(2)), 0), 100)
       : current.loyaltyRate,
+  loyaltyRedeemAllCategories:
+    typeof payload?.loyaltyRedeemAllCategories === 'boolean'
+      ? payload.loyaltyRedeemAllCategories
+      : current.loyaltyRedeemAllCategories,
+  loyaltyRedeemCategoryIds:
+    payload?.loyaltyRedeemAllCategories === true
+      ? []
+      : Array.isArray(payload?.loyaltyRedeemCategoryIds)
+        ? Array.from(new Set(payload.loyaltyRedeemCategoryIds.map((id) => id.trim()).filter((id) => id.length > 0)))
+        : current.loyaltyRedeemCategoryIds,
 });
 
 const loadBranding = (): RestaurantPreferences => {
@@ -156,6 +187,8 @@ export const useRestaurantStore = create<RestaurantState>((set, get) => ({
       measurementUnits: get().measurementUnits,
       enableOrderTags: get().enableOrderTags,
       loyaltyRate: get().loyaltyRate,
+      loyaltyRedeemAllCategories: get().loyaltyRedeemAllCategories,
+      loyaltyRedeemCategoryIds: get().loyaltyRedeemCategoryIds,
     };
 
     const merged = mergeBranding(current, payload);
