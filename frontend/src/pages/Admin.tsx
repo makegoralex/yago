@@ -3575,7 +3575,7 @@ const AdminPage: React.FC = () => {
       const items = [...prev.items];
       const current = { ...items[index], [field]: value };
       const parseNumber = (input: string) => {
-        const trimmed = input.trim();
+        const trimmed = input.trim().replace(',', '.');
         if (!trimmed) {
           return null;
         }
@@ -7060,9 +7060,8 @@ const AdminPage: React.FC = () => {
                                     </td>
                                     <td className="px-3 py-2">
                                       <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
+                                        type="text"
+                                        inputMode="decimal"
                                         value={item.unitCost}
                                         onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
                                         className="w-24 rounded-xl border border-slate-200 px-2 py-2"
@@ -7071,9 +7070,8 @@ const AdminPage: React.FC = () => {
                                     </td>
                                     <td className="px-3 py-2">
                                       <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
+                                        type="text"
+                                        inputMode="decimal"
                                         value={item.totalCost}
                                         onChange={(event) =>
                                           handleReceiptItemChange(index, 'totalCost', event.target.value)
