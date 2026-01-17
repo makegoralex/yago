@@ -9,8 +9,15 @@ import {
 } from '../services/authService';
 import { validateRequest } from '../middleware/validation';
 import { authSchemas, type LoginBody, type RefreshBody, type RegisterBody } from '../validation/authSchemas';
+import { createRateLimiter } from '../middleware/rateLimit';
 
 export const authRouter = Router();
+
+const authRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: 'Too many authentication attempts, please try again later.',
+});
 
 const resolveUserId = (user: { id?: string; _id?: unknown } | { id?: string } | { _id?: unknown }): string => {
   const maybeId = (user as { id?: string }).id;
@@ -26,91 +33,106 @@ const resolveUserId = (user: { id?: string; _id?: unknown } | { id?: string } | 
   throw new Error('User identifier is not available');
 };
 
-authRouter.post('/register', validateRequest({ body: authSchemas.register }), async (req: Request, res: Response) => {
-  try {
-    const { name, email, password, role, organizationId } = req.body as RegisterBody;
+authRouter.post(
+  '/register',
+  authRateLimiter,
+  validateRequest({ body: authSchemas.register }),
+  async (req: Request, res: Response) => {
+    try {
+      const { name, email, password, role, organizationId } = req.body as RegisterBody;
 
-    const { user, tokens } = await registerUser({
-      name,
-      email,
-      password,
-      organizationId,
-      role,
-    });
+      const { user, tokens } = await registerUser({
+        name,
+        email,
+        password,
+        organizationId,
+        role,
+      });
 
-    res.status(201).json({
-      data: {
-        user: {
-          id: resolveUserId(user),
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          organizationId: user.organizationId ? String(user.organizationId) : undefined,
+      res.status(201).json({
+        data: {
+          user: {
+            id: resolveUserId(user),
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            organizationId: user.organizationId ? String(user.organizationId) : undefined,
+          },
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
         },
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-      },
-      error: null,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Registration failed';
-    const status = message.includes('exists') ? 409 : 400;
-    res.status(status).json({ data: null, error: message });
-  }
-});
-
-authRouter.post('/login', validateRequest({ body: authSchemas.login }), async (req: Request, res: Response) => {
-  try {
-    const { email, password, organizationId } = req.body as LoginBody;
-
-    const { user, tokens } = await authenticateUser(email, password, organizationId);
-
-    res.json({
-      data: {
-        user: {
-          id: resolveUserId(user),
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          organizationId: user.organizationId ? String(user.organizationId) : undefined,
-        },
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-      },
-      error: null,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Authentication failed';
-    res.status(401).json({ data: null, error: message });
-  }
-});
-
-authRouter.post('/refresh', validateRequest({ body: authSchemas.refresh }), async (req: Request, res: Response) => {
-  try {
-    const { refreshToken } = req.body as RefreshBody;
-
-    const payload = verifyRefreshToken(refreshToken);
-    const user = await UserModel.findById(payload.sub);
-
-    if (!user) {
-      res.status(401).json({ data: null, error: 'User not found' });
-      return;
+        error: null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Registration failed';
+      const status = message.includes('exists') ? 409 : 400;
+      res.status(status).json({ data: null, error: message });
     }
-
-    const tokens = generateTokens(user);
-
-    res.json({
-      data: {
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-      },
-      error: null,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Invalid refresh token';
-    res.status(401).json({ data: null, error: message || 'Invalid refresh token' });
   }
-});
+);
+
+authRouter.post(
+  '/login',
+  authRateLimiter,
+  validateRequest({ body: authSchemas.login }),
+  async (req: Request, res: Response) => {
+    try {
+      const { email, password, organizationId } = req.body as LoginBody;
+
+      const { user, tokens } = await authenticateUser(email, password, organizationId);
+
+      res.json({
+        data: {
+          user: {
+            id: resolveUserId(user),
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            organizationId: user.organizationId ? String(user.organizationId) : undefined,
+          },
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+        },
+        error: null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Authentication failed';
+      res.status(401).json({ data: null, error: message });
+    }
+  }
+);
+
+authRouter.post(
+  '/refresh',
+  authRateLimiter,
+  validateRequest({ body: authSchemas.refresh }),
+  async (req: Request, res: Response) => {
+    try {
+      const { refreshToken } = req.body as RefreshBody;
+
+      const payload = verifyRefreshToken(refreshToken);
+      const user = await UserModel.findById(payload.sub);
+
+      if (!user) {
+        res.status(401).json({ data: null, error: 'User not found' });
+        return;
+      }
+
+      const tokens = generateTokens(user);
+
+      res.json({
+        data: {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+        },
+        error: null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid refresh token';
+      res.status(401).json({ data: null, error: message || 'Invalid refresh token' });
+    }
+  }
+);
 
 authRouter.get('/me', authMiddleware, async (req: Request, res: Response) => {
   if (!req.user) {

@@ -106,11 +106,6 @@ const resolveAccessToken = (req: Request): string | null => {
     }
   }
 
-  const queryToken = req.query.accessToken ?? req.query.token;
-  if (typeof queryToken === 'string' && queryToken.trim()) {
-    return safelyDecodeURIComponent(queryToken.trim());
-  }
-
   return null;
 };
 
