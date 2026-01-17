@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 import * as XLSX from 'xlsx';
+import { Menu } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -3574,7 +3575,7 @@ const AdminPage: React.FC = () => {
       const items = [...prev.items];
       const current = { ...items[index], [field]: value };
       const parseNumber = (input: string) => {
-        const trimmed = input.trim();
+        const trimmed = input.trim().replace(',', '.');
         if (!trimmed) {
           return null;
         }
@@ -3860,30 +3861,24 @@ const AdminPage: React.FC = () => {
       return;
     }
 
-    const handlePointerDown = (event: MouseEvent) => {
+    const handlePointerDown = (event: PointerEvent) => {
       const dropdown = receiptSearchDropdownRef.current;
       const input = receiptItemSearchRefs.current[activeReceiptSearchIndex];
-      if (dropdown?.contains(event.target as Node) || input?.contains(event.target as Node)) {
+      const path = event.composedPath ? event.composedPath() : [];
+
+      if (
+        (dropdown && path.includes(dropdown)) ||
+        (input && (path.includes(input) || input.contains(event.target as Node)))
+      ) {
         return;
       }
       setActiveReceiptSearchIndex(null);
     };
 
-    const handleFocusIn = (event: FocusEvent) => {
-      const dropdown = receiptSearchDropdownRef.current;
-      const input = receiptItemSearchRefs.current[activeReceiptSearchIndex];
-      if (dropdown?.contains(event.target as Node) || input?.contains(event.target as Node)) {
-        return;
-      }
-      setActiveReceiptSearchIndex(null);
-    };
-
-    window.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('focusin', handleFocusIn);
+    window.addEventListener('pointerdown', handlePointerDown);
 
     return () => {
-      window.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('focusin', handleFocusIn);
+      window.removeEventListener('pointerdown', handlePointerDown);
     };
   }, [activeReceiptSearchIndex]);
 
@@ -4606,9 +4601,7 @@ const AdminPage: React.FC = () => {
                 className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 md:hidden"
                 aria-label="Открыть меню админки"
               >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
+                <Menu className="h-5 w-5" aria-hidden />
               </button>
             </div>
           </div>
@@ -4629,7 +4622,6 @@ const AdminPage: React.FC = () => {
                   }`}
                 >
                   <span>{item.label}</span>
-                  <span className="text-xs text-slate-400">{item.id === activeTab ? 'Сейчас' : ''}</span>
                 </button>
               ))}
             </div>
@@ -7068,9 +7060,8 @@ const AdminPage: React.FC = () => {
                                     </td>
                                     <td className="px-3 py-2">
                                       <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
+                                        type="text"
+                                        inputMode="decimal"
                                         value={item.unitCost}
                                         onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
                                         className="w-24 rounded-xl border border-slate-200 px-2 py-2"
@@ -7079,9 +7070,8 @@ const AdminPage: React.FC = () => {
                                     </td>
                                     <td className="px-3 py-2">
                                       <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
+                                        type="text"
+                                        inputMode="decimal"
                                         value={item.totalCost}
                                         onChange={(event) =>
                                           handleReceiptItemChange(index, 'totalCost', event.target.value)
@@ -8242,38 +8232,69 @@ const AdminPage: React.FC = () => {
                   </button>
                 </div>
               ) : cashiers.length ? (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Имя</th>
-                        <th className="px-3 py-2 text-left">Email</th>
-                        <th className="px-3 py-2 text-left">Создан</th>
-                        <th className="px-3 py-2 text-left">Обновлён</th>
-                        <th className="px-3 py-2 text-right">Действия</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {cashiers.map((cashier) => (
-                        <tr key={cashier.id}>
-                          <td className="px-3 py-2 font-semibold text-slate-800">{cashier.name || '—'}</td>
-                          <td className="px-3 py-2 text-slate-500">{cashier.email || '—'}</td>
-                          <td className="px-3 py-2 text-slate-500">{formatDateTime(cashier.createdAt)}</td>
-                          <td className="px-3 py-2 text-slate-500">{formatDateTime(cashier.updatedAt)}</td>
-                          <td className="px-3 py-2 text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteCashier(cashier.id)}
-                              className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-                            >
-                              Удалить
-                            </button>
-                          </td>
+                <>
+                  <div className="space-y-3 sm:hidden">
+                    {cashiers.map((cashier) => (
+                      <div key={cashier.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">{cashier.name || '—'}</p>
+                            <p className="text-xs text-slate-500">{cashier.email || '—'}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCashier(cashier.id)}
+                            className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs text-slate-500">
+                          <div className="flex items-center justify-between">
+                            <span className="uppercase text-slate-400">Создан</span>
+                            <span>{formatDateTime(cashier.createdAt)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="uppercase text-slate-400">Обновлён</span>
+                            <span>{formatDateTime(cashier.updatedAt)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hidden overflow-x-auto sm:block">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Имя</th>
+                          <th className="px-3 py-2 text-left">Email</th>
+                          <th className="px-3 py-2 text-left">Создан</th>
+                          <th className="px-3 py-2 text-left">Обновлён</th>
+                          <th className="px-3 py-2 text-right">Действия</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {cashiers.map((cashier) => (
+                          <tr key={cashier.id}>
+                            <td className="px-3 py-2 font-semibold text-slate-800">{cashier.name || '—'}</td>
+                            <td className="px-3 py-2 text-slate-500">{cashier.email || '—'}</td>
+                            <td className="px-3 py-2 text-slate-500">{formatDateTime(cashier.createdAt)}</td>
+                            <td className="px-3 py-2 text-slate-500">{formatDateTime(cashier.updatedAt)}</td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCashier(cashier.id)}
+                                className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+                              >
+                                Удалить
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               ) : (
                 <div className="flex flex-col items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-sm text-slate-500">
