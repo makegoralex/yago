@@ -1317,12 +1317,11 @@ const AdminPage: React.FC = () => {
     return lookup;
   }, [receiptItemOptions]);
 
-  const receiptItemSearchLimit = 25;
   const filterReceiptItemOptions = useCallback(
     (query: string) => {
       const normalized = query.trim().toLowerCase();
       if (!normalized) {
-        return receiptItemOptions.slice(0, receiptItemSearchLimit);
+        return receiptItemOptions;
       }
 
       return receiptItemOptions
@@ -1335,8 +1334,7 @@ const AdminPage: React.FC = () => {
             display.includes(normalized) ||
             typeLabel.includes(normalized)
           );
-        })
-        .slice(0, receiptItemSearchLimit);
+        });
     },
     [receiptItemOptions]
   );
@@ -6944,12 +6942,13 @@ const AdminPage: React.FC = () => {
                             <tbody>
                               {receiptItems.map((item, index) => {
                                 const optionKey = `${item.itemType}:${item.itemId}`;
+                                const searchValue = item.search ?? '';
                                 const optionLabel =
-                                  item.search && item.search.trim().length > 0
-                                    ? item.search
+                                  searchValue.trim().length > 0
+                                    ? searchValue
                                     : receiptItemOptionById.get(optionKey)?.displayValue ??
                                       (item.itemId ? getInventoryItemName(item.itemType, item.itemId) : '');
-                                const filteredOptions = filterReceiptItemOptions(optionLabel);
+                                const filteredOptions = filterReceiptItemOptions(searchValue);
 
                                 return (
                                   <tr key={`${item.itemId}-${index}`} className="border-t border-slate-100">
