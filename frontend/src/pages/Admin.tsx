@@ -352,6 +352,38 @@ const normalizeCustomerHeader = (value: unknown): string =>
 const normalizePhoneValue = (value?: string | null): string =>
   typeof value === 'string' ? value.replace(/\D/g, '') : '';
 
+const formatGuestPhone = (value: string): string => {
+  const digits = value.replace(/\D/g, '');
+  const hasCountryPrefix = value.trim().startsWith('+7');
+  let trimmed = digits;
+
+  if (hasCountryPrefix && trimmed.startsWith('7')) {
+    trimmed = trimmed.slice(1);
+  } else if (trimmed.length > 10 && (trimmed.startsWith('7') || trimmed.startsWith('8'))) {
+    trimmed = trimmed.slice(1);
+  }
+
+  trimmed = trimmed.slice(0, 10);
+
+  if (!trimmed) {
+    return '';
+  }
+
+  const groups = [3, 3, 2, 2];
+  const parts: string[] = [];
+  let index = 0;
+
+  groups.forEach((size) => {
+    if (index >= trimmed.length) {
+      return;
+    }
+    parts.push(trimmed.slice(index, index + size));
+    index += size;
+  });
+
+  return `+7-${parts.join('-')}`;
+};
+
 const highlightMatch = (value: string, query: string): React.ReactNode => {
   if (!query) {
     return value;
@@ -2019,9 +2051,14 @@ const AdminPage: React.FC = () => {
     setLoyaltyActionAmount('');
     setNewCustomerForm({
       name: '',
-      phone: phoneValue ?? '',
+      phone: phoneValue ? formatGuestPhone(phoneValue) : '',
       email: '',
     });
+  };
+
+  const handleNewCustomerPhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const maskedValue = formatGuestPhone(event.target.value);
+    setNewCustomerForm((prev) => ({ ...prev, phone: maskedValue }));
   };
 
   const handleCreateCustomer = async (event: React.FormEvent) => {
@@ -7879,9 +7916,9 @@ const AdminPage: React.FC = () => {
                         <input
                           type="tel"
                           value={newCustomerForm.phone}
-                          onChange={(event) => setNewCustomerForm((prev) => ({ ...prev, phone: event.target.value }))}
+                          onChange={handleNewCustomerPhoneChange}
                           className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                          placeholder="Телефон"
+                          placeholder="+7-xxx-xx-xx-xx"
                         />
                         <input
                           type="email"
@@ -8107,9 +8144,9 @@ const AdminPage: React.FC = () => {
                         <input
                           type="tel"
                           value={newCustomerForm.phone}
-                          onChange={(event) => setNewCustomerForm((prev) => ({ ...prev, phone: event.target.value }))}
+                          onChange={handleNewCustomerPhoneChange}
                           className="w-full rounded-2xl border border-slate-200 px-4 py-2"
-                          placeholder="Телефон"
+                          placeholder="+7-xxx-xx-xx-xx"
                         />
                         <input
                           type="email"
