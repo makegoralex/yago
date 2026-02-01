@@ -3852,6 +3852,15 @@ const AdminPage: React.FC = () => {
   const receiptItemSearchRefs = useRef<Array<HTMLInputElement | null>>([]);
   const receiptSearchDropdownRef = useRef<HTMLDivElement | null>(null);
 
+  const handleReceiptItemSearchFocus = useCallback(
+    (index: number, event: React.FocusEvent<HTMLInputElement>) => {
+      setActiveReceiptSearchIndex(index);
+      updateReceiptSearchPosition(index);
+      requestAnimationFrame(() => event.currentTarget.select());
+    },
+    [updateReceiptSearchPosition]
+  );
+
   const updateReceiptSearchPosition = useCallback(
     (index: number) => {
       const target = receiptItemSearchRefs.current[index];
