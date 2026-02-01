@@ -107,6 +107,17 @@ type StockReceiptItem = {
   unitCost: number;
 };
 
+type ReceiptItemForm = {
+  rowId: string;
+  itemType: 'ingredient' | 'product';
+  itemId: string;
+  search: string;
+  quantity: string;
+  unitCost: string;
+  totalCost: string;
+  priceSource: 'unitCost' | 'totalCost';
+};
+
 type StockReceipt = {
   _id: string;
   type: 'receipt' | 'writeOff' | 'inventory';
@@ -208,6 +219,18 @@ const convertQuantity = (quantity: number, fromUnit?: string | null, toUnit?: st
 
   return quantity * factor;
 };
+
+const createReceiptItemRow = (overrides: Partial<ReceiptItemForm> = {}): ReceiptItemForm => ({
+  rowId: crypto.randomUUID(),
+  itemType: 'ingredient',
+  itemId: '',
+  search: '',
+  quantity: '',
+  unitCost: '',
+  totalCost: '',
+  priceSource: 'unitCost',
+  ...overrides,
+});
 
 const normalizeSalesAndShiftStats = (
   payload?: SalesAndShiftStats | LegacySalesAndShiftStats | null
@@ -694,17 +717,7 @@ const AdminPage: React.FC = () => {
   const [receiptForm, setReceiptForm] = useState({
     warehouseId: '',
     supplierId: '',
-    items: [
-      {
-        itemType: 'ingredient' as 'ingredient' | 'product',
-        itemId: '',
-        search: '',
-        quantity: '',
-        unitCost: '',
-        totalCost: '',
-        priceSource: 'unitCost' as 'unitCost' | 'totalCost',
-      },
-    ],
+    items: [createReceiptItemRow()],
   });
   const receiptItems = receiptForm?.items ?? [];
   const [receiptType, setReceiptType] = useState<'receipt' | 'writeOff'>('receipt');
@@ -3614,13 +3627,17 @@ const AdminPage: React.FC = () => {
   };
 
   const handleReceiptItemChange = (
-    index: number,
+    rowId: string,
     field: 'itemType' | 'itemId' | 'quantity' | 'unitCost' | 'totalCost',
     value: string
   ) => {
     setReceiptForm((prev) => {
+      const targetIndex = prev.items.findIndex((item) => item.rowId === rowId);
+      if (targetIndex === -1) {
+        return prev;
+      }
       const items = [...prev.items];
-      const current = { ...items[index], [field]: value };
+      const current = { ...items[targetIndex], [field]: value };
       const parseNumber = (input: string) => {
         const trimmed = input.trim().replace(',', '.');
         if (!trimmed) {
@@ -3669,7 +3686,7 @@ const AdminPage: React.FC = () => {
         }
       }
 
-      items[index] = current;
+      items[targetIndex] = current;
       return { ...prev, items };
     });
   };
@@ -3718,11 +3735,11 @@ const AdminPage: React.FC = () => {
   );
 
   const adjustReceiptItemQuantity = useCallback(
-    (index: number, delta: number) => {
-      const currentValue = Number(receiptItems[index]?.quantity || 0);
+    (rowId: string, delta: number) => {
+      const currentValue = Number(receiptItems.find((item) => item.rowId === rowId)?.quantity || 0);
       const nextValue = Math.max(0, currentValue + delta);
       const formatted = nextValue > 0 ? formatReceiptValue(nextValue) : '';
-      handleReceiptItemChange(index, 'quantity', formatted);
+      handleReceiptItemChange(rowId, 'quantity', formatted);
     },
     [formatReceiptValue, handleReceiptItemChange, receiptItems]
   );
@@ -3730,18 +3747,7 @@ const AdminPage: React.FC = () => {
   const addReceiptItemRow = () => {
     setReceiptForm((prev) => ({
       ...prev,
-      items: [
-        ...prev.items,
-        {
-          itemType: 'ingredient' as 'ingredient' | 'product',
-          itemId: '',
-          search: '',
-          quantity: '',
-          unitCost: '',
-          totalCost: '',
-          priceSource: 'unitCost' as 'unitCost' | 'totalCost',
-        },
-      ],
+      items: [...prev.items, createReceiptItemRow()],
     }));
     setPendingReceiptFocusIndex(receiptItems.length);
   };
@@ -3760,17 +3766,7 @@ const AdminPage: React.FC = () => {
     setReceiptForm({
       warehouseId: preserveWarehouse ? receiptForm.warehouseId : '',
       supplierId: '',
-      items: [
-        {
-          itemType: 'ingredient',
-          itemId: '',
-          search: '',
-          quantity: '',
-          unitCost: '',
-          totalCost: '',
-          priceSource: 'unitCost',
-        },
-      ],
+      items: [createReceiptItemRow()],
     });
   };
 
@@ -3794,26 +3790,20 @@ const AdminPage: React.FC = () => {
         items:
           items.length > 0
             ? items.map((item) => ({
-                itemType: item.itemType,
-                itemId: item.itemId,
-                search:
-                  receiptItemOptionById.get(`${item.itemType}:${item.itemId}`)?.displayValue ??
-                  getInventoryItemName(item.itemType, item.itemId),
-                quantity: item.quantity.toString(),
-                unitCost: item.unitCost.toString(),
-                totalCost: formatReceiptValue(item.quantity * item.unitCost),
-                priceSource: 'unitCost',
+                ...createReceiptItemRow({
+                  itemType: item.itemType,
+                  itemId: item.itemId,
+                  search:
+                    receiptItemOptionById.get(`${item.itemType}:${item.itemId}`)?.displayValue ??
+                    getInventoryItemName(item.itemType, item.itemId),
+                  quantity: item.quantity.toString(),
+                  unitCost: item.unitCost.toString(),
+                  totalCost: formatReceiptValue(item.quantity * item.unitCost),
+                  priceSource: 'unitCost',
+                }),
               }))
             : [
-                {
-                  itemType: 'ingredient',
-                  itemId: '',
-                  search: '',
-                  quantity: '',
-                  unitCost: '',
-                  totalCost: '',
-                  priceSource: 'unitCost',
-                },
+                createReceiptItemRow({ itemType: 'ingredient' }),
               ],
       });
       return true;
@@ -6997,7 +6987,7 @@ const AdminPage: React.FC = () => {
                                 const filteredOptions = filterReceiptItemOptions(searchValue);
 
                                 return (
-                                  <tr key={`receipt-item-${index}`} className="border-t border-slate-100">
+                                  <tr key={item.rowId} className="border-t border-slate-100">
                                     <td className="px-3 py-2">
                                       <div className="relative">
                                         <input
@@ -7072,7 +7062,7 @@ const AdminPage: React.FC = () => {
                                       <div className="flex items-center gap-1">
                                         <button
                                           type="button"
-                                          onClick={() => adjustReceiptItemQuantity(index, -1)}
+                                          onClick={() => adjustReceiptItemQuantity(item.rowId, -1)}
                                           className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
                                           aria-label="Уменьшить количество"
                                         >
@@ -7084,7 +7074,7 @@ const AdminPage: React.FC = () => {
                                           value={item.quantity}
                                           onChange={(event) =>
                                             handleReceiptItemChange(
-                                              index,
+                                              item.rowId,
                                               'quantity',
                                               sanitizeReceiptNumericInput(event.target.value)
                                             )
@@ -7095,7 +7085,7 @@ const AdminPage: React.FC = () => {
                                         />
                                         <button
                                           type="button"
-                                          onClick={() => adjustReceiptItemQuantity(index, 1)}
+                                          onClick={() => adjustReceiptItemQuantity(item.rowId, 1)}
                                           className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
                                           aria-label="Увеличить количество"
                                         >
@@ -7115,7 +7105,7 @@ const AdminPage: React.FC = () => {
                                         value={item.unitCost}
                                         onChange={(event) =>
                                           handleReceiptItemChange(
-                                            index,
+                                            item.rowId,
                                             'unitCost',
                                             sanitizeReceiptNumericInput(event.target.value)
                                           )
@@ -7132,7 +7122,7 @@ const AdminPage: React.FC = () => {
                                         value={item.totalCost}
                                         onChange={(event) =>
                                           handleReceiptItemChange(
-                                            index,
+                                            item.rowId,
                                             'totalCost',
                                             sanitizeReceiptNumericInput(event.target.value)
                                           )
