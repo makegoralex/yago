@@ -3852,44 +3852,38 @@ const AdminPage: React.FC = () => {
   const receiptItemSearchRefs = useRef<Array<HTMLInputElement | null>>([]);
   const receiptSearchDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const handleReceiptItemSearchFocus = useCallback(
-    (index: number, event: React.FocusEvent<HTMLInputElement>) => {
-      setActiveReceiptSearchIndex(index);
-      updateReceiptSearchPosition(index);
-      requestAnimationFrame(() => event.currentTarget.select());
-    },
-    [updateReceiptSearchPosition]
-  );
+  function updateReceiptSearchPosition(index: number) {
+    const target = receiptItemSearchRefs.current[index];
+    if (!target) {
+      return;
+    }
+    const rect = target.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const gap = 6;
+    const spaceBelow = Math.max(0, viewportHeight - rect.bottom - gap);
+    const spaceAbove = Math.max(0, rect.top - gap);
+    const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
+    const availableSpace = openUp ? spaceAbove : spaceBelow;
+    const maxHeight = Math.min(280, availableSpace);
+    if (maxHeight <= 0) {
+      return;
+    }
+    const top = openUp ? Math.max(gap, rect.top - maxHeight - gap) : rect.bottom + gap;
 
-  const updateReceiptSearchPosition = useCallback(
-    (index: number) => {
-      const target = receiptItemSearchRefs.current[index];
-      if (!target) {
-        return;
-      }
-      const rect = target.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      const gap = 6;
-      const spaceBelow = Math.max(0, viewportHeight - rect.bottom - gap);
-      const spaceAbove = Math.max(0, rect.top - gap);
-      const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
-      const availableSpace = openUp ? spaceAbove : spaceBelow;
-      const maxHeight = Math.min(280, availableSpace);
-      if (maxHeight <= 0) {
-        return;
-      }
-      const top = openUp ? Math.max(gap, rect.top - maxHeight - gap) : rect.bottom + gap;
+    setReceiptSearchPosition({
+      index,
+      top,
+      left: rect.left,
+      width: rect.width,
+      maxHeight,
+    });
+  }
 
-      setReceiptSearchPosition({
-        index,
-        top,
-        left: rect.left,
-        width: rect.width,
-        maxHeight,
-      });
-    },
-    []
-  );
+  const handleReceiptSearchFocus = (index: number, event: React.FocusEvent<HTMLInputElement>) => {
+    setActiveReceiptSearchIndex(index);
+    updateReceiptSearchPosition(index);
+    requestAnimationFrame(() => event.currentTarget.select());
+  };
 
   const handleReceiptSearchFocus = (index: number, event: React.FocusEvent<HTMLInputElement>) => {
     setActiveReceiptSearchIndex(index);
