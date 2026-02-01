@@ -1268,6 +1268,18 @@ const AdminPage: React.FC = () => {
     return Math.round((value + Number.EPSILON) * 100) / 100;
   }, []);
 
+  const sanitizeReceiptNumericInput = useCallback((value: string) => {
+    const cleaned = value.replace(/[^\d.,]/g, '');
+    const separatorIndex = cleaned.search(/[.,]/);
+    if (separatorIndex === -1) {
+      return cleaned;
+    }
+    const separator = cleaned[separatorIndex];
+    const before = cleaned.slice(0, separatorIndex);
+    const after = cleaned.slice(separatorIndex + 1).replace(/[.,]/g, '');
+    return `${before}${separator}${after}`;
+  }, []);
+
   const formatReceiptValue = useCallback(
     (value: number) => {
       if (!Number.isFinite(value)) {
@@ -3868,6 +3880,15 @@ const AdminPage: React.FC = () => {
       });
     },
     []
+  );
+
+  const handleReceiptItemSearchFocus = useCallback(
+    (index: number, event: React.FocusEvent<HTMLInputElement>) => {
+      setActiveReceiptSearchIndex(index);
+      updateReceiptSearchPosition(index);
+      requestAnimationFrame(() => event.currentTarget.select());
+    },
+    [updateReceiptSearchPosition]
   );
 
   useEffect(() => {
@@ -6995,10 +7016,7 @@ const AdminPage: React.FC = () => {
                                           type="text"
                                           value={optionLabel}
                                           onChange={(event) => handleReceiptItemSearchChange(index, event.target.value)}
-                                          onFocus={() => {
-                                            setActiveReceiptSearchIndex(index);
-                                            updateReceiptSearchPosition(index);
-                                          }}
+                                          onFocus={(event) => handleReceiptItemSearchFocus(index, event)}
                                           onKeyDown={(event) => {
                                             if (event.key === 'Escape') {
                                               setActiveReceiptSearchIndex(null);
@@ -7066,12 +7084,15 @@ const AdminPage: React.FC = () => {
                                           −
                                         </button>
                                         <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
+                                          type="text"
+                                          inputMode="decimal"
                                           value={item.quantity}
                                           onChange={(event) =>
-                                            handleReceiptItemChange(index, 'quantity', event.target.value)
+                                            handleReceiptItemChange(
+                                              index,
+                                              'quantity',
+                                              sanitizeReceiptNumericInput(event.target.value)
+                                            )
                                           }
                                           className="w-16 rounded-xl border border-slate-200 px-2 py-2 text-center"
                                           placeholder="0"
@@ -7096,7 +7117,13 @@ const AdminPage: React.FC = () => {
                                         type="text"
                                         inputMode="decimal"
                                         value={item.unitCost}
-                                        onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
+                                        onChange={(event) =>
+                                          handleReceiptItemChange(
+                                            index,
+                                            'unitCost',
+                                            sanitizeReceiptNumericInput(event.target.value)
+                                          )
+                                        }
                                         className="w-24 rounded-xl border border-slate-200 px-2 py-2"
                                         placeholder="Цена"
                                       />
@@ -7107,7 +7134,11 @@ const AdminPage: React.FC = () => {
                                         inputMode="decimal"
                                         value={item.totalCost}
                                         onChange={(event) =>
-                                          handleReceiptItemChange(index, 'totalCost', event.target.value)
+                                          handleReceiptItemChange(
+                                            index,
+                                            'totalCost',
+                                            sanitizeReceiptNumericInput(event.target.value)
+                                          )
                                         }
                                         className="w-24 rounded-xl border border-slate-200 px-2 py-2"
                                         placeholder="Сумма"
