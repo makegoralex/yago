@@ -3879,18 +3879,6 @@ const AdminPage: React.FC = () => {
     });
   }
 
-  const handleReceiptSearchFocus = (index: number, event: React.FocusEvent<HTMLInputElement>) => {
-    setActiveReceiptSearchIndex(index);
-    updateReceiptSearchPosition(index);
-    requestAnimationFrame(() => event.currentTarget.select());
-  };
-
-  const handleReceiptSearchFocus = (index: number, event: React.FocusEvent<HTMLInputElement>) => {
-    setActiveReceiptSearchIndex(index);
-    updateReceiptSearchPosition(index);
-    requestAnimationFrame(() => event.currentTarget.select());
-  };
-
   useEffect(() => {
     if (activeReceiptSearchIndex === null) {
       setReceiptSearchPosition(null);
@@ -7016,7 +7004,11 @@ const AdminPage: React.FC = () => {
                                           type="text"
                                           value={optionLabel}
                                           onChange={(event) => handleReceiptItemSearchChange(index, event.target.value)}
-                                          onFocus={(event) => handleReceiptSearchFocus(index, event)}
+                                          onFocus={(event) => {
+                                            setActiveReceiptSearchIndex(index);
+                                            updateReceiptSearchPosition(index);
+                                            requestAnimationFrame(() => event.currentTarget.select());
+                                          }}
                                           onKeyDown={(event) => {
                                             if (event.key === 'Escape') {
                                               setActiveReceiptSearchIndex(null);
