@@ -3885,6 +3885,12 @@ const AdminPage: React.FC = () => {
     requestAnimationFrame(() => event.currentTarget.select());
   };
 
+  const handleReceiptSearchFocus = (index: number, event: React.FocusEvent<HTMLInputElement>) => {
+    setActiveReceiptSearchIndex(index);
+    updateReceiptSearchPosition(index);
+    requestAnimationFrame(() => event.currentTarget.select());
+  };
+
   useEffect(() => {
     if (activeReceiptSearchIndex === null) {
       setReceiptSearchPosition(null);
