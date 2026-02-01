@@ -1271,6 +1271,18 @@ const AdminPage: React.FC = () => {
     return Math.round((value + Number.EPSILON) * 100) / 100;
   }, []);
 
+  const sanitizeReceiptNumericInput = useCallback((value: string) => {
+    const cleaned = value.replace(/[^\d.,]/g, '');
+    const separatorIndex = cleaned.search(/[.,]/);
+    if (separatorIndex === -1) {
+      return cleaned;
+    }
+    const separator = cleaned[separatorIndex];
+    const before = cleaned.slice(0, separatorIndex);
+    const after = cleaned.slice(separatorIndex + 1).replace(/[.,]/g, '');
+    return `${before}${separator}${after}`;
+  }, []);
+
   const formatReceiptValue = useCallback(
     (value: number) => {
       if (!Number.isFinite(value)) {
@@ -3843,35 +3855,32 @@ const AdminPage: React.FC = () => {
   const receiptItemSearchRefs = useRef<Array<HTMLInputElement | null>>([]);
   const receiptSearchDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const updateReceiptSearchPosition = useCallback(
-    (index: number) => {
-      const target = receiptItemSearchRefs.current[index];
-      if (!target) {
-        return;
-      }
-      const rect = target.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      const gap = 6;
-      const spaceBelow = Math.max(0, viewportHeight - rect.bottom - gap);
-      const spaceAbove = Math.max(0, rect.top - gap);
-      const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
-      const availableSpace = openUp ? spaceAbove : spaceBelow;
-      const maxHeight = Math.min(280, availableSpace);
-      if (maxHeight <= 0) {
-        return;
-      }
-      const top = openUp ? Math.max(gap, rect.top - maxHeight - gap) : rect.bottom + gap;
+  function updateReceiptSearchPosition(index: number) {
+    const target = receiptItemSearchRefs.current[index];
+    if (!target) {
+      return;
+    }
+    const rect = target.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const gap = 6;
+    const spaceBelow = Math.max(0, viewportHeight - rect.bottom - gap);
+    const spaceAbove = Math.max(0, rect.top - gap);
+    const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
+    const availableSpace = openUp ? spaceAbove : spaceBelow;
+    const maxHeight = Math.min(280, availableSpace);
+    if (maxHeight <= 0) {
+      return;
+    }
+    const top = openUp ? Math.max(gap, rect.top - maxHeight - gap) : rect.bottom + gap;
 
-      setReceiptSearchPosition({
-        index,
-        top,
-        left: rect.left,
-        width: rect.width,
-        maxHeight,
-      });
-    },
-    []
-  );
+    setReceiptSearchPosition({
+      index,
+      top,
+      left: rect.left,
+      width: rect.width,
+      maxHeight,
+    });
+  }
 
   useEffect(() => {
     if (activeReceiptSearchIndex === null) {
@@ -6988,7 +6997,7 @@ const AdminPage: React.FC = () => {
                                 const filteredOptions = filterReceiptItemOptions(searchValue);
 
                                 return (
-                                  <tr key={`${item.itemId}-${index}`} className="border-t border-slate-100">
+                                  <tr key={`receipt-item-${index}`} className="border-t border-slate-100">
                                     <td className="px-3 py-2">
                                       <div className="relative">
                                         <input
@@ -6998,9 +7007,10 @@ const AdminPage: React.FC = () => {
                                           type="text"
                                           value={optionLabel}
                                           onChange={(event) => handleReceiptItemSearchChange(index, event.target.value)}
-                                          onFocus={() => {
+                                          onFocus={(event) => {
                                             setActiveReceiptSearchIndex(index);
                                             updateReceiptSearchPosition(index);
+                                            requestAnimationFrame(() => event.currentTarget.select());
                                           }}
                                           onKeyDown={(event) => {
                                             if (event.key === 'Escape') {
@@ -7069,13 +7079,17 @@ const AdminPage: React.FC = () => {
                                           −
                                         </button>
                                         <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
+                                          type="text"
+                                          inputMode="decimal"
                                           value={item.quantity}
                                           onChange={(event) =>
-                                            handleReceiptItemChange(index, 'quantity', event.target.value)
+                                            handleReceiptItemChange(
+                                              index,
+                                              'quantity',
+                                              sanitizeReceiptNumericInput(event.target.value)
+                                            )
                                           }
+                                          onFocus={() => setActiveReceiptSearchIndex(null)}
                                           className="w-16 rounded-xl border border-slate-200 px-2 py-2 text-center"
                                           placeholder="0"
                                         />
@@ -7099,7 +7113,14 @@ const AdminPage: React.FC = () => {
                                         type="text"
                                         inputMode="decimal"
                                         value={item.unitCost}
-                                        onChange={(event) => handleReceiptItemChange(index, 'unitCost', event.target.value)}
+                                        onChange={(event) =>
+                                          handleReceiptItemChange(
+                                            index,
+                                            'unitCost',
+                                            sanitizeReceiptNumericInput(event.target.value)
+                                          )
+                                        }
+                                        onFocus={() => setActiveReceiptSearchIndex(null)}
                                         className="w-24 rounded-xl border border-slate-200 px-2 py-2"
                                         placeholder="Цена"
                                       />
@@ -7110,8 +7131,13 @@ const AdminPage: React.FC = () => {
                                         inputMode="decimal"
                                         value={item.totalCost}
                                         onChange={(event) =>
-                                          handleReceiptItemChange(index, 'totalCost', event.target.value)
+                                          handleReceiptItemChange(
+                                            index,
+                                            'totalCost',
+                                            sanitizeReceiptNumericInput(event.target.value)
+                                          )
                                         }
+                                        onFocus={() => setActiveReceiptSearchIndex(null)}
                                         className="w-24 rounded-xl border border-slate-200 px-2 py-2"
                                         placeholder="Сумма"
                                       />
