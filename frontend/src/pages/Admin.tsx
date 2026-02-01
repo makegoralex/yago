@@ -6994,7 +6994,7 @@ const AdminPage: React.FC = () => {
                                 const filteredOptions = filterReceiptItemOptions(searchValue);
 
                                 return (
-                                  <tr key={`${item.itemId}-${index}`} className="border-t border-slate-100">
+                                  <tr key={`receipt-item-${index}`} className="border-t border-slate-100">
                                     <td className="px-3 py-2">
                                       <div className="relative">
                                         <input
@@ -7086,6 +7086,7 @@ const AdminPage: React.FC = () => {
                                               sanitizeReceiptNumericInput(event.target.value)
                                             )
                                           }
+                                          onFocus={() => setActiveReceiptSearchIndex(null)}
                                           className="w-16 rounded-xl border border-slate-200 px-2 py-2 text-center"
                                           placeholder="0"
                                         />
@@ -7116,6 +7117,7 @@ const AdminPage: React.FC = () => {
                                             sanitizeReceiptNumericInput(event.target.value)
                                           )
                                         }
+                                        onFocus={() => setActiveReceiptSearchIndex(null)}
                                         className="w-24 rounded-xl border border-slate-200 px-2 py-2"
                                         placeholder="Цена"
                                       />
@@ -7132,6 +7134,7 @@ const AdminPage: React.FC = () => {
                                             sanitizeReceiptNumericInput(event.target.value)
                                           )
                                         }
+                                        onFocus={() => setActiveReceiptSearchIndex(null)}
                                         className="w-24 rounded-xl border border-slate-200 px-2 py-2"
                                         placeholder="Сумма"
                                       />
