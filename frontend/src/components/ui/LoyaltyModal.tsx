@@ -11,7 +11,36 @@ export type LoyaltyModalProps = {
 
 const normalizePhone = (value: string): string => value.replace(/\D/g, '');
 const MIN_PHONE_SEARCH_LENGTH = 4;
-const defaultPhoneValue = '+7';
+const defaultPhoneValue = '';
+
+const formatGuestPhone = (value: string): string => {
+  const digits = value.replace(/\D/g, '');
+  let trimmed = digits;
+
+  if ((trimmed.startsWith('7') || trimmed.startsWith('8')) && trimmed.length > 1) {
+    trimmed = trimmed.slice(1);
+  }
+
+  trimmed = trimmed.slice(0, 10);
+
+  if (!trimmed) {
+    return '';
+  }
+
+  const groups = [3, 3, 2, 2];
+  const parts: string[] = [];
+  let index = 0;
+
+  groups.forEach((size) => {
+    if (index >= trimmed.length) {
+      return;
+    }
+    parts.push(trimmed.slice(index, index + size));
+    index += size;
+  });
+
+  return `+7-${parts.join('-')}`;
+};
 
 const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -115,11 +144,7 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
 
   const handleCreatePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
-    if (!value.trim()) {
-      setCreatePhone(defaultPhoneValue);
-      return;
-    }
-    setCreatePhone(value);
+    setCreatePhone(formatGuestPhone(value));
   };
 
   const handleCreate = async () => {
@@ -197,7 +222,7 @@ const LoyaltyModal: React.FC<LoyaltyModalProps> = ({ open, onClose, onAttach }) 
             <input
               value={createPhone}
               onChange={handleCreatePhoneChange}
-              placeholder="+7 (999) 000-00-00"
+              placeholder="+7-xxx-xx-xx-xx"
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base shadow-sm focus:border-secondary focus:bg-white"
             />
             <button

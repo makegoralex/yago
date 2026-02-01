@@ -356,7 +356,7 @@ const formatGuestPhone = (value: string): string => {
   const digits = value.replace(/\D/g, '');
   let trimmed = digits;
 
-  if ((trimmed.startsWith('7') || trimmed.startsWith('8')) && trimmed.length > 10) {
+  if ((trimmed.startsWith('7') || trimmed.startsWith('8')) && trimmed.length > 1) {
     trimmed = trimmed.slice(1);
   }
 
