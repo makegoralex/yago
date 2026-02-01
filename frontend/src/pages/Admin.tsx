@@ -3891,14 +3891,11 @@ const AdminPage: React.FC = () => {
     []
   );
 
-  const handleReceiptItemSearchFocus = useCallback(
-    (index: number, event: React.FocusEvent<HTMLInputElement>) => {
-      setActiveReceiptSearchIndex(index);
-      updateReceiptSearchPosition(index);
-      requestAnimationFrame(() => event.currentTarget.select());
-    },
-    [updateReceiptSearchPosition]
-  );
+  const handleReceiptSearchFocus = (index: number, event: React.FocusEvent<HTMLInputElement>) => {
+    setActiveReceiptSearchIndex(index);
+    updateReceiptSearchPosition(index);
+    requestAnimationFrame(() => event.currentTarget.select());
+  };
 
   useEffect(() => {
     if (activeReceiptSearchIndex === null) {
@@ -7025,7 +7022,7 @@ const AdminPage: React.FC = () => {
                                           type="text"
                                           value={optionLabel}
                                           onChange={(event) => handleReceiptItemSearchChange(index, event.target.value)}
-                                          onFocus={(event) => handleReceiptItemSearchFocus(index, event)}
+                                          onFocus={(event) => handleReceiptSearchFocus(index, event)}
                                           onKeyDown={(event) => {
                                             if (event.key === 'Escape') {
                                               setActiveReceiptSearchIndex(null);
