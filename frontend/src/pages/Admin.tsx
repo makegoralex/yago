@@ -354,9 +354,12 @@ const normalizePhoneValue = (value?: string | null): string =>
 
 const formatGuestPhone = (value: string): string => {
   const digits = value.replace(/\D/g, '');
+  const hasCountryPrefix = value.trim().startsWith('+7');
   let trimmed = digits;
 
-  if ((trimmed.startsWith('7') || trimmed.startsWith('8')) && trimmed.length > 1) {
+  if (hasCountryPrefix && trimmed.startsWith('7')) {
+    trimmed = trimmed.slice(1);
+  } else if (trimmed.length > 10 && (trimmed.startsWith('7') || trimmed.startsWith('8'))) {
     trimmed = trimmed.slice(1);
   }
 
