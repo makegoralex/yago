@@ -23,11 +23,9 @@ import {
 import { WarehouseModel } from '../inventory/warehouse.model';
 import { adjustInventoryQuantity } from '../inventory/inventoryCost.service';
 import { calculateOrderTotals } from '../discounts/discount.service';
-import { PrintJobModel } from '../printing/printJob.model';
 import { ShiftDocument, ShiftModel } from '../shifts/shift.model';
 import { orderSchemas, type OrderItemsBody, type OrderPaymentBody, type StartOrderBody } from '../../validation/orderSchemas';
-import { getCashRegisterSettings, getRestaurantBranding } from '../restaurant/restaurantSettings.service';
-import { sendEvotorReceipt } from './evotor.service';
+import { getRestaurantBranding } from '../restaurant/restaurantSettings.service';
 
 const router = Router();
 
@@ -922,74 +920,6 @@ router.post(
     order.receiptId = undefined;
 
     await order.save();
-
-    const paymentMethod = order.payment?.method === 'card' ? 'card' : 'cash';
-    const items = order.items.map((item) => ({
-      name: item.name,
-      qty: item.qty,
-      price: item.price,
-      modifiers: item.modifiersApplied?.length
-        ? item.modifiersApplied.map((modifier) => ({
-            groupName: modifier.groupName,
-            options: modifier.options.map((option) => ({
-              name: option.name,
-              price: option.priceChange,
-            })),
-          }))
-        : undefined,
-    }));
-
-    const cashRegisterSettings = await getCashRegisterSettings(organizationId);
-
-    let evotorError: Error | null = null;
-
-    if (cashRegisterSettings.provider === 'atol') {
-      await PrintJobModel.create({
-        status: 'pending',
-        registerId: order.registerId,
-        payload: {
-          orderId: order._id as Types.ObjectId,
-          organizationId,
-          registerId: order.registerId,
-          cashierId: order.cashierId as Types.ObjectId,
-          paymentMethod,
-          total: order.total,
-          items,
-        },
-      });
-    }
-
-    if (cashRegisterSettings.provider === 'evotor') {
-      try {
-        const { receiptId } = await sendEvotorReceipt({
-          order,
-          paymentMethod,
-          cloudToken: cashRegisterSettings.evotorCloudToken,
-          appToken: process.env.EVOTOR_APP_TOKEN,
-        });
-
-        if (receiptId) {
-          order.receiptId = receiptId;
-          if (order.payment) {
-            order.payment.receiptId = receiptId;
-          }
-          await order.save();
-        }
-      } catch (error) {
-        const resolvedError = error instanceof Error ? error : new Error('Evotor receipt error');
-        console.error('Failed to send receipt to Evotor', resolvedError);
-        evotorError = resolvedError;
-      }
-    }
-
-    if (evotorError) {
-      order.status = 'draft';
-      order.payment = undefined;
-      order.receiptId = undefined;
-      await order.save();
-      res.status(502).json({ data: null, error: 'Не удалось отправить чек в Эвотор' });
-      return;
-    }
 
     await deductInventoryForOrder(order);
 
