@@ -23,10 +23,9 @@ import {
 import { WarehouseModel } from '../inventory/warehouse.model';
 import { adjustInventoryQuantity } from '../inventory/inventoryCost.service';
 import { calculateOrderTotals } from '../discounts/discount.service';
-import { PrintJobModel } from '../printing/printJob.model';
 import { ShiftDocument, ShiftModel } from '../shifts/shift.model';
 import { orderSchemas, type OrderItemsBody, type OrderPaymentBody, type StartOrderBody } from '../../validation/orderSchemas';
-import { getCashRegisterSettings, getRestaurantBranding } from '../restaurant/restaurantSettings.service';
+import { getRestaurantBranding } from '../restaurant/restaurantSettings.service';
 
 const router = Router();
 
@@ -922,41 +921,11 @@ router.post(
 
     await order.save();
 
-    const paymentMethod = order.payment?.method === 'card' ? 'card' : 'cash';
-    const items = order.items.map((item) => ({
-      name: item.name,
-      qty: item.qty,
-      price: item.price,
-      modifiers: item.modifiersApplied?.length
-        ? item.modifiersApplied.map((modifier) => ({
-            groupName: modifier.groupName,
-            options: modifier.options.map((option) => ({
-              name: option.name,
-              price: option.priceChange,
-            })),
-          }))
-        : undefined,
-    }));
-
-    const cashRegisterSettings = await getCashRegisterSettings(organizationId);
-
-    if (cashRegisterSettings.provider !== 'none') {
-      await PrintJobModel.create({
-        status: 'pending',
-        registerId: order.registerId,
-        payload: {
-          orderId: order._id as Types.ObjectId,
-          organizationId,
-          registerId: order.registerId,
-          cashierId: order.cashierId as Types.ObjectId,
-          paymentMethod,
-          total: order.total,
-          items,
-        },
-      });
+    try {
+      await deductInventoryForOrder(order);
+    } catch (error) {
+      console.error('Failed to deduct inventory after payment', error);
     }
-
-    await deductInventoryForOrder(order);
 
     if (order.customerId) {
       try {
@@ -1057,7 +1026,11 @@ router.post(
       return;
     }
 
-    await restoreInventoryForOrder(order);
+    try {
+      await restoreInventoryForOrder(order);
+    } catch (error) {
+      console.error('Failed to restore inventory after cancellation', error);
+    }
 
     if (order.customerId) {
       if (order.manualDiscount > 0) {
