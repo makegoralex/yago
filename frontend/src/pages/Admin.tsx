@@ -156,7 +156,7 @@ type CashierSummary = {
   updatedAt?: string;
 };
 
-type CashRegisterProvider = 'none' | 'evotor';
+type CashRegisterProvider = 'none' | 'atol' | 'evotor';
 
 type CashRegisterSettings = {
   provider: CashRegisterProvider;
@@ -8977,6 +8977,7 @@ const AdminPage: React.FC = () => {
                     className="rounded-2xl border border-slate-200 px-4 py-3"
                   >
                     <option value="none">Не подключено</option>
+                    <option value="atol">Атол</option>
                     <option value="evotor">Эвотор</option>
                   </select>
                 </label>

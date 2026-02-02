@@ -26,7 +26,7 @@ import { calculateOrderTotals } from '../discounts/discount.service';
 import { PrintJobModel } from '../printing/printJob.model';
 import { ShiftDocument, ShiftModel } from '../shifts/shift.model';
 import { orderSchemas, type OrderItemsBody, type OrderPaymentBody, type StartOrderBody } from '../../validation/orderSchemas';
-import { getRestaurantBranding } from '../restaurant/restaurantSettings.service';
+import { getCashRegisterSettings, getRestaurantBranding } from '../restaurant/restaurantSettings.service';
 
 const router = Router();
 
@@ -938,19 +938,23 @@ router.post(
         : undefined,
     }));
 
-    await PrintJobModel.create({
-      status: 'pending',
-      registerId: order.registerId,
-      payload: {
-        orderId: order._id as Types.ObjectId,
-        organizationId,
+    const cashRegisterSettings = await getCashRegisterSettings(organizationId);
+
+    if (cashRegisterSettings.provider !== 'none') {
+      await PrintJobModel.create({
+        status: 'pending',
         registerId: order.registerId,
-        cashierId: order.cashierId as Types.ObjectId,
-        paymentMethod,
-        total: order.total,
-        items,
-      },
-    });
+        payload: {
+          orderId: order._id as Types.ObjectId,
+          organizationId,
+          registerId: order.registerId,
+          cashierId: order.cashierId as Types.ObjectId,
+          paymentMethod,
+          total: order.total,
+          items,
+        },
+      });
+    }
 
     await deductInventoryForOrder(order);
 
