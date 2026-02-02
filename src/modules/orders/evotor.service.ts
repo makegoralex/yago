@@ -77,6 +77,8 @@ export const sendEvotorReceipt = async ({
 
   if (appToken) {
     headers.Authorization = `Bearer ${appToken}`;
+  } else if (cloudToken) {
+    headers.Authorization = `Bearer ${cloudToken}`;
   }
 
   const payload = {
