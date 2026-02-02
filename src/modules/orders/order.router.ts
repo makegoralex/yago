@@ -982,6 +982,15 @@ router.post(
       }
     }
 
+    if (evotorError) {
+      order.status = 'draft';
+      order.payment = undefined;
+      order.receiptId = undefined;
+      await order.save();
+      res.status(502).json({ data: null, error: 'Не удалось отправить чек в Эвотор' });
+      return;
+    }
+
     await deductInventoryForOrder(order);
 
     if (order.customerId) {
