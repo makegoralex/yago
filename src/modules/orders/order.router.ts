@@ -921,7 +921,11 @@ router.post(
 
     await order.save();
 
-    await deductInventoryForOrder(order);
+    try {
+      await deductInventoryForOrder(order);
+    } catch (error) {
+      console.error('Failed to deduct inventory after payment', error);
+    }
 
     if (order.customerId) {
       try {
@@ -1027,7 +1031,11 @@ router.post(
       return;
     }
 
-    await restoreInventoryForOrder(order);
+    try {
+      await restoreInventoryForOrder(order);
+    } catch (error) {
+      console.error('Failed to restore inventory after cancellation', error);
+    }
 
     if (order.customerId) {
       if (order.manualDiscount > 0) {
