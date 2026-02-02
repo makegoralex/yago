@@ -8,6 +8,8 @@ export interface IRestaurantSettings extends Document {
   loyaltyRate: number;
   loyaltyRedeemAllCategories: boolean;
   loyaltyRedeemCategoryIds: string[];
+  cashRegisterProvider: 'none' | 'evotor';
+  evotorCloudToken: string;
   singletonKey: string;
   organizationId: Types.ObjectId;
   createdAt: Date;
@@ -61,6 +63,17 @@ const restaurantSettingsSchema = new Schema<IRestaurantSettings>(
     loyaltyRedeemCategoryIds: {
       type: [String],
       default: [],
+    },
+    cashRegisterProvider: {
+      type: String,
+      enum: ['none', 'evotor'],
+      default: 'none',
+      trim: true,
+    },
+    evotorCloudToken: {
+      type: String,
+      default: '',
+      trim: true,
     },
   },
   { timestamps: true }
