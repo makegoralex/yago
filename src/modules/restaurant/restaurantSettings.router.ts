@@ -101,7 +101,8 @@ function extractCashRegisterUpdatePayload(body: unknown): Partial<CashRegisterSe
   }
 
   const { provider, evotorCloudToken } = body as Record<string, unknown>;
-  const normalizedProvider = provider === 'evotor' ? 'evotor' : provider === 'none' ? 'none' : undefined;
+  const normalizedProvider =
+    provider === 'evotor' ? 'evotor' : provider === 'atol' ? 'atol' : provider === 'none' ? 'none' : undefined;
   const normalizedToken = typeof evotorCloudToken === 'string' ? evotorCloudToken.trim() : undefined;
 
   const updatePayload: Partial<CashRegisterSettings> = {

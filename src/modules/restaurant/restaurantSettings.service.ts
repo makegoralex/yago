@@ -12,7 +12,7 @@ export type RestaurantBranding = {
   loyaltyRedeemCategoryIds: string[];
 };
 
-export type CashRegisterProvider = 'none' | 'evotor';
+export type CashRegisterProvider = 'none' | 'atol' | 'evotor';
 
 export type CashRegisterSettings = {
   provider: CashRegisterProvider;
@@ -114,7 +114,9 @@ const normalizeCashRegister = (
   const provider =
     settings && typeof settings === 'object' && (settings as any).cashRegisterProvider === 'evotor'
       ? 'evotor'
-      : DEFAULT_CASH_REGISTER.provider;
+      : settings && typeof settings === 'object' && (settings as any).cashRegisterProvider === 'atol'
+        ? 'atol'
+        : DEFAULT_CASH_REGISTER.provider;
   const token =
     settings && typeof settings === 'object' && typeof (settings as any).evotorCloudToken === 'string'
       ? (settings as any).evotorCloudToken.trim()
@@ -238,12 +240,16 @@ export const updateCashRegisterSettings = async (
     settingsDoc.organizationId = organizationId;
   }
 
-  if (payload.provider === 'evotor' || payload.provider === 'none') {
+  if (payload.provider === 'evotor' || payload.provider === 'atol' || payload.provider === 'none') {
     settingsDoc.cashRegisterProvider = payload.provider;
   }
 
   if (typeof payload.evotorCloudToken === 'string') {
     settingsDoc.evotorCloudToken = payload.evotorCloudToken.trim();
+  }
+
+  if (settingsDoc.cashRegisterProvider === 'evotor' && !settingsDoc.evotorCloudToken) {
+    throw new Error('Evotor cloud token is required');
   }
 
   if (settingsDoc.cashRegisterProvider !== 'evotor') {
