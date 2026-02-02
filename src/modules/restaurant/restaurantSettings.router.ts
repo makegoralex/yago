@@ -9,6 +9,9 @@ import {
   updateRestaurantBranding,
   restaurantBrandingDefaults,
   type RestaurantBranding,
+  getCashRegisterSettings,
+  updateCashRegisterSettings,
+  type CashRegisterSettings,
 } from './restaurantSettings.service';
 
 const router = Router();
@@ -92,6 +95,23 @@ function extractBrandingUpdatePayload(body: unknown): Partial<RestaurantBranding
   return Object.values(updatePayload).every((value) => value === undefined) ? null : updatePayload;
 }
 
+function extractCashRegisterUpdatePayload(body: unknown): Partial<CashRegisterSettings> | null {
+  if (!body || typeof body !== 'object') {
+    return null;
+  }
+
+  const { provider, evotorCloudToken } = body as Record<string, unknown>;
+  const normalizedProvider = provider === 'evotor' ? 'evotor' : provider === 'none' ? 'none' : undefined;
+  const normalizedToken = typeof evotorCloudToken === 'string' ? evotorCloudToken.trim() : undefined;
+
+  const updatePayload: Partial<CashRegisterSettings> = {
+    provider: normalizedProvider,
+    evotorCloudToken: normalizedToken,
+  };
+
+  return Object.values(updatePayload).every((value) => value === undefined) ? null : updatePayload;
+}
+
 router.get(
   '/branding',
   asyncHandler(async (req: Request, res: Response) => {
@@ -105,6 +125,22 @@ router.get(
     const branding = await getRestaurantBranding(organizationId);
 
     res.json({ data: { branding }, error: null });
+  })
+);
+
+router.get(
+  '/cash-register',
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const settings = await getCashRegisterSettings(organizationId);
+
+    res.json({ data: { settings }, error: null });
   })
 );
 
@@ -132,6 +168,39 @@ router.put(
     } catch (error) {
       console.error('Failed to update restaurant branding:', error);
       res.status(400).json({ data: null, error: 'Некорректные данные брендинга' });
+    }
+  })
+);
+
+router.put(
+  '/cash-register',
+  requireRole(['owner', 'superAdmin']),
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const updatePayload = extractCashRegisterUpdatePayload(req.body);
+
+    if (!updatePayload) {
+      res.status(400).json({ data: null, error: 'Не переданы валидные данные кассы' });
+      return;
+    }
+
+    if (updatePayload.provider === 'evotor' && !updatePayload.evotorCloudToken) {
+      res.status(400).json({ data: null, error: 'Укажите токен Облака Эвотор' });
+      return;
+    }
+
+    try {
+      const settings = await updateCashRegisterSettings(organizationId, updatePayload);
+      res.json({ data: { settings }, error: null });
+    } catch (error) {
+      console.error('Failed to update cash register settings:', error);
+      res.status(400).json({ data: null, error: 'Некорректные данные кассы' });
     }
   })
 );

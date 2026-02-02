@@ -12,6 +12,13 @@ export type RestaurantBranding = {
   loyaltyRedeemCategoryIds: string[];
 };
 
+export type CashRegisterProvider = 'none' | 'evotor';
+
+export type CashRegisterSettings = {
+  provider: CashRegisterProvider;
+  evotorCloudToken: string;
+};
+
 const DEFAULT_BRANDING: RestaurantBranding = {
   name: 'Yago Coffee',
   logoUrl: '',
@@ -20,6 +27,11 @@ const DEFAULT_BRANDING: RestaurantBranding = {
   loyaltyRate: 5,
   loyaltyRedeemAllCategories: true,
   loyaltyRedeemCategoryIds: [],
+};
+
+const DEFAULT_CASH_REGISTER: CashRegisterSettings = {
+  provider: 'none',
+  evotorCloudToken: '',
 };
 
 const clampLoyaltyRate = (value: unknown): number => {
@@ -93,6 +105,24 @@ const normalizeBranding = (branding: Partial<RestaurantBranding> | IRestaurantSe
     loyaltyRate: clampLoyaltyRate(branding && typeof branding === 'object' ? (branding as any).loyaltyRate : undefined),
     loyaltyRedeemAllCategories,
     loyaltyRedeemCategoryIds: loyaltyRedeemAllCategories ? [] : loyaltyRedeemCategoryIds,
+  };
+};
+
+const normalizeCashRegister = (
+  settings: Partial<CashRegisterSettings> | IRestaurantSettings | null | undefined
+): CashRegisterSettings => {
+  const provider =
+    settings && typeof settings === 'object' && (settings as any).cashRegisterProvider === 'evotor'
+      ? 'evotor'
+      : DEFAULT_CASH_REGISTER.provider;
+  const token =
+    settings && typeof settings === 'object' && typeof (settings as any).evotorCloudToken === 'string'
+      ? (settings as any).evotorCloudToken.trim()
+      : DEFAULT_CASH_REGISTER.evotorCloudToken;
+
+  return {
+    provider,
+    evotorCloudToken: provider === 'evotor' ? token : '',
   };
 };
 
@@ -173,4 +203,53 @@ export const restaurantBrandingDefaults = DEFAULT_BRANDING;
 export const getLoyaltyAccrualRate = async (organizationId: Types.ObjectId): Promise<number> => {
   const branding = await getRestaurantBranding(organizationId);
   return clampLoyaltyRate(branding.loyaltyRate);
+};
+
+export const getCashRegisterSettings = async (
+  organizationId: Types.ObjectId
+): Promise<CashRegisterSettings> => {
+  const existing = await RestaurantSettingsModel.findOne({ organizationId });
+  if (existing) {
+    return normalizeCashRegister(existing);
+  }
+
+  const created = await RestaurantSettingsModel.create({
+    ...DEFAULT_BRANDING,
+    ...DEFAULT_CASH_REGISTER,
+    organizationId,
+  });
+  return normalizeCashRegister(created);
+};
+
+export const updateCashRegisterSettings = async (
+  organizationId: Types.ObjectId,
+  payload: Partial<CashRegisterSettings>
+): Promise<CashRegisterSettings> => {
+  const existing = await RestaurantSettingsModel.findOne({ organizationId });
+  const settingsDoc =
+    existing ??
+    new RestaurantSettingsModel({
+      ...DEFAULT_BRANDING,
+      ...DEFAULT_CASH_REGISTER,
+      organizationId,
+    });
+
+  if (!settingsDoc.organizationId) {
+    settingsDoc.organizationId = organizationId;
+  }
+
+  if (payload.provider === 'evotor' || payload.provider === 'none') {
+    settingsDoc.cashRegisterProvider = payload.provider;
+  }
+
+  if (typeof payload.evotorCloudToken === 'string') {
+    settingsDoc.evotorCloudToken = payload.evotorCloudToken.trim();
+  }
+
+  if (settingsDoc.cashRegisterProvider !== 'evotor') {
+    settingsDoc.evotorCloudToken = '';
+  }
+
+  const saved = await settingsDoc.save();
+  return normalizeCashRegister(saved);
 };

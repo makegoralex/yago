@@ -156,6 +156,13 @@ type CashierSummary = {
   updatedAt?: string;
 };
 
+type CashRegisterProvider = 'none' | 'evotor';
+
+type CashRegisterSettings = {
+  provider: CashRegisterProvider;
+  evotorCloudToken: string;
+};
+
 type SalesAndShiftStats = {
   totalRevenue: number;
   orderCount: number;
@@ -552,12 +559,13 @@ const AdminPage: React.FC = () => {
       { id: 'staff' as const, label: 'Персонал' },
       { id: 'suppliers' as const, label: 'Поставщики' },
       { id: 'discounts' as const, label: 'Скидки' },
+      { id: 'cash-register' as const, label: 'Касса' },
       { id: 'branding' as const, label: 'Ресторан' },
     ],
     []
   );
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'menu' | 'inventory' | 'loyalty' | 'suppliers' | 'discounts' | 'staff' | 'branding'
+    'dashboard' | 'menu' | 'inventory' | 'loyalty' | 'suppliers' | 'discounts' | 'staff' | 'cash-register' | 'branding'
   >(navItems[0].id);
   const [isNavOpen, setIsNavOpen] = useState(false);
   const currentTabLabel = useMemo(
@@ -573,6 +581,7 @@ const AdminPage: React.FC = () => {
       staff: 'Сотрудники и доступ к системе.',
       suppliers: 'Контакты поставщиков и история закупок.',
       discounts: 'Скидки, автоакции и правила.',
+      'cash-register': 'Подключение кассы и интеграций.',
       branding: 'Брендинг и параметры ресторана.',
     }),
     []
@@ -811,6 +820,14 @@ const AdminPage: React.FC = () => {
   const [savingLoyaltyCategories, setSavingLoyaltyCategories] = useState(false);
   const [brandingForm, setBrandingForm] = useState({ name: restaurantName, logoUrl: restaurantLogo });
   const [brandingSaving, setBrandingSaving] = useState(false);
+  const [cashRegisterForm, setCashRegisterForm] = useState<CashRegisterSettings>({
+    provider: 'none',
+    evotorCloudToken: '',
+  });
+  const [cashRegisterLoading, setCashRegisterLoading] = useState(false);
+  const [cashRegisterLoaded, setCashRegisterLoaded] = useState(false);
+  const [cashRegisterSaving, setCashRegisterSaving] = useState(false);
+  const [cashRegisterError, setCashRegisterError] = useState<string | null>(null);
 
   useEffect(() => {
     setBrandingForm({ name: restaurantName, logoUrl: restaurantLogo });
@@ -4570,6 +4587,64 @@ const AdminPage: React.FC = () => {
       notify({ title: 'Не удалось сохранить настройки меток', type: 'error' });
     } finally {
       setBrandingSaving(false);
+    }
+  };
+
+  const loadCashRegisterSettings = useCallback(async () => {
+    setCashRegisterLoading(true);
+    setCashRegisterError(null);
+    try {
+      const response = await api.get('/api/restaurant/cash-register');
+      const payload = getResponseData<{ settings?: CashRegisterSettings }>(response);
+      const settings = payload?.settings;
+      if (!settings) {
+        throw new Error('Invalid cash register response');
+      }
+      setCashRegisterForm(settings);
+      setCashRegisterLoaded(true);
+    } catch (error) {
+      console.error('Не удалось загрузить настройки кассы', error);
+      setCashRegisterError(extractErrorMessage(error, 'Не удалось загрузить настройки кассы'));
+    } finally {
+      setCashRegisterLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'cash-register' || cashRegisterLoaded || cashRegisterLoading) {
+      return;
+    }
+
+    void loadCashRegisterSettings();
+  }, [activeTab, cashRegisterLoaded, cashRegisterLoading, loadCashRegisterSettings]);
+
+  const handleSubmitCashRegister = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalizedToken = cashRegisterForm.evotorCloudToken.trim();
+    if (cashRegisterForm.provider === 'evotor' && !normalizedToken) {
+      notify({ title: 'Укажите токен Эвотор', type: 'info' });
+      return;
+    }
+
+    try {
+      setCashRegisterSaving(true);
+      const payload = {
+        provider: cashRegisterForm.provider,
+        evotorCloudToken: cashRegisterForm.provider === 'evotor' ? normalizedToken : '',
+      };
+      const response = await api.put('/api/restaurant/cash-register', payload);
+      const data = getResponseData<{ settings?: CashRegisterSettings }>(response);
+      const settings = data?.settings;
+      if (settings) {
+        setCashRegisterForm(settings);
+      }
+      notify({ title: 'Настройки кассы сохранены', type: 'success' });
+    } catch (error) {
+      console.error('Не удалось сохранить настройки кассы', error);
+      notify({ title: 'Не удалось сохранить настройки кассы', type: 'error' });
+    } finally {
+      setCashRegisterSaving(false);
     }
   };
 
@@ -8862,6 +8937,93 @@ const AdminPage: React.FC = () => {
                 </table>
               </div>
             )}
+          </Card>
+        </div>
+      ) : null}
+
+      {activeTab === 'cash-register' ? (
+        <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+          <Card title="Настройки кассы">
+            {cashRegisterLoading && !cashRegisterLoaded ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="h-12 animate-pulse rounded-2xl bg-slate-200/60" />
+                ))}
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitCashRegister} className="space-y-6 text-sm text-slate-600">
+                {cashRegisterError ? (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                    <p>{cashRegisterError}</p>
+                    <button
+                      type="button"
+                      onClick={() => loadCashRegisterSettings()}
+                      className="mt-2 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600"
+                    >
+                      Попробовать снова
+                    </button>
+                  </div>
+                ) : null}
+                <label className="flex flex-col gap-2">
+                  <span className="text-xs uppercase text-slate-400">Провайдер кассы</span>
+                  <select
+                    value={cashRegisterForm.provider}
+                    onChange={(event) =>
+                      setCashRegisterForm((prev) => ({
+                        ...prev,
+                        provider: event.target.value as CashRegisterProvider,
+                      }))
+                    }
+                    className="rounded-2xl border border-slate-200 px-4 py-3"
+                  >
+                    <option value="none">Не подключено</option>
+                    <option value="evotor">Эвотор</option>
+                  </select>
+                </label>
+                {cashRegisterForm.provider === 'evotor' ? (
+                  <label className="flex flex-col gap-2">
+                    <span className="text-xs uppercase text-slate-400">Токен Эвотор (cloud token)</span>
+                    <input
+                      type="password"
+                      value={cashRegisterForm.evotorCloudToken}
+                      onChange={(event) =>
+                        setCashRegisterForm((prev) => ({ ...prev, evotorCloudToken: event.target.value }))
+                      }
+                      className="rounded-2xl border border-slate-200 px-4 py-3"
+                      placeholder="Вставьте токен из Эвотор Маркета"
+                      autoComplete="off"
+                      required
+                    />
+                    <span className="text-xs text-slate-400">
+                      Токен выдаётся после установки приложения в Эвотор Маркете. Используется для доступа к API облака.
+                    </span>
+                  </label>
+                ) : null}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="submit"
+                    className="rounded-2xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    disabled={cashRegisterSaving}
+                  >
+                    {cashRegisterSaving ? 'Сохранение…' : 'Сохранить'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </Card>
+          <Card title="Как работает интеграция">
+            <div className="space-y-3 text-sm text-slate-600">
+              <p>
+                В SaaS-формате каждый личный кабинет настраивает кассу отдельно. Чеки будут отправляться в ту кассу,
+                которая подключена в текущем аккаунте.
+              </p>
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
+                <p>
+                  Если токен будет изменён или отозван в Эвоторе, просто обновите его здесь. После сохранения новые чеки
+                  отправятся в кассу автоматически.
+                </p>
+              </div>
+            </div>
           </Card>
         </div>
       ) : null}
