@@ -935,11 +935,6 @@ router.post(
       }
     }
 
-    if (evotorError) {
-      res.status(502).json({ data: null, error: 'Не удалось отправить чек в Эвотор' });
-      return;
-    }
-
     const populatedOrder =
       (await reloadOrderWithCustomer(order._id as Types.ObjectId, order.organizationId)) ?? order;
 

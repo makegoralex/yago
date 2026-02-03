@@ -100,14 +100,11 @@ function extractCashRegisterUpdatePayload(body: unknown): Partial<CashRegisterSe
     return null;
   }
 
-  const { provider, evotorCloudToken } = body as Record<string, unknown>;
-  const normalizedProvider =
-    provider === 'evotor' ? 'evotor' : provider === 'atol' ? 'atol' : provider === 'none' ? 'none' : undefined;
-  const normalizedToken = typeof evotorCloudToken === 'string' ? evotorCloudToken.trim() : undefined;
+  const { provider } = body as Record<string, unknown>;
+  const normalizedProvider = provider === 'atol' ? 'atol' : provider === 'none' ? 'none' : undefined;
 
   const updatePayload: Partial<CashRegisterSettings> = {
     provider: normalizedProvider,
-    evotorCloudToken: normalizedToken,
   };
 
   return Object.values(updatePayload).every((value) => value === undefined) ? null : updatePayload;
@@ -188,11 +185,6 @@ router.put(
 
     if (!updatePayload) {
       res.status(400).json({ data: null, error: 'Не переданы валидные данные кассы' });
-      return;
-    }
-
-    if (updatePayload.provider === 'evotor' && !updatePayload.evotorCloudToken) {
-      res.status(400).json({ data: null, error: 'Укажите токен Облака Эвотор' });
       return;
     }
 

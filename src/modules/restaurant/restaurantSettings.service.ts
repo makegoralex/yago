@@ -12,11 +12,10 @@ export type RestaurantBranding = {
   loyaltyRedeemCategoryIds: string[];
 };
 
-export type CashRegisterProvider = 'none' | 'atol' | 'evotor';
+export type CashRegisterProvider = 'none' | 'atol';
 
 export type CashRegisterSettings = {
   provider: CashRegisterProvider;
-  evotorCloudToken: string;
 };
 
 const DEFAULT_BRANDING: RestaurantBranding = {
@@ -31,7 +30,6 @@ const DEFAULT_BRANDING: RestaurantBranding = {
 
 const DEFAULT_CASH_REGISTER: CashRegisterSettings = {
   provider: 'none',
-  evotorCloudToken: '',
 };
 
 const clampLoyaltyRate = (value: unknown): number => {
@@ -112,19 +110,12 @@ const normalizeCashRegister = (
   settings: Partial<CashRegisterSettings> | IRestaurantSettings | null | undefined
 ): CashRegisterSettings => {
   const provider =
-    settings && typeof settings === 'object' && (settings as any).cashRegisterProvider === 'evotor'
-      ? 'evotor'
-      : settings && typeof settings === 'object' && (settings as any).cashRegisterProvider === 'atol'
-        ? 'atol'
-        : DEFAULT_CASH_REGISTER.provider;
-  const token =
-    settings && typeof settings === 'object' && typeof (settings as any).evotorCloudToken === 'string'
-      ? (settings as any).evotorCloudToken.trim()
-      : DEFAULT_CASH_REGISTER.evotorCloudToken;
+    settings && typeof settings === 'object' && (settings as any).cashRegisterProvider === 'atol'
+      ? 'atol'
+      : DEFAULT_CASH_REGISTER.provider;
 
   return {
     provider,
-    evotorCloudToken: provider === 'evotor' ? token : '',
   };
 };
 
@@ -240,20 +231,8 @@ export const updateCashRegisterSettings = async (
     settingsDoc.organizationId = organizationId;
   }
 
-  if (payload.provider === 'evotor' || payload.provider === 'atol' || payload.provider === 'none') {
+  if (payload.provider === 'atol' || payload.provider === 'none') {
     settingsDoc.cashRegisterProvider = payload.provider;
-  }
-
-  if (typeof payload.evotorCloudToken === 'string') {
-    settingsDoc.evotorCloudToken = payload.evotorCloudToken.trim();
-  }
-
-  if (settingsDoc.cashRegisterProvider === 'evotor' && !settingsDoc.evotorCloudToken) {
-    throw new Error('Evotor cloud token is required');
-  }
-
-  if (settingsDoc.cashRegisterProvider !== 'evotor') {
-    settingsDoc.evotorCloudToken = '';
   }
 
   const saved = await settingsDoc.save();
