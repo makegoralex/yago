@@ -156,11 +156,10 @@ type CashierSummary = {
   updatedAt?: string;
 };
 
-type CashRegisterProvider = 'none' | 'atol' | 'evotor';
+type CashRegisterProvider = 'none' | 'atol';
 
 type CashRegisterSettings = {
   provider: CashRegisterProvider;
-  evotorCloudToken: string;
 };
 
 type SalesAndShiftStats = {
@@ -822,7 +821,6 @@ const AdminPage: React.FC = () => {
   const [brandingSaving, setBrandingSaving] = useState(false);
   const [cashRegisterForm, setCashRegisterForm] = useState<CashRegisterSettings>({
     provider: 'none',
-    evotorCloudToken: '',
   });
   const [cashRegisterLoading, setCashRegisterLoading] = useState(false);
   const [cashRegisterLoaded, setCashRegisterLoaded] = useState(false);
@@ -4621,17 +4619,10 @@ const AdminPage: React.FC = () => {
   const handleSubmitCashRegister = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const normalizedToken = cashRegisterForm.evotorCloudToken.trim();
-    if (cashRegisterForm.provider === 'evotor' && !normalizedToken) {
-      notify({ title: 'Укажите токен Эвотор', type: 'info' });
-      return;
-    }
-
     try {
       setCashRegisterSaving(true);
       const payload = {
         provider: cashRegisterForm.provider,
-        evotorCloudToken: cashRegisterForm.provider === 'evotor' ? normalizedToken : '',
       };
       const response = await api.put('/api/restaurant/cash-register', payload);
       const data = getResponseData<{ settings?: CashRegisterSettings }>(response);
@@ -8978,28 +8969,8 @@ const AdminPage: React.FC = () => {
                   >
                     <option value="none">Не подключено</option>
                     <option value="atol">Атол</option>
-                    <option value="evotor">Эвотор</option>
                   </select>
                 </label>
-                {cashRegisterForm.provider === 'evotor' ? (
-                  <label className="flex flex-col gap-2">
-                    <span className="text-xs uppercase text-slate-400">Токен Эвотор (cloud token)</span>
-                    <input
-                      type="password"
-                      value={cashRegisterForm.evotorCloudToken}
-                      onChange={(event) =>
-                        setCashRegisterForm((prev) => ({ ...prev, evotorCloudToken: event.target.value }))
-                      }
-                      className="rounded-2xl border border-slate-200 px-4 py-3"
-                      placeholder="Вставьте токен из Эвотор Маркета"
-                      autoComplete="off"
-                      required
-                    />
-                    <span className="text-xs text-slate-400">
-                      Токен выдаётся после установки приложения в Эвотор Маркете. Используется для доступа к API облака.
-                    </span>
-                  </label>
-                ) : null}
                 <div className="flex flex-wrap gap-3">
                   <button
                     type="submit"
@@ -9019,10 +8990,7 @@ const AdminPage: React.FC = () => {
                 которая подключена в текущем аккаунте.
               </p>
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
-                <p>
-                  Если токен будет изменён или отозван в Эвоторе, просто обновите его здесь. После сохранения новые чеки
-                  отправятся в кассу автоматически.
-                </p>
+                <p>После сохранения изменения применяются сразу — новые чеки отправятся в выбранную кассу автоматически.</p>
               </div>
             </div>
           </Card>
