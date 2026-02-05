@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Yago Evotor</string>
+    <string name="status_message">Приложение для интеграции с Эвотором запущено</string>
+</resources>
