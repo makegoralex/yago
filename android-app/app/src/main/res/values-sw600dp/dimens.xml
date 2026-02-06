@@ -1,0 +1,5 @@
+<resources>
+    <dimen name="pos_padding">32dp</dimen>
+    <dimen name="pos_spacing">20dp</dimen>
+    <dimen name="pos_title_size">24sp</dimen>
+</resources>
