@@ -26,6 +26,7 @@ import { calculateOrderTotals } from '../discounts/discount.service';
 import { ShiftDocument, ShiftModel } from '../shifts/shift.model';
 import { orderSchemas, type OrderItemsBody, type OrderPaymentBody, type StartOrderBody } from '../../validation/orderSchemas';
 import { getRestaurantBranding } from '../restaurant/restaurantSettings.service';
+import { pushOrderToEvotor } from '../evotor/evotor.service';
 
 const router = Router();
 
@@ -37,6 +38,14 @@ const FULFILLED_ORDER_STATUSES: OrderStatus[] = ['paid', 'completed'];
 const SHIFT_HISTORY_STATUSES: OrderStatus[] = ['paid', 'completed', 'cancelled'];
 const ORDER_TAGS: OrderTag[] = ['takeaway', 'delivery'];
 const CUSTOMER_PROJECTION = 'name phone points';
+
+const pushOrderToEvotorSafe = async (order: OrderDocument): Promise<void> => {
+  try {
+    await pushOrderToEvotor(order);
+  } catch (error) {
+    console.warn('Failed to push order to Evotor:', error);
+  }
+};
 
 const cachedDefaultWarehouseIds = new Map<string, Types.ObjectId | null>();
 
@@ -720,6 +729,8 @@ router.post(
       status: 'draft',
     });
 
+    void pushOrderToEvotorSafe(order);
+
     const populatedOrder =
       (await reloadOrderWithCustomer(order._id as Types.ObjectId, organizationId)) ?? order;
 
@@ -829,6 +840,7 @@ router.post(
     order.total = calculation.total;
 
     await order.save();
+    void pushOrderToEvotorSafe(order);
 
     const populatedOrder =
       (await reloadOrderWithCustomer(order._id as Types.ObjectId, order.organizationId)) ?? order;
