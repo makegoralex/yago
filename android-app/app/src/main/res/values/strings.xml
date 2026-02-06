@@ -1,4 +1,15 @@
 <resources>
     <string name="app_name">Yago Evotor</string>
     <string name="status_message">Приложение для интеграции с Эвотором запущено</string>
+    <string name="login_title">Вход в кассу</string>
+    <string name="login_hint">Укажите адрес сервера и данные кассира для загрузки меню и заказов.</string>
+    <string name="login_base_url">Адрес сервера (например, http://192.168.0.10:3000)</string>
+    <string name="login_email">Email</string>
+    <string name="login_password">Пароль</string>
+    <string name="login_org_id">Organization ID (необязательно)</string>
+    <string name="login_button">Войти</string>
+    <string name="login_error_required">Заполните адрес, email и пароль.</string>
+    <string name="login_error_invalid">Не удалось войти. Проверьте данные.</string>
+    <string name="logout_button">Выйти</string>
+    <string name="pos_ready_message">Эвотор POS готов. Организация: %1$s</string>
 </resources>
