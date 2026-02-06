@@ -21,6 +21,9 @@ export const appConfig = {
   bcryptSaltRounds: parseNumber(process.env.BCRYPT_SALT_ROUNDS, 10),
   frontendDistPath: process.env.FRONTEND_DIST_PATH,
   printJobToken: process.env.PRINT_JOB_TOKEN ?? '',
+  evotorAppUuid: process.env.EVOTOR_APP_UUID ?? '',
+  evotorPublisherToken: process.env.EVOTOR_PUBLISHER_TOKEN ?? '',
+  evotorWebhookSecret: process.env.EVOTOR_WEBHOOK_SECRET ?? '',
 };
 
 export const validateConfig = (): void => {
