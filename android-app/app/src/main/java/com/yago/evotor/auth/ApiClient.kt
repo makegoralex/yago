@@ -14,6 +14,11 @@ object ApiClient {
         val organizationId: String?
     )
 
+    data class RefreshResponse(
+        val accessToken: String,
+        val refreshToken: String
+    )
+
     data class OrderItem(
         val name: String,
         val qty: Double,
@@ -48,17 +53,10 @@ object ApiClient {
             outputStream.write(payload.toString().toByteArray())
         }
 
-        val responseCode = connection.responseCode
-        val reader = if (responseCode in 200..299) {
-            BufferedReader(InputStreamReader(connection.inputStream))
-        } else {
-            BufferedReader(InputStreamReader(connection.errorStream))
-        }
-
-        val responseText = reader.use { it.readText() }
-        if (responseCode !in 200..299) {
+        val responseText = readResponse(connection)
+        if (connection.responseCode !in 200..299) {
             val errorMessage = extractErrorMessage(responseText)
-            throw ApiException(responseCode, errorMessage)
+            throw ApiException(connection.responseCode, errorMessage)
         }
 
         val json = JSONObject(responseText)
@@ -72,6 +70,36 @@ object ApiClient {
         )
     }
 
+    fun refreshTokens(baseUrl: String, refreshToken: String): RefreshResponse {
+        val endpoint = baseUrl.trimEnd('/') + "/api/auth/refresh"
+        val url = URL(endpoint)
+        val connection = url.openConnection() as HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.doOutput = true
+
+        val payload = JSONObject()
+        payload.put("refreshToken", refreshToken)
+
+        connection.outputStream.use { outputStream ->
+            outputStream.write(payload.toString().toByteArray())
+        }
+
+        val responseText = readResponse(connection)
+        if (connection.responseCode !in 200..299) {
+            val errorMessage = extractErrorMessage(responseText)
+            throw ApiException(connection.responseCode, errorMessage)
+        }
+
+        val json = JSONObject(responseText)
+        val data = json.getJSONObject("data")
+
+        return RefreshResponse(
+            accessToken = data.getString("accessToken"),
+            refreshToken = data.getString("refreshToken")
+        )
+    }
+
     fun fetchActiveOrders(baseUrl: String, accessToken: String): List<ActiveOrder> {
         val endpoint = baseUrl.trimEnd('/') + "/api/orders/active"
         val url = URL(endpoint)
@@ -80,17 +108,10 @@ object ApiClient {
         connection.setRequestProperty("Authorization", "Bearer $accessToken")
         connection.setRequestProperty("Content-Type", "application/json")
 
-        val responseCode = connection.responseCode
-        val reader = if (responseCode in 200..299) {
-            BufferedReader(InputStreamReader(connection.inputStream))
-        } else {
-            BufferedReader(InputStreamReader(connection.errorStream))
-        }
-
-        val responseText = reader.use { it.readText() }
-        if (responseCode !in 200..299) {
+        val responseText = readResponse(connection)
+        if (connection.responseCode !in 200..299) {
             val errorMessage = extractErrorMessage(responseText)
-            throw ApiException(responseCode, errorMessage)
+            throw ApiException(connection.responseCode, errorMessage)
         }
 
         val json = JSONObject(responseText)
@@ -123,6 +144,15 @@ object ApiClient {
         }
 
         return orders
+    }
+
+    private fun readResponse(connection: HttpURLConnection): String {
+        val reader = if (connection.responseCode in 200..299) {
+            BufferedReader(InputStreamReader(connection.inputStream))
+        } else {
+            BufferedReader(InputStreamReader(connection.errorStream))
+        }
+        return reader.use { it.readText() }
     }
 
     private fun extractErrorMessage(responseText: String): String {

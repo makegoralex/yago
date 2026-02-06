@@ -9,6 +9,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.yago.evotor.auth.ApiClient
 import com.yago.evotor.auth.LoginActivity
+import com.yago.evotor.auth.Session
 import com.yago.evotor.auth.SessionStorage
 import java.text.DecimalFormat
 
@@ -47,10 +48,19 @@ class MainActivity : AppCompatActivity() {
         pollingRunnable = object : Runnable {
             override fun run() {
                 Thread {
+                    val refreshedSession = sessionStorage.loadSession() ?: session
                     try {
-                        val orders = ApiClient.fetchActiveOrders(session.baseUrl, session.accessToken)
+                        val orders = ApiClient.fetchActiveOrders(refreshedSession.baseUrl, refreshedSession.accessToken)
                         runOnUiThread {
                             ordersText.text = renderOrders(orders)
+                        }
+                    } catch (error: ApiClient.ApiException) {
+                        if (error.statusCode == 401) {
+                            handleTokenRefresh(sessionStorage, refreshedSession, ordersText)
+                        } else {
+                            runOnUiThread {
+                                ordersText.text = getString(R.string.orders_error, error.message)
+                            }
                         }
                     } catch (error: Exception) {
                         runOnUiThread {
@@ -71,6 +81,29 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         pollingRunnable?.let { handler.removeCallbacks(it) }
+    }
+
+    private fun handleTokenRefresh(
+        sessionStorage: SessionStorage,
+        session: Session,
+        ordersText: TextView
+    ) {
+        try {
+            val refreshed = ApiClient.refreshTokens(session.baseUrl, session.refreshToken)
+            val updatedSession = session.copy(
+                accessToken = refreshed.accessToken,
+                refreshToken = refreshed.refreshToken
+            )
+            sessionStorage.saveSession(updatedSession)
+            val orders = ApiClient.fetchActiveOrders(updatedSession.baseUrl, updatedSession.accessToken)
+            runOnUiThread {
+                ordersText.text = renderOrders(orders)
+            }
+        } catch (error: Exception) {
+            runOnUiThread {
+                ordersText.text = getString(R.string.orders_error, error.message ?: "")
+            }
+        }
     }
 
     private fun renderOrders(orders: List<ApiClient.ActiveOrder>): String {
