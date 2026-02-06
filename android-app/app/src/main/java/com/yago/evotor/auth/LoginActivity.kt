@@ -72,11 +72,18 @@ class LoginActivity : AppCompatActivity() {
                         loginButton.isEnabled = true
                         openPos()
                     }
+                } catch (error: ApiClient.ApiException) {
+                    runOnUiThread {
+                        progressBar.visibility = View.GONE
+                        loginButton.isEnabled = true
+                        errorText.text = getString(R.string.login_error_api, error.statusCode ?: 0, error.message)
+                        errorText.visibility = View.VISIBLE
+                    }
                 } catch (error: Exception) {
                     runOnUiThread {
                         progressBar.visibility = View.GONE
                         loginButton.isEnabled = true
-                        errorText.text = getString(R.string.login_error_invalid)
+                        errorText.text = getString(R.string.login_error_generic, error.message ?: "")
                         errorText.visibility = View.VISIBLE
                     }
                 }

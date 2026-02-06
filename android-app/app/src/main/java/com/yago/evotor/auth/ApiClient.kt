@@ -13,6 +13,8 @@ object ApiClient {
         val organizationId: String?
     )
 
+    class ApiException(val statusCode: Int?, override val message: String) : Exception(message)
+
     fun login(baseUrl: String, email: String, password: String, organizationId: String?): LoginResponse {
         val endpoint = baseUrl.trimEnd('/') + "/api/auth/login"
         val url = URL(endpoint)
@@ -41,7 +43,8 @@ object ApiClient {
 
         val responseText = reader.use { it.readText() }
         if (responseCode !in 200..299) {
-            throw IllegalStateException("Login failed: $responseText")
+            val errorMessage = extractErrorMessage(responseText)
+            throw ApiException(responseCode, errorMessage)
         }
 
         val json = JSONObject(responseText)
@@ -53,5 +56,18 @@ object ApiClient {
             refreshToken = data.getString("refreshToken"),
             organizationId = if (user.has("organizationId")) user.optString("organizationId", null) else null
         )
+    }
+
+    private fun extractErrorMessage(responseText: String): String {
+        return try {
+            val json = JSONObject(responseText)
+            when {
+                json.has("error") -> json.optString("error", "Unknown error")
+                json.has("message") -> json.optString("message", "Unknown error")
+                else -> responseText.ifBlank { "Unknown error" }
+            }
+        } catch (error: Exception) {
+            responseText.ifBlank { "Unknown error" }
+        }
     }
 }
