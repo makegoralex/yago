@@ -9,6 +9,9 @@
         android:roundIcon="@drawable/ic_launcher_foreground"
         android:supportsRtl="true"
         android:theme="@style/Theme.YagoEvotor">
+        <meta-data
+            android:name="app_uuid"
+            android:value="c2c3cb64-70d6-4d54-9450-0a4efd302ea3" />
         <activity
             android:name="com.yago.evotor.auth.LoginActivity"
             android:exported="true">
