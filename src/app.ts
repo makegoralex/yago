@@ -21,6 +21,7 @@ import restaurantSettingsRouter from './modules/restaurant/restaurantSettings.ro
 import organizationsRouter from './routes/organizations';
 import contentRouter from './routes/content';
 import printJobRouter from './modules/printing/printJob.router';
+import evotorRouter from './modules/evotor/evotor.router';
 
 const app = express();
 
@@ -66,6 +67,7 @@ app.use('/api/admin', adminManagementRouter);
 app.use('/api/shifts', shiftRouter);
 app.use('/api/restaurant', restaurantSettingsRouter);
 app.use('/api/print-jobs', printJobRouter);
+app.use('/api/evotor', evotorRouter);
 
 app.get('/api/protected', authMiddleware, (req, res) => {
   res.json({
