@@ -119,4 +119,30 @@ evotorRouter.get(
   })
 );
 
+evotorRouter.get(
+  '/status',
+  authMiddleware,
+  requireRole(['owner', 'superAdmin']),
+  asyncHandler(async (req, res) => {
+    const organizationId = req.user?.organizationId;
+    if (!organizationId || !Types.ObjectId.isValid(organizationId)) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const devices = await EvotorDeviceModel.find({ organizationId: new Types.ObjectId(organizationId) })
+      .sort({ updatedAt: -1 })
+      .select('deviceUuid storeUuid userId inn appUuid registerId createdAt updatedAt');
+
+    res.json({
+      data: {
+        appUuid: appConfig.evotorAppUuid,
+        devices,
+        deviceCount: devices.length,
+      },
+      error: null,
+    });
+  })
+);
+
 export default evotorRouter;
