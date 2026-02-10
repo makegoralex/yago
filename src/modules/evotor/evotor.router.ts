@@ -104,6 +104,19 @@ evotorRouter.post(
 );
 
 evotorRouter.get(
+  '/devices/raw',
+  authMiddleware,
+  requireRole(['owner', 'superAdmin']),
+  asyncHandler(async (_req, res) => {
+    const devices = await EvotorDeviceModel.find()
+      .sort({ createdAt: -1 })
+      .select('deviceUuid storeUuid userId inn createdAt');
+
+    res.json({ data: devices, error: null });
+  })
+);
+
+evotorRouter.get(
   '/devices',
   authMiddleware,
   requireRole(['owner', 'superAdmin']),
