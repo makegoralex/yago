@@ -11,6 +11,42 @@ const asyncHandler =
 
 const evotorRouter = Router();
 
+const maskSecret = (value: string | undefined): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length <= 8) {
+    return '***';
+  }
+
+  return `${trimmed.slice(0, 4)}***${trimmed.slice(-4)}`;
+};
+
+const logEvotorTokenWebhook = (req: any): void => {
+  if (!appConfig.evotorWebhookDebug) {
+    return;
+  }
+
+  const payload = req.body ?? {};
+  const payloadToken = typeof payload.token === 'string' ? payload.token : undefined;
+
+  console.info('[evotor][token] webhook payload received', {
+    method: req.method,
+    url: req.originalUrl,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    authorization: maskSecret(
+      typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined
+    ),
+    payload: {
+      ...payload,
+      token: maskSecret(payloadToken),
+    },
+  });
+};
+
 const ensureWebhookAuth = (authorization: string | undefined): boolean => {
   if (!appConfig.evotorWebhookSecret) {
     return true;
@@ -29,7 +65,17 @@ const ensureWebhookAuth = (authorization: string | undefined): boolean => {
 evotorRouter.post(
   '/token',
   asyncHandler(async (req, res) => {
+    logEvotorTokenWebhook(req);
+
     if (!ensureWebhookAuth(req.headers.authorization)) {
+      if (appConfig.evotorWebhookDebug) {
+        console.warn('[evotor][token] unauthorized webhook request', {
+          authorization: maskSecret(
+            typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined
+          ),
+        });
+      }
+
       res.status(401).json({ data: null, error: 'Unauthorized' });
       return;
     }
@@ -39,6 +85,10 @@ evotorRouter.post(
     const token = typeof payload.token === 'string' ? payload.token : '';
 
     if (!token) {
+      if (appConfig.evotorWebhookDebug) {
+        console.warn('[evotor][token] request rejected: token is required in payload');
+      }
+
       res.status(400).json({ data: null, error: 'Token is required' });
       return;
     }
@@ -62,6 +112,15 @@ evotorRouter.post(
       update,
       { upsert: true, new: true }
     );
+
+    if (appConfig.evotorWebhookDebug) {
+      console.info('[evotor][token] webhook saved', {
+        id: doc._id,
+        userId,
+        deviceUuid,
+        storeUuid,
+      });
+    }
 
     res.json({ data: { id: doc._id }, error: null });
   })
