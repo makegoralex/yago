@@ -88,10 +88,14 @@ Webhook обычно приходит во время установки/пер�
 
 В `webhook payload received` проверьте:
 - `authorization` (маскируется в логах),
-- `payload.user.id`,
+- `payload.user.id` **или** `payload.userId` / `payload.userUuid`,
 - `payload.device_uuid`,
 - `payload.store_uuid`,
 - `payload.token` (маскируется в логах).
+
+Если Evotor присылает идентификатор пользователя не во вложенном `user.id`,
+backend также поддерживает плоские поля `userId`, `user_id`, `userUuid`,
+`user_uuid`.
 
 В `webhook saved` проверьте:
 - `id` записи,

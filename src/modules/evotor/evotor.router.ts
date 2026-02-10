@@ -47,6 +47,16 @@ const logEvotorTokenWebhook = (req: any): void => {
   });
 };
 
+const pickString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
 const ensureWebhookAuth = (authorization: string | undefined): boolean => {
   if (!appConfig.evotorWebhookSecret) {
     return true;
@@ -82,7 +92,7 @@ evotorRouter.post(
 
     const payload = req.body ?? {};
     const user = payload.user ?? {};
-    const token = typeof payload.token === 'string' ? payload.token : '';
+    const token = pickString(payload.token) ?? '';
 
     if (!token) {
       if (appConfig.evotorWebhookDebug) {
@@ -93,10 +103,21 @@ evotorRouter.post(
       return;
     }
 
-    const userId = typeof user.id === 'string' ? user.id : undefined;
-    const inn = typeof user.inn === 'string' ? user.inn : undefined;
-    const deviceUuid = typeof payload.device_uuid === 'string' ? payload.device_uuid : undefined;
-    const storeUuid = typeof payload.store_uuid === 'string' ? payload.store_uuid : undefined;
+    const userId = pickString(user.id, user.userId, user.user_uuid, user.userUuid, payload.userId, payload.user_id, payload.userUuid, payload.user_uuid);
+    if (!userId) {
+      if (appConfig.evotorWebhookDebug) {
+        console.warn('[evotor][token] request rejected: user id is required in payload', {
+          payloadKeys: Object.keys(payload),
+        });
+      }
+
+      res.status(400).json({ data: null, error: 'User identifier is required' });
+      return;
+    }
+
+    const inn = pickString(user.inn, payload.inn);
+    const deviceUuid = pickString(payload.device_uuid, payload.deviceUuid);
+    const storeUuid = pickString(payload.store_uuid, payload.storeUuid);
 
     const update = {
       userId,
