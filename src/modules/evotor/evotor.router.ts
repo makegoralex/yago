@@ -110,7 +110,7 @@ evotorRouter.get(
   asyncHandler(async (_req, res) => {
     const devices = await EvotorDeviceModel.find()
       .sort({ createdAt: -1 })
-      .select('deviceUuid storeUuid userId inn createdAt');
+      .select('_id deviceUuid storeUuid userId inn appUuid createdAt updatedAt');
 
     res.json({ data: devices, error: null });
   })
