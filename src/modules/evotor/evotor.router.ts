@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { EvotorDeviceModel } from './evotor.model';
 import { appConfig } from '../../config/env';
+import { authenticateUser } from '../../services/authService';
 const asyncHandler =
   (fn: (req: any, res: any) => Promise<void>) =>
   (req: any, res: any, next: any) =>
@@ -71,6 +72,39 @@ const ensureWebhookAuth = (authorization: string | undefined): boolean => {
 
   return authorization === expectedBearer || authorization === expectedBasic;
 };
+
+evotorRouter.post(
+  '/user/verify',
+  asyncHandler(async (req, res) => {
+    if (!ensureWebhookAuth(req.headers.authorization)) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const payload = req.body ?? {};
+    const evotorUserId = pickString(payload.userId, payload.user_id, payload.userUuid, payload.user_uuid);
+    const username = pickString(payload.username, payload.login, payload.email);
+    const password = pickString(payload.password);
+    const organizationId = pickString(payload.organizationId, payload.organization_id, payload.customField);
+
+    if (!evotorUserId || !username || !password) {
+      res.status(400).json({ error: 'userId, username and password are required' });
+      return;
+    }
+
+    try {
+      const { tokens } = await authenticateUser(username, password, organizationId);
+
+      res.json({
+        userId: evotorUserId,
+        token: tokens.accessToken,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid credentials';
+      res.status(401).json({ error: message });
+    }
+  })
+);
 
 evotorRouter.post(
   '/token',

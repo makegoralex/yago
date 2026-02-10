@@ -11,6 +11,7 @@ class SessionStorage(context: Context) {
             .putString(KEY_ACCESS_TOKEN, session.accessToken)
             .putString(KEY_REFRESH_TOKEN, session.refreshToken)
             .putString(KEY_ORG_ID, session.organizationId)
+            .putString(KEY_ORG_NAME, session.organizationName)
             .putString(KEY_BASE_URL, session.baseUrl)
             .apply()
     }
@@ -20,8 +21,9 @@ class SessionStorage(context: Context) {
         val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, null) ?: return null
         val baseUrl = prefs.getString(KEY_BASE_URL, null) ?: return null
         val organizationId = prefs.getString(KEY_ORG_ID, null)
+        val organizationName = prefs.getString(KEY_ORG_NAME, null)
 
-        return Session(accessToken, refreshToken, organizationId, baseUrl)
+        return Session(accessToken, refreshToken, organizationId, organizationName, baseUrl)
     }
 
     fun clear() {
@@ -33,6 +35,7 @@ class SessionStorage(context: Context) {
         private const val KEY_ACCESS_TOKEN = "accessToken"
         private const val KEY_REFRESH_TOKEN = "refreshToken"
         private const val KEY_ORG_ID = "organizationId"
+        private const val KEY_ORG_NAME = "organizationName"
         private const val KEY_BASE_URL = "baseUrl"
     }
 }
@@ -42,5 +45,6 @@ data class Session(
     val accessToken: String,
     val refreshToken: String,
     val organizationId: String?,
+    val organizationName: String?,
     val baseUrl: String
 )

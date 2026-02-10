@@ -27,6 +27,36 @@ EVOTOR_WEBHOOK_DEBUG=true
 
 Включите галку **«Токен приложения для доступа к REST API Эвотор»**.
 
+## 2.1) Настройка «Авторизации учётной записи в стороннем сервисе»
+
+Если включаете в кабинете Evotor блок авторизации (`POST /user/verify`),
+заполняйте так:
+
+- URL: `https://yago-app.ru/api/evotor/user/verify`
+- Тип авторизации: **Ваш токен**
+- Токен: такой же как `EVOTOR_WEBHOOK_SECRET`
+
+Поддерживаемый формат запроса от Evotor:
+
+```json
+{
+  "userId": "01-00000000000001",
+  "username": "user@example.com",
+  "password": "user-password"
+}
+```
+
+Ответ backend при успешной проверке:
+
+```json
+{
+  "userId": "01-00000000000001",
+  "token": "<accessToken вашего сервиса>"
+}
+```
+
+Где `username` должен соответствовать email пользователя в Yago.
+
 ## 3) Установка APK на терминал
 
 После установки Evotor отправит webhook → backend сохранит устройство.

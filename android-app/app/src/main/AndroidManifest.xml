@@ -4,9 +4,9 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@drawable/ic_launcher_foreground"
+        android:icon="@mipmap/ic_launcher"
         android:label="Yago Evotor"
-        android:roundIcon="@drawable/ic_launcher_foreground"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.YagoEvotor">
         <meta-data
@@ -14,11 +14,17 @@
             android:value="c2c3cb64-70d6-4d54-9450-0a4efd302ea3" />
         <activity
             android:name="com.yago.evotor.auth.LoginActivity"
+            android:icon="@mipmap/ic_launcher"
+            android:label="Yago Evotor"
             android:exported="true">
+            <meta-data
+                android:name="ru.evotor.launcher.BACKGROUND_COLOR"
+                android:value="#133788" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.EVOTOR" />
             </intent-filter>
         </activity>
         <activity

@@ -63,6 +63,7 @@ class LoginActivity : AppCompatActivity() {
                             accessToken = response.accessToken,
                             refreshToken = response.refreshToken,
                             organizationId = response.organizationId ?: organizationId,
+                            organizationName = response.organizationName,
                             baseUrl = baseUrl
                         )
                     )
