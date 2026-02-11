@@ -11,7 +11,8 @@ object ApiClient {
     data class LoginResponse(
         val accessToken: String,
         val refreshToken: String,
-        val organizationId: String?
+        val organizationId: String?,
+        val organizationName: String?
     )
 
     data class RefreshResponse(
@@ -66,7 +67,8 @@ object ApiClient {
         return LoginResponse(
             accessToken = data.getString("accessToken"),
             refreshToken = data.getString("refreshToken"),
-            organizationId = if (user.has("organizationId")) user.optString("organizationId", null) else null
+            organizationId = if (user.has("organizationId")) user.optString("organizationId", null) else null,
+            organizationName = if (user.has("organizationName")) user.optString("organizationName", null) else null
         )
     }
 
