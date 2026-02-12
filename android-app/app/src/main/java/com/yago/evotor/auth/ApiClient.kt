@@ -6,12 +6,14 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import javax.net.ssl.SSLHandshakeException
 
 object ApiClient {
     data class LoginResponse(
         val accessToken: String,
         val refreshToken: String,
-        val organizationId: String?
+        val organizationId: String?,
+        val organizationName: String?
     )
 
     data class RefreshResponse(
@@ -34,13 +36,27 @@ object ApiClient {
 
     class ApiException(val statusCode: Int?, override val message: String) : Exception(message)
 
+    data class HealthCheckResult(
+        val endpoint: String,
+        val statusCode: Int
+    )
+
+    fun checkHealth(baseUrl: String): HealthCheckResult {
+        val endpoint = baseUrl.trimEnd('/') + "/healthz"
+        val connection = openConnection(endpoint, "GET")
+        val responseCode = readResponseCode(connection, endpoint)
+        if (responseCode !in 200..299) {
+            val errorMessage = extractErrorMessage(readResponse(connection, endpoint))
+            throw ApiException(responseCode, "Healthcheck failed for $endpoint: $errorMessage")
+        }
+
+        return HealthCheckResult(endpoint = endpoint, statusCode = responseCode)
+    }
+
     fun login(baseUrl: String, email: String, password: String, organizationId: String?): LoginResponse {
         val endpoint = baseUrl.trimEnd('/') + "/api/auth/login"
-        val url = URL(endpoint)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "POST"
+        val connection = openConnection(endpoint, "POST")
         connection.setRequestProperty("Content-Type", "application/json")
-        connection.doOutput = true
 
         val payload = JSONObject()
         payload.put("email", email)
@@ -49,14 +65,13 @@ object ApiClient {
             payload.put("organizationId", organizationId)
         }
 
-        connection.outputStream.use { outputStream ->
-            outputStream.write(payload.toString().toByteArray())
-        }
+        writePayload(connection, endpoint, payload)
 
-        val responseText = readResponse(connection)
-        if (connection.responseCode !in 200..299) {
+        val responseText = readResponse(connection, endpoint)
+        val responseCode = readResponseCode(connection, endpoint)
+        if (responseCode !in 200..299) {
             val errorMessage = extractErrorMessage(responseText)
-            throw ApiException(connection.responseCode, errorMessage)
+            throw ApiException(responseCode, errorMessage)
         }
 
         val json = JSONObject(responseText)
@@ -66,29 +81,25 @@ object ApiClient {
         return LoginResponse(
             accessToken = data.getString("accessToken"),
             refreshToken = data.getString("refreshToken"),
-            organizationId = if (user.has("organizationId")) user.optString("organizationId", null) else null
+            organizationId = if (user.has("organizationId")) user.optString("organizationId", null) else null,
+            organizationName = if (user.has("organizationName")) user.optString("organizationName", null) else null
         )
     }
 
     fun refreshTokens(baseUrl: String, refreshToken: String): RefreshResponse {
         val endpoint = baseUrl.trimEnd('/') + "/api/auth/refresh"
-        val url = URL(endpoint)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "POST"
+        val connection = openConnection(endpoint, "POST")
         connection.setRequestProperty("Content-Type", "application/json")
-        connection.doOutput = true
 
         val payload = JSONObject()
         payload.put("refreshToken", refreshToken)
+        writePayload(connection, endpoint, payload)
 
-        connection.outputStream.use { outputStream ->
-            outputStream.write(payload.toString().toByteArray())
-        }
-
-        val responseText = readResponse(connection)
-        if (connection.responseCode !in 200..299) {
+        val responseText = readResponse(connection, endpoint)
+        val responseCode = readResponseCode(connection, endpoint)
+        if (responseCode !in 200..299) {
             val errorMessage = extractErrorMessage(responseText)
-            throw ApiException(connection.responseCode, errorMessage)
+            throw ApiException(responseCode, errorMessage)
         }
 
         val json = JSONObject(responseText)
@@ -102,16 +113,15 @@ object ApiClient {
 
     fun fetchActiveOrders(baseUrl: String, accessToken: String): List<ActiveOrder> {
         val endpoint = baseUrl.trimEnd('/') + "/api/orders/active"
-        val url = URL(endpoint)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
+        val connection = openConnection(endpoint, "GET")
         connection.setRequestProperty("Authorization", "Bearer $accessToken")
         connection.setRequestProperty("Content-Type", "application/json")
 
-        val responseText = readResponse(connection)
-        if (connection.responseCode !in 200..299) {
+        val responseText = readResponse(connection, endpoint)
+        val responseCode = readResponseCode(connection, endpoint)
+        if (responseCode !in 200..299) {
             val errorMessage = extractErrorMessage(responseText)
-            throw ApiException(connection.responseCode, errorMessage)
+            throw ApiException(responseCode, errorMessage)
         }
 
         val json = JSONObject(responseText)
@@ -146,13 +156,72 @@ object ApiClient {
         return orders
     }
 
-    private fun readResponse(connection: HttpURLConnection): String {
-        val reader = if (connection.responseCode in 200..299) {
-            BufferedReader(InputStreamReader(connection.inputStream))
-        } else {
-            BufferedReader(InputStreamReader(connection.errorStream))
+    private fun writePayload(connection: HttpURLConnection, endpoint: String, payload: JSONObject) {
+        try {
+            connection.outputStream.use { outputStream ->
+                outputStream.write(payload.toString().toByteArray())
+            }
+        } catch (error: Exception) {
+            throw ApiException(null, formatConnectionError(endpoint, "write request body", error))
+        }
+    }
+
+    private fun readResponseCode(connection: HttpURLConnection, endpoint: String): Int {
+        return try {
+            connection.responseCode
+        } catch (error: Exception) {
+            throw ApiException(null, formatConnectionError(endpoint, "read response code", error))
+        }
+    }
+
+    private fun readResponse(connection: HttpURLConnection, endpoint: String): String {
+        val reader = try {
+            val responseCode = connection.responseCode
+            if (responseCode in 200..299) {
+                BufferedReader(InputStreamReader(connection.inputStream))
+            } else {
+                BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream))
+            }
+        } catch (error: Exception) {
+            throw ApiException(null, formatConnectionError(endpoint, "read response body", error))
         }
         return reader.use { it.readText() }
+    }
+
+    private fun openConnection(endpoint: String, method: String): HttpURLConnection {
+        try {
+            val url = URL(endpoint)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = method
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
+            connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("User-Agent", "YagoEvotor/1.0")
+            if (method == "POST" || method == "PUT" || method == "PATCH") {
+                connection.doOutput = true
+            }
+            return connection
+        } catch (error: Exception) {
+            throw ApiException(null, formatConnectionError(endpoint, "open connection", error))
+        }
+    }
+
+    private fun formatConnectionError(endpoint: String, phase: String, error: Throwable): String {
+        val chain = generateSequence(error) { it.cause }
+            .mapNotNull { cause ->
+                val name = cause::class.java.simpleName
+                val message = cause.message?.trim().orEmpty()
+                if (message.isBlank()) name else "$name: $message"
+            }
+            .toList()
+
+        val details = chain.joinToString(" -> ")
+        val prefix = "Network error during $phase ($endpoint)."
+        return if (error is SSLHandshakeException || chain.any { it.contains("SSL", ignoreCase = true) || it.contains("certificate", ignoreCase = true) }) {
+            "$prefix TLS/SSL error. Проверьте сертификат сервера и цепочку доверия. $details"
+        } else {
+            "$prefix ${details.ifBlank { "Unknown network error" }}"
+        }
     }
 
     private fun extractErrorMessage(responseText: String): String {
