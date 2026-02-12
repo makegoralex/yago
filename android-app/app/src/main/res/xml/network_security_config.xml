@@ -5,7 +5,7 @@
             <certificates src="system" />
             <certificates src="user" />
             <certificates src="@raw/isrg_root_x1" />
-            <!-- Если support Evotor выдаст root CA в PEM, добавьте: <certificates src="@raw/evotor_root_ca" /> -->
+            <certificates src="@raw/rootca2025" />
         </trust-anchors>
     </base-config>
 
@@ -15,7 +15,7 @@
             <certificates src="system" />
             <certificates src="user" />
             <certificates src="@raw/isrg_root_x1" />
-            <!-- Если support Evotor выдаст root CA в PEM, добавьте: <certificates src="@raw/evotor_root_ca" /> -->
+            <certificates src="@raw/rootca2025" />
         </trust-anchors>
     </domain-config>
 </network-security-config>

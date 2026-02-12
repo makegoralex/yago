@@ -73,9 +73,11 @@ EVOTOR_WEBHOOK_DEBUG=true
 
 Если Evotor/support выдал новый корневой сертификат УЦ Эвотор:
 
-- добавьте его в Android-приложение в `android-app/app/src/main/res/raw/` (PEM);
-- пропишите в `android-app/app/src/main/res/xml/network_security_config.xml` как `@raw/<имя_файла_без_ext>`;
+- добавьте его в Android-приложение как `android-app/app/src/main/res/raw/rootca2025.crt`;
+- в `network_security_config.xml` уже должен быть прописан `@raw/rootca2025`;
 - при необходимости установите этот же root на ваш сервер/балансировщик, если сервер общается с сервисами Эвотор.
+
+Важно: для Android resources имя файла должно быть lowercase, поэтому используйте `rootca2025.crt`.
 
 ## 3) Установка APK на терминал
 

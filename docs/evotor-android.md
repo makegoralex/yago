@@ -68,19 +68,19 @@
 показывается расширенная диагностическая ошибка подключения.
 
 
-## Куда добавлять сертификат Эвотор (если support выдал .pem)
+## Куда добавлять сертификат Эвотор (если support выдал .crt/.pem)
 
 Если Evotor/support выдал отдельный корневой сертификат (например, УЦ Эвотор),
 его нужно добавить **в приложение** так же, как `isrg_root_x1.pem`:
 
-1. Скопируйте PEM-файл в `android-app/app/src/main/res/raw/`
-   (например: `android-app/app/src/main/res/raw/evotor_root_ca.pem`).
-2. Добавьте его в `network_security_config.xml` в блок `trust-anchors`:
+1. Скопируйте сертификат в `android-app/app/src/main/res/raw/` как `rootca2025.crt`.
+2. В `network_security_config.xml` уже прописан trust anchor:
 
 ```xml
-<certificates src="@raw/evotor_root_ca" />
+<certificates src="@raw/rootca2025" />
 ```
 
 3. Пересоберите APK и установите новую версию на терминал.
 
-Важно: файл должен быть валидным PEM-сертификатом (не `.cer` в бинарном DER без конвертации).
+Важно: Android resource-имя должно быть в нижнем регистре.
+Если кладёте файл вручную, используйте именно `rootca2025.crt` (не `rootCA2025.crt`).
