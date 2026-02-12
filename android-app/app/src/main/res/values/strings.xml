@@ -11,6 +11,7 @@
     <string name="login_error_required">Заполните адрес, email и пароль.</string>
     <string name="login_error_invalid">Не удалось войти. Проверьте данные.</string>
     <string name="login_error_api">Ошибка %1$d: %2$s</string>
+    <string name="login_error_network">Ошибка подключения: %1$s</string>
     <string name="login_error_generic">Не удалось войти: %1$s</string>
     <string name="logout_button">Выйти</string>
     <string name="pos_ready_message">Эвотор POS готов. Организация: %1$s</string>

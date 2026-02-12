@@ -57,6 +57,7 @@ class LoginActivity : AppCompatActivity() {
 
             Thread {
                 try {
+                    ApiClient.checkHealth(baseUrl)
                     val response = ApiClient.login(baseUrl, email, password, organizationId)
                     sessionStorage.saveSession(
                         Session(
@@ -77,7 +78,12 @@ class LoginActivity : AppCompatActivity() {
                     runOnUiThread {
                         progressBar.visibility = View.GONE
                         loginButton.isEnabled = true
-                        errorText.text = getString(R.string.login_error_api, error.statusCode ?: 0, error.message)
+                        errorText.text =
+                            if (error.statusCode == null) {
+                                getString(R.string.login_error_network, error.message)
+                            } else {
+                                getString(R.string.login_error_api, error.statusCode, error.message)
+                            }
                         errorText.visibility = View.VISIBLE
                     }
                 } catch (error: Exception) {
