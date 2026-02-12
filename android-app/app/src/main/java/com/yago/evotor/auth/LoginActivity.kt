@@ -12,6 +12,10 @@ import com.yago.evotor.MainActivity
 import com.yago.evotor.R
 
 class LoginActivity : AppCompatActivity() {
+    companion object {
+        private const val DEFAULT_BASE_URL = "https://yago-app.ru"
+    }
+
     private lateinit var baseUrlInput: EditText
     private lateinit var emailInput: EditText
     private lateinit var passwordInput: EditText
@@ -29,6 +33,7 @@ class LoginActivity : AppCompatActivity() {
         organizationInput = findViewById(R.id.organizationInput)
         errorText = findViewById(R.id.errorText)
         progressBar = findViewById(R.id.loginProgress)
+        baseUrlInput.setText(DEFAULT_BASE_URL)
 
         val sessionStorage = SessionStorage(this)
         sessionStorage.loadSession()?.let {
@@ -41,13 +46,13 @@ class LoginActivity : AppCompatActivity() {
             errorText.text = ""
             errorText.visibility = View.GONE
 
-            val baseUrl = baseUrlInput.text.toString().trim()
+            val baseUrl = DEFAULT_BASE_URL
             val email = emailInput.text.toString().trim()
             val password = passwordInput.text.toString().trim()
             val organizationId = organizationInput.text.toString().trim().ifBlank { null }
 
-            if (baseUrl.isBlank() || email.isBlank() || password.isBlank()) {
-                errorText.text = getString(R.string.login_error_required)
+            if (email.isBlank() || password.isBlank()) {
+                errorText.text = getString(R.string.login_error_required_credentials)
                 errorText.visibility = View.VISIBLE
                 return@setOnClickListener
             }
@@ -57,12 +62,14 @@ class LoginActivity : AppCompatActivity() {
 
             Thread {
                 try {
+                    ApiClient.checkHealth(baseUrl)
                     val response = ApiClient.login(baseUrl, email, password, organizationId)
                     sessionStorage.saveSession(
                         Session(
                             accessToken = response.accessToken,
                             refreshToken = response.refreshToken,
                             organizationId = response.organizationId ?: organizationId,
+                            organizationName = response.organizationName,
                             baseUrl = baseUrl
                         )
                     )
@@ -76,7 +83,12 @@ class LoginActivity : AppCompatActivity() {
                     runOnUiThread {
                         progressBar.visibility = View.GONE
                         loginButton.isEnabled = true
-                        errorText.text = getString(R.string.login_error_api, error.statusCode ?: 0, error.message)
+                        errorText.text =
+                            if (error.statusCode == null) {
+                                getString(R.string.login_error_network, error.message)
+                            } else {
+                                getString(R.string.login_error_api, error.statusCode, error.message)
+                            }
                         errorText.visibility = View.VISIBLE
                     }
                 } catch (error: Exception) {
