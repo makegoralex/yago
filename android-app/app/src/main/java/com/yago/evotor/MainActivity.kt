@@ -36,7 +36,8 @@ class MainActivity : AppCompatActivity() {
         val ordersText = findViewById<TextView>(R.id.ordersText)
         val logoutButton = findViewById<Button>(R.id.logoutButton)
 
-        statusText.text = getString(R.string.pos_ready_message, session.organizationId ?: "—")
+        val organizationLabel = session.organizationName ?: session.organizationId ?: "—"
+        statusText.text = getString(R.string.pos_ready_message, organizationLabel)
         ordersText.text = getString(R.string.orders_loading)
 
         logoutButton.setOnClickListener {
