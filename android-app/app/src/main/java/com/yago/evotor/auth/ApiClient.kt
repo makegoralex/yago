@@ -9,6 +9,9 @@ import java.net.URL
 import javax.net.ssl.SSLHandshakeException
 
 object ApiClient {
+    private const val CONNECT_TIMEOUT_MS = 5_000
+    private const val READ_TIMEOUT_MS = 10_000
+
     data class LoginResponse(
         val accessToken: String,
         val refreshToken: String,
@@ -193,8 +196,9 @@ object ApiClient {
             val url = URL(endpoint)
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = method
-            connection.connectTimeout = 15000
-            connection.readTimeout = 15000
+            // Evotor proxy docs: connection timeout 5s, response timeout 10s.
+            connection.connectTimeout = CONNECT_TIMEOUT_MS
+            connection.readTimeout = READ_TIMEOUT_MS
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("User-Agent", "YagoEvotor/1.0")
             if (method == "POST" || method == "PUT" || method == "PATCH") {
