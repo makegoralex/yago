@@ -32,7 +32,11 @@
             android:layout_marginTop="@dimen/pos_spacing"
             android:hint="@string/login_base_url"
             android:inputType="textUri"
-            android:importantForAutofill="no" />
+            android:importantForAutofill="no"
+            android:enabled="false"
+            android:focusable="false"
+            android:clickable="false"
+            android:visibility="gone" />
 
         <EditText
             android:id="@+id/emailInput"

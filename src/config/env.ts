@@ -24,6 +24,7 @@ export const appConfig = {
   evotorAppUuid: process.env.EVOTOR_APP_UUID ?? '',
   evotorPublisherToken: process.env.EVOTOR_PUBLISHER_TOKEN ?? '',
   evotorWebhookSecret: process.env.EVOTOR_WEBHOOK_SECRET ?? '',
+  evotorWebhookDebug: process.env.EVOTOR_WEBHOOK_DEBUG === 'true',
 };
 
 export const validateConfig = (): void => {

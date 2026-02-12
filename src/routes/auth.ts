@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { authMiddleware } from '../middleware/auth';
+import { OrganizationModel } from '../models/Organization';
 import { UserModel } from '../models/User';
 import {
   authenticateUser,
@@ -26,6 +27,15 @@ const resolveUserId = (user: { id?: string; _id?: unknown } | { id?: string } | 
   throw new Error('User identifier is not available');
 };
 
+const resolveOrganizationName = async (organizationId?: string): Promise<string | undefined> => {
+  if (!organizationId) {
+    return undefined;
+  }
+
+  const organization = await OrganizationModel.findById(organizationId).select('name').lean();
+  return organization?.name;
+};
+
 authRouter.post('/register', validateRequest({ body: authSchemas.register }), async (req: Request, res: Response) => {
   try {
     const { name, email, password, role, organizationId } = req.body as RegisterBody;
@@ -38,6 +48,9 @@ authRouter.post('/register', validateRequest({ body: authSchemas.register }), as
       role,
     });
 
+    const resolvedOrganizationId = user.organizationId ? String(user.organizationId) : undefined;
+    const organizationName = await resolveOrganizationName(resolvedOrganizationId);
+
     res.status(201).json({
       data: {
         user: {
@@ -45,7 +58,8 @@ authRouter.post('/register', validateRequest({ body: authSchemas.register }), as
           name: user.name,
           email: user.email,
           role: user.role,
-          organizationId: user.organizationId ? String(user.organizationId) : undefined,
+          organizationId: resolvedOrganizationId,
+          organizationName,
         },
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
@@ -65,6 +79,9 @@ authRouter.post('/login', validateRequest({ body: authSchemas.login }), async (r
 
     const { user, tokens } = await authenticateUser(email, password, organizationId);
 
+    const resolvedOrganizationId = user.organizationId ? String(user.organizationId) : undefined;
+    const organizationName = await resolveOrganizationName(resolvedOrganizationId);
+
     res.json({
       data: {
         user: {
@@ -72,7 +89,8 @@ authRouter.post('/login', validateRequest({ body: authSchemas.login }), async (r
           name: user.name,
           email: user.email,
           role: user.role,
-          organizationId: user.organizationId ? String(user.organizationId) : undefined,
+          organizationId: resolvedOrganizationId,
+          organizationName,
         },
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
