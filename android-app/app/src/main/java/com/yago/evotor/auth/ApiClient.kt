@@ -44,9 +44,9 @@ object ApiClient {
     fun checkHealth(baseUrl: String): HealthCheckResult {
         val endpoint = baseUrl.trimEnd('/') + "/healthz"
         val connection = openConnection(endpoint, "GET")
-        val responseCode = connection.responseCode
+        val responseCode = readResponseCode(connection, endpoint)
         if (responseCode !in 200..299) {
-            val errorMessage = extractErrorMessage(readResponse(connection))
+            val errorMessage = extractErrorMessage(readResponse(connection, endpoint))
             throw ApiException(responseCode, "Healthcheck failed for $endpoint: $errorMessage")
         }
 
@@ -65,14 +65,13 @@ object ApiClient {
             payload.put("organizationId", organizationId)
         }
 
-        connection.outputStream.use { outputStream ->
-            outputStream.write(payload.toString().toByteArray())
-        }
+        writePayload(connection, endpoint, payload)
 
-        val responseText = readResponse(connection)
-        if (connection.responseCode !in 200..299) {
+        val responseText = readResponse(connection, endpoint)
+        val responseCode = readResponseCode(connection, endpoint)
+        if (responseCode !in 200..299) {
             val errorMessage = extractErrorMessage(responseText)
-            throw ApiException(connection.responseCode, errorMessage)
+            throw ApiException(responseCode, errorMessage)
         }
 
         val json = JSONObject(responseText)
@@ -94,15 +93,13 @@ object ApiClient {
 
         val payload = JSONObject()
         payload.put("refreshToken", refreshToken)
+        writePayload(connection, endpoint, payload)
 
-        connection.outputStream.use { outputStream ->
-            outputStream.write(payload.toString().toByteArray())
-        }
-
-        val responseText = readResponse(connection)
-        if (connection.responseCode !in 200..299) {
+        val responseText = readResponse(connection, endpoint)
+        val responseCode = readResponseCode(connection, endpoint)
+        if (responseCode !in 200..299) {
             val errorMessage = extractErrorMessage(responseText)
-            throw ApiException(connection.responseCode, errorMessage)
+            throw ApiException(responseCode, errorMessage)
         }
 
         val json = JSONObject(responseText)
@@ -120,10 +117,11 @@ object ApiClient {
         connection.setRequestProperty("Authorization", "Bearer $accessToken")
         connection.setRequestProperty("Content-Type", "application/json")
 
-        val responseText = readResponse(connection)
-        if (connection.responseCode !in 200..299) {
+        val responseText = readResponse(connection, endpoint)
+        val responseCode = readResponseCode(connection, endpoint)
+        if (responseCode !in 200..299) {
             val errorMessage = extractErrorMessage(responseText)
-            throw ApiException(connection.responseCode, errorMessage)
+            throw ApiException(responseCode, errorMessage)
         }
 
         val json = JSONObject(responseText)
@@ -158,15 +156,34 @@ object ApiClient {
         return orders
     }
 
-    private fun readResponse(connection: HttpURLConnection): String {
+    private fun writePayload(connection: HttpURLConnection, endpoint: String, payload: JSONObject) {
+        try {
+            connection.outputStream.use { outputStream ->
+                outputStream.write(payload.toString().toByteArray())
+            }
+        } catch (error: Exception) {
+            throw ApiException(null, formatConnectionError(endpoint, "write request body", error))
+        }
+    }
+
+    private fun readResponseCode(connection: HttpURLConnection, endpoint: String): Int {
+        return try {
+            connection.responseCode
+        } catch (error: Exception) {
+            throw ApiException(null, formatConnectionError(endpoint, "read response code", error))
+        }
+    }
+
+    private fun readResponse(connection: HttpURLConnection, endpoint: String): String {
         val reader = try {
-            if (connection.responseCode in 200..299) {
+            val responseCode = connection.responseCode
+            if (responseCode in 200..299) {
                 BufferedReader(InputStreamReader(connection.inputStream))
             } else {
                 BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream))
             }
         } catch (error: Exception) {
-            throw ApiException(null, formatConnectionError(error))
+            throw ApiException(null, formatConnectionError(endpoint, "read response body", error))
         }
         return reader.use { it.readText() }
     }
@@ -185,11 +202,11 @@ object ApiClient {
             }
             return connection
         } catch (error: Exception) {
-            throw ApiException(null, formatConnectionError(error))
+            throw ApiException(null, formatConnectionError(endpoint, "open connection", error))
         }
     }
 
-    private fun formatConnectionError(error: Throwable): String {
+    private fun formatConnectionError(endpoint: String, phase: String, error: Throwable): String {
         val chain = generateSequence(error) { it.cause }
             .mapNotNull { cause ->
                 val name = cause::class.java.simpleName
@@ -199,10 +216,11 @@ object ApiClient {
             .toList()
 
         val details = chain.joinToString(" -> ")
-        return if (error is SSLHandshakeException || chain.any { it.contains("SSL", ignoreCase = true) }) {
-            "TLS/SSL error. Проверьте сертификат сервера и цепочку доверия. $details"
+        val prefix = "Network error during $phase ($endpoint)."
+        return if (error is SSLHandshakeException || chain.any { it.contains("SSL", ignoreCase = true) || it.contains("certificate", ignoreCase = true) }) {
+            "$prefix TLS/SSL error. Проверьте сертификат сервера и цепочку доверия. $details"
         } else {
-            details.ifBlank { "Network connection error" }
+            "$prefix ${details.ifBlank { "Unknown network error" }}"
         }
     }
 
