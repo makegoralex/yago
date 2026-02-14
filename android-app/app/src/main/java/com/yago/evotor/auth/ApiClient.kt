@@ -1,16 +1,23 @@
 package com.yago.evotor.auth
 
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
+import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLHandshakeException
 
 object ApiClient {
-    private const val CONNECT_TIMEOUT_MS = 5_000
-    private const val READ_TIMEOUT_MS = 10_000
+    private const val CONNECT_TIMEOUT_MS = 5_000L
+    private const val READ_TIMEOUT_MS = 10_000L
+    private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+    private val httpClient: OkHttpClient = OkHttpClient.Builder()
+        // Evotor proxy docs: connection timeout 5s, response timeout 10s.
+        .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .build()
 
     data class LoginResponse(
         val accessToken: String,
@@ -46,20 +53,17 @@ object ApiClient {
 
     fun checkHealth(baseUrl: String): HealthCheckResult {
         val endpoint = baseUrl.trimEnd('/') + "/healthz"
-        val connection = openConnection(endpoint, "GET")
-        val responseCode = readResponseCode(connection, endpoint)
-        if (responseCode !in 200..299) {
-            val errorMessage = extractErrorMessage(readResponse(connection, endpoint))
-            throw ApiException(responseCode, "Healthcheck failed for $endpoint: $errorMessage")
+        val response = executeRequest(endpoint = endpoint, method = "GET")
+        if (response.statusCode !in 200..299) {
+            val errorMessage = extractErrorMessage(response.body)
+            throw ApiException(response.statusCode, "Healthcheck failed for $endpoint: $errorMessage")
         }
 
-        return HealthCheckResult(endpoint = endpoint, statusCode = responseCode)
+        return HealthCheckResult(endpoint = endpoint, statusCode = response.statusCode)
     }
 
     fun login(baseUrl: String, email: String, password: String, organizationId: String?): LoginResponse {
         val endpoint = baseUrl.trimEnd('/') + "/api/auth/login"
-        val connection = openConnection(endpoint, "POST")
-        connection.setRequestProperty("Content-Type", "application/json")
 
         val payload = JSONObject()
         payload.put("email", email)
@@ -68,16 +72,13 @@ object ApiClient {
             payload.put("organizationId", organizationId)
         }
 
-        writePayload(connection, endpoint, payload)
-
-        val responseText = readResponse(connection, endpoint)
-        val responseCode = readResponseCode(connection, endpoint)
-        if (responseCode !in 200..299) {
-            val errorMessage = extractErrorMessage(responseText)
-            throw ApiException(responseCode, errorMessage)
+        val response = executeRequest(endpoint = endpoint, method = "POST", payload = payload)
+        if (response.statusCode !in 200..299) {
+            val errorMessage = extractErrorMessage(response.body)
+            throw ApiException(response.statusCode, errorMessage)
         }
 
-        val json = JSONObject(responseText)
+        val json = JSONObject(response.body)
         val data = json.getJSONObject("data")
         val user = data.getJSONObject("user")
 
@@ -91,21 +92,17 @@ object ApiClient {
 
     fun refreshTokens(baseUrl: String, refreshToken: String): RefreshResponse {
         val endpoint = baseUrl.trimEnd('/') + "/api/auth/refresh"
-        val connection = openConnection(endpoint, "POST")
-        connection.setRequestProperty("Content-Type", "application/json")
 
         val payload = JSONObject()
         payload.put("refreshToken", refreshToken)
-        writePayload(connection, endpoint, payload)
 
-        val responseText = readResponse(connection, endpoint)
-        val responseCode = readResponseCode(connection, endpoint)
-        if (responseCode !in 200..299) {
-            val errorMessage = extractErrorMessage(responseText)
-            throw ApiException(responseCode, errorMessage)
+        val response = executeRequest(endpoint = endpoint, method = "POST", payload = payload)
+        if (response.statusCode !in 200..299) {
+            val errorMessage = extractErrorMessage(response.body)
+            throw ApiException(response.statusCode, errorMessage)
         }
 
-        val json = JSONObject(responseText)
+        val json = JSONObject(response.body)
         val data = json.getJSONObject("data")
 
         return RefreshResponse(
@@ -116,18 +113,18 @@ object ApiClient {
 
     fun fetchActiveOrders(baseUrl: String, accessToken: String): List<ActiveOrder> {
         val endpoint = baseUrl.trimEnd('/') + "/api/orders/active"
-        val connection = openConnection(endpoint, "GET")
-        connection.setRequestProperty("X-Yago-App-Token", accessToken)
-        connection.setRequestProperty("Content-Type", "application/json")
+        val response = executeRequest(
+            endpoint = endpoint,
+            method = "GET",
+            extraHeaders = mapOf("X-Yago-App-Token" to accessToken)
+        )
 
-        val responseText = readResponse(connection, endpoint)
-        val responseCode = readResponseCode(connection, endpoint)
-        if (responseCode !in 200..299) {
-            val errorMessage = extractErrorMessage(responseText)
-            throw ApiException(responseCode, errorMessage)
+        if (response.statusCode !in 200..299) {
+            val errorMessage = extractErrorMessage(response.body)
+            throw ApiException(response.statusCode, errorMessage)
         }
 
-        val json = JSONObject(responseText)
+        val json = JSONObject(response.body)
         val dataArray = json.optJSONArray("data") ?: JSONArray()
         val orders = mutableListOf<ActiveOrder>()
 
@@ -159,54 +156,62 @@ object ApiClient {
         return orders
     }
 
-    private fun writePayload(connection: HttpURLConnection, endpoint: String, payload: JSONObject) {
-        try {
-            connection.outputStream.use { outputStream ->
-                outputStream.write(payload.toString().toByteArray())
-            }
-        } catch (error: Exception) {
-            throw ApiException(null, formatConnectionError(endpoint, "write request body", error))
-        }
-    }
+    private data class HttpResponse(
+        val statusCode: Int,
+        val body: String
+    )
 
-    private fun readResponseCode(connection: HttpURLConnection, endpoint: String): Int {
+    private fun executeRequest(
+        endpoint: String,
+        method: String,
+        payload: JSONObject? = null,
+        extraHeaders: Map<String, String> = emptyMap()
+    ): HttpResponse {
+        val requestBuilder = Request.Builder()
+            .url(endpoint)
+            .header("Accept", "application/json")
+            .header("User-Agent", "YagoEvotor/1.0")
+
+        extraHeaders.forEach { (key, value) ->
+            requestBuilder.header(key, value)
+        }
+
+        val requestBody = payload?.toString()?.toRequestBody(JSON_MEDIA_TYPE)
+        if (requestBody != null) {
+            requestBuilder.header("Content-Type", "application/json")
+        }
+
+        when (method) {
+            "GET" -> requestBuilder.get()
+            "POST" -> requestBuilder.post(requestBody ?: "{}".toRequestBody(JSON_MEDIA_TYPE))
+            "PUT" -> requestBuilder.put(requestBody ?: "{}".toRequestBody(JSON_MEDIA_TYPE))
+            "PATCH" -> requestBuilder.patch(requestBody ?: "{}".toRequestBody(JSON_MEDIA_TYPE))
+            "DELETE" -> {
+                if (requestBody != null) {
+                    requestBuilder.delete(requestBody)
+                } else {
+                    requestBuilder.delete()
+                }
+            }
+            else -> throw ApiException(null, "Unsupported HTTP method: $method")
+        }
+
+        val request = requestBuilder.build()
+        val call = try {
+            httpClient.newCall(request)
+        } catch (error: Exception) {
+            throw ApiException(null, formatConnectionError(endpoint, "prepare request", error))
+        }
+
         return try {
-            connection.responseCode
-        } catch (error: Exception) {
-            throw ApiException(null, formatConnectionError(endpoint, "read response code", error))
-        }
-    }
-
-    private fun readResponse(connection: HttpURLConnection, endpoint: String): String {
-        val reader = try {
-            val responseCode = connection.responseCode
-            if (responseCode in 200..299) {
-                BufferedReader(InputStreamReader(connection.inputStream))
-            } else {
-                BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream))
+            call.execute().use { response ->
+                HttpResponse(
+                    statusCode = response.code,
+                    body = response.body?.string().orEmpty()
+                )
             }
         } catch (error: Exception) {
-            throw ApiException(null, formatConnectionError(endpoint, "read response body", error))
-        }
-        return reader.use { it.readText() }
-    }
-
-    private fun openConnection(endpoint: String, method: String): HttpURLConnection {
-        try {
-            val url = URL(endpoint)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = method
-            // Evotor proxy docs: connection timeout 5s, response timeout 10s.
-            connection.connectTimeout = CONNECT_TIMEOUT_MS
-            connection.readTimeout = READ_TIMEOUT_MS
-            connection.setRequestProperty("Accept", "application/json")
-            connection.setRequestProperty("User-Agent", "YagoEvotor/1.0")
-            if (method == "POST" || method == "PUT" || method == "PATCH") {
-                connection.doOutput = true
-            }
-            return connection
-        } catch (error: Exception) {
-            throw ApiException(null, formatConnectionError(endpoint, "open connection", error))
+            throw ApiException(null, formatConnectionError(endpoint, "execute request", error))
         }
     }
 
