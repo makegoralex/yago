@@ -1,23 +1,29 @@
 package com.yago.evotor.auth
 
+import android.content.Context
+import com.yago.evotor.R
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.KeyStore
+import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509TrustManager
 
 object ApiClient {
     private const val CONNECT_TIMEOUT_MS = 5_000L
     private const val READ_TIMEOUT_MS = 10_000L
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
-    private val httpClient: OkHttpClient = OkHttpClient.Builder()
-        // Evotor proxy docs: connection timeout 5s, response timeout 10s.
-        .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-        .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-        .build()
+
+    @Volatile
+    private var httpClient: OkHttpClient? = null
 
     data class LoginResponse(
         val accessToken: String,
@@ -50,6 +56,54 @@ object ApiClient {
         val endpoint: String,
         val statusCode: Int
     )
+
+    fun initialize(context: Context) {
+        if (httpClient != null) {
+            return
+        }
+
+        synchronized(this) {
+            if (httpClient != null) {
+                return
+            }
+
+            try {
+                val certFactory = CertificateFactory.getInstance("X.509")
+                val certificate = context.resources.openRawResource(R.raw.rootca2025).use { input ->
+                    certFactory.generateCertificate(input) as X509Certificate
+                }
+
+                val keyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
+                    load(null, null)
+                    setCertificateEntry("evotor_rootca2025", certificate)
+                }
+
+                val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+                trustManagerFactory.init(keyStore)
+
+                val trustManager = trustManagerFactory.trustManagers
+                    .filterIsInstance<X509TrustManager>()
+                    .firstOrNull()
+                    ?: throw ApiException(null, "Unable to create X509TrustManager for Evotor certificate")
+
+                val sslContext = SSLContext.getInstance("TLS")
+                sslContext.init(null, arrayOf(trustManager), null)
+
+                httpClient = OkHttpClient.Builder()
+                    // Evotor proxy docs: connection timeout 5s, response timeout 10s.
+                    .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    .sslSocketFactory(sslContext.socketFactory, trustManager)
+                    // Evotor proxy certificate chain may not contain valid SAN.
+                    .hostnameVerifier { _, _ -> true }
+                    .build()
+            } catch (error: ApiException) {
+                throw error
+            } catch (error: Exception) {
+                throw ApiException(null, formatConnectionError("evotor-rootca", "initialize SSL", error))
+            }
+        }
+    }
 
     fun checkHealth(baseUrl: String): HealthCheckResult {
         val endpoint = baseUrl.trimEnd('/') + "/healthz"
@@ -197,8 +251,13 @@ object ApiClient {
         }
 
         val request = requestBuilder.build()
+        val client = httpClient ?: throw ApiException(
+            null,
+            "ApiClient is not initialized. Call ApiClient.initialize(context) before network requests."
+        )
+
         val call = try {
-            httpClient.newCall(request)
+            client.newCall(request)
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError(endpoint, "prepare request", error))
         }
