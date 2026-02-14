@@ -180,7 +180,8 @@ curl -sS https://yago-app.ru/api/evotor/status -H "Authorization: Bearer <ADMIN_
 Терминал Эвотор перехватывает и проксирует их через облако (если включён proxy v2).
 
 Важно: в клиенте **не** используем служебные заголовки, которые Эвотор перезаписывает (`Host`, `Expect`, `Transfer-Encoding`, `X-Evotor-*` и т.д.).
-Используем только прикладные заголовки (`Authorization`, `Content-Type`, `Accept`, `User-Agent`).
+Внутренний токен приложения передаём в отдельном заголовке `X-Yago-App-Token`, чтобы не конфликтовать с прокси/служебным `Authorization`.
+`Authorization` оставляем для серверных и административных вызовов, где это необходимо.
 
 Таймауты в клиенте выставлены по рекомендации Evotor:
 - `connectTimeout = 5s`;

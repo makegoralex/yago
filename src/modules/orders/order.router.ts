@@ -2,6 +2,7 @@ import { Router, type Request, type RequestHandler } from 'express';
 import { FilterQuery, isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { evotorRequestDebug } from '../../middleware/evotorRequestDebug';
 import { enforceActiveSubscription } from '../../middleware/subscription';
 import { validateRequest } from '../../middleware/validation';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
@@ -115,6 +116,8 @@ const getOrganizationObjectId = (req: Request): Types.ObjectId | null => {
 
   return new Types.ObjectId(organizationId);
 };
+
+router.use('/active', evotorRequestDebug('GET /api/orders/active'));
 
 const findOrderForOrganization = (
   orderId: string,
