@@ -10,6 +10,7 @@ import {
 } from '../services/authService';
 import { validateRequest } from '../middleware/validation';
 import { authSchemas, type LoginBody, type RefreshBody, type RegisterBody } from '../validation/authSchemas';
+import { evotorRequestDebug } from '../middleware/evotorRequestDebug';
 
 export const authRouter = Router();
 
@@ -73,7 +74,7 @@ authRouter.post('/register', validateRequest({ body: authSchemas.register }), as
   }
 });
 
-authRouter.post('/login', validateRequest({ body: authSchemas.login }), async (req: Request, res: Response) => {
+authRouter.post('/login', evotorRequestDebug('POST /api/auth/login'), validateRequest({ body: authSchemas.login }), async (req: Request, res: Response) => {
   try {
     const { email, password, organizationId } = req.body as LoginBody;
 
@@ -103,7 +104,7 @@ authRouter.post('/login', validateRequest({ body: authSchemas.login }), async (r
   }
 });
 
-authRouter.post('/refresh', validateRequest({ body: authSchemas.refresh }), async (req: Request, res: Response) => {
+authRouter.post('/refresh', evotorRequestDebug('POST /api/auth/refresh'), validateRequest({ body: authSchemas.refresh }), async (req: Request, res: Response) => {
   try {
     const { refreshToken } = req.body as RefreshBody;
 

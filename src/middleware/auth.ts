@@ -72,7 +72,23 @@ const resolveAuthorizationHeaderToken = (headerValue: string | undefined): strin
   return null;
 };
 
-const resolveAccessToken = (req: Request): string | null => {
+export const resolveAccessToken = (req: Request): string | null => {
+  const appTokenHeader =
+    (typeof req.headers['x-yago-app-token'] === 'string'
+      ? req.headers['x-yago-app-token']
+      : Array.isArray(req.headers['x-yago-app-token'])
+        ? req.headers['x-yago-app-token'][0]
+        : undefined) ??
+    (typeof req.headers['x-yago-internal-token'] === 'string'
+      ? req.headers['x-yago-internal-token']
+      : Array.isArray(req.headers['x-yago-internal-token'])
+        ? req.headers['x-yago-internal-token'][0]
+        : undefined);
+
+  if (appTokenHeader) {
+    return safelyDecodeURIComponent(appTokenHeader);
+  }
+
   const headerToken =
     resolveAuthorizationHeaderToken(req.get('authorization')) ??
     resolveAuthorizationHeaderToken(req.get('Authorization'));

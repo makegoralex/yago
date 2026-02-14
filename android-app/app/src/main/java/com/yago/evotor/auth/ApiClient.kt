@@ -117,7 +117,7 @@ object ApiClient {
     fun fetchActiveOrders(baseUrl: String, accessToken: String): List<ActiveOrder> {
         val endpoint = baseUrl.trimEnd('/') + "/api/orders/active"
         val connection = openConnection(endpoint, "GET")
-        connection.setRequestProperty("Authorization", "Bearer $accessToken")
+        connection.setRequestProperty("X-Yago-App-Token", accessToken)
         connection.setRequestProperty("Content-Type", "application/json")
 
         val responseText = readResponse(connection, endpoint)
