@@ -259,7 +259,6 @@ object ApiClient {
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError(endpoint, "execute request", error))
         }
-    }
 
     private fun buildEvotorTrustManager(context: Context): X509TrustManager {
         val certFactory = CertificateFactory.getInstance("X.509")
