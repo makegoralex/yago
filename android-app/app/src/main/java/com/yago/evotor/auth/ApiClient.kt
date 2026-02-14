@@ -68,37 +68,24 @@ object ApiClient {
             }
 
             try {
-                val certFactory = CertificateFactory.getInstance("X.509")
-                val certificate = context.resources.openRawResource(R.raw.rootca2025).use { input ->
-                    certFactory.generateCertificate(input) as X509Certificate
-                }
-
-                val keyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
-                    load(null, null)
-                    setCertificateEntry("evotor_rootca2025", certificate)
-                }
-
-                val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
-                trustManagerFactory.init(keyStore)
-
-                val trustManager = trustManagerFactory.trustManagers
-                    .filterIsInstance<X509TrustManager>()
-                    .firstOrNull()
-                    ?: throw ApiException(null, "Unable to create X509TrustManager for Evotor certificate")
+                val evotorTrustManager = buildEvotorTrustManager(context)
+                val systemTrustManager = buildSystemTrustManager()
+                val compositeTrustManager = CompositeTrustManager(
+                    primary = evotorTrustManager,
+                    fallback = systemTrustManager
+                )
 
                 val sslContext = SSLContext.getInstance("TLS")
-                sslContext.init(null, arrayOf(trustManager), null)
+                sslContext.init(null, arrayOf(compositeTrustManager), null)
 
                 httpClient = OkHttpClient.Builder()
                     // Evotor proxy docs: connection timeout 5s, response timeout 10s.
                     .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                    .sslSocketFactory(sslContext.socketFactory, trustManager)
+                    .sslSocketFactory(sslContext.socketFactory, compositeTrustManager)
                     // Evotor proxy certificate chain may not contain valid SAN.
                     .hostnameVerifier { _, _ -> true }
                     .build()
-            } catch (error: ApiException) {
-                throw error
             } catch (error: Exception) {
                 throw ApiException(null, formatConnectionError("evotor-rootca", "initialize SSL", error))
             }
@@ -271,6 +258,56 @@ object ApiClient {
             }
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError(endpoint, "execute request", error))
+        }
+
+    private fun buildEvotorTrustManager(context: Context): X509TrustManager {
+        val certFactory = CertificateFactory.getInstance("X.509")
+        val certificate = context.resources.openRawResource(R.raw.rootca2025).use { input ->
+            certFactory.generateCertificate(input) as X509Certificate
+        }
+
+        val keyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
+            load(null, null)
+            setCertificateEntry("evotor_rootca2025", certificate)
+        }
+
+        val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+        trustManagerFactory.init(keyStore)
+        return trustManagerFactory.trustManagers.filterIsInstance<X509TrustManager>().firstOrNull()
+            ?: throw ApiException(null, "Unable to create X509TrustManager for Evotor certificate")
+    }
+
+    private fun buildSystemTrustManager(): X509TrustManager {
+        val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+        trustManagerFactory.init(null as KeyStore?)
+        return trustManagerFactory.trustManagers.filterIsInstance<X509TrustManager>().firstOrNull()
+            ?: throw ApiException(null, "Unable to create default X509TrustManager")
+    }
+
+    private class CompositeTrustManager(
+        private val primary: X509TrustManager,
+        private val fallback: X509TrustManager
+    ) : X509TrustManager {
+        override fun getAcceptedIssuers(): Array<X509Certificate> {
+            return (primary.acceptedIssuers.asList() + fallback.acceptedIssuers.asList())
+                .distinctBy { it.subjectX500Principal.name + it.serialNumber.toString() }
+                .toTypedArray()
+        }
+
+        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
+            try {
+                primary.checkClientTrusted(chain, authType)
+            } catch (_: Exception) {
+                fallback.checkClientTrusted(chain, authType)
+            }
+        }
+
+        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+            try {
+                primary.checkServerTrusted(chain, authType)
+            } catch (_: Exception) {
+                fallback.checkServerTrusted(chain, authType)
+            }
         }
     }
 
