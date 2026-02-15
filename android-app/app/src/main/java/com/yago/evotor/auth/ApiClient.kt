@@ -194,7 +194,6 @@ object ApiClient {
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError("evotor-rootca", "initialize SSL", error))
         }
-    }
 
     private fun executeRequest(
         endpoint: String,
@@ -251,6 +250,8 @@ object ApiClient {
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError(endpoint, "execute request", error))
         }
+
+        throw ApiException(null, "Unable to create X509TrustManager for Evotor certificate")
     }
 
     private fun buildEvotorTrustManager(context: Context): X509TrustManager {
