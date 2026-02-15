@@ -189,7 +189,6 @@ object ApiClient {
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError("evotor-rootca", "initialize SSL", error))
         }
-    }
 
     private fun executeRequest(
         endpoint: String,
