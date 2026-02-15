@@ -1,21 +1,14 @@
 package com.yago.evotor.auth
 
 import android.content.Context
-import com.yago.evotor.R
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.security.KeyStore
-import java.security.cert.CertificateFactory
-import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLHandshakeException
-import javax.net.ssl.TrustManagerFactory
-import javax.net.ssl.X509TrustManager
 
 object ApiClient {
 
@@ -58,11 +51,11 @@ object ApiClient {
 
     class ApiException(val statusCode: Int?, override val message: String) : Exception(message)
 
-    fun initialize(context: Context) {
+    fun initialize(@Suppress("UNUSED_PARAMETER") context: Context) {
         if (httpClient != null) return
         synchronized(this) {
             if (httpClient == null) {
-                httpClient = buildHttpClient(context)
+                httpClient = buildHttpClient()
             }
         }
     }
@@ -180,24 +173,11 @@ object ApiClient {
         val body: String
     )
 
-    private fun buildHttpClient(context: Context): OkHttpClient {
-        try {
-            val evotorTrustManager = buildEvotorTrustManager(context)
-            val systemTrustManager = buildSystemTrustManager()
-            val compositeTrustManager = CompositeTrustManager(evotorTrustManager, systemTrustManager)
-
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(null, arrayOf(compositeTrustManager), null)
-
-            return OkHttpClient.Builder()
-                .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                .sslSocketFactory(sslContext.socketFactory, compositeTrustManager)
-                .hostnameVerifier { _, _ -> true }
-                .build()
-        } catch (error: Exception) {
-            throw ApiException(null, formatConnectionError("evotor-rootca", "initialize SSL", error))
-        }
+    private fun buildHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .build()
     }
 
     private fun executeRequest(
@@ -237,61 +217,6 @@ object ApiClient {
             }
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError(endpoint, "execute request", error))
-        }
-    }
-
-    private fun buildEvotorTrustManager(context: Context): X509TrustManager {
-        val certFactory = CertificateFactory.getInstance("X.509")
-        val certificate = context.resources.openRawResource(R.raw.rootca2025).use {
-            certFactory.generateCertificate(it) as X509Certificate
-        }
-
-        val keyStore = KeyStore.getInstance(KeyStore.getDefaultType())
-        keyStore.load(null, null)
-        keyStore.setCertificateEntry("evotor_rootca2025", certificate)
-
-        val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
-        trustManagerFactory.init(keyStore)
-
-        return trustManagerFactory.trustManagers
-            .filterIsInstance<X509TrustManager>()
-            .first()
-    }
-
-    private fun buildSystemTrustManager(): X509TrustManager {
-        val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
-        trustManagerFactory.init(null as KeyStore?)
-
-        return trustManagerFactory.trustManagers
-            .filterIsInstance<X509TrustManager>()
-            .first()
-    }
-
-    private class CompositeTrustManager(
-        private val primary: X509TrustManager,
-        private val fallback: X509TrustManager
-    ) : X509TrustManager {
-
-        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
-            try {
-                primary.checkClientTrusted(chain, authType)
-            } catch (_: Exception) {
-                fallback.checkClientTrusted(chain, authType)
-            }
-        }
-
-        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-            try {
-                primary.checkServerTrusted(chain, authType)
-            } catch (_: Exception) {
-                fallback.checkServerTrusted(chain, authType)
-            }
-        }
-
-        override fun getAcceptedIssuers(): Array<X509Certificate> {
-            return (primary.acceptedIssuers + fallback.acceptedIssuers)
-                .distinctBy { it.subjectX500Principal.name + it.serialNumber }
-                .toTypedArray()
         }
     }
 
