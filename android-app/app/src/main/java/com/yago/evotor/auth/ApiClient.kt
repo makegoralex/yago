@@ -18,6 +18,7 @@ import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 
 object ApiClient {
+
     private const val CONNECT_TIMEOUT_MS = 5_000L
     private const val READ_TIMEOUT_MS = 10_000L
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
@@ -59,7 +60,6 @@ object ApiClient {
 
     fun initialize(context: Context) {
         if (httpClient != null) return
-
         synchronized(this) {
             if (httpClient == null) {
                 httpClient = buildHttpClient(context)
@@ -71,20 +71,19 @@ object ApiClient {
         val endpoint = baseUrl.trimEnd('/') + "/healthz"
         val response = executeRequest(endpoint, "GET", null, emptyMap())
         if (response.statusCode !in 200..299) {
-            val message = extractErrorMessage(response.body)
-            throw ApiException(response.statusCode, "Healthcheck failed for $endpoint: $message")
+            throw ApiException(response.statusCode, extractErrorMessage(response.body))
         }
-
         return HealthCheckResult(endpoint, response.statusCode)
     }
 
     fun login(baseUrl: String, email: String, password: String, organizationId: String?): LoginResponse {
         val endpoint = baseUrl.trimEnd('/') + "/api/auth/login"
-        val payload = JSONObject()
-        payload.put("email", email)
-        payload.put("password", password)
-        if (!organizationId.isNullOrBlank()) {
-            payload.put("organizationId", organizationId)
+        val payload = JSONObject().apply {
+            put("email", email)
+            put("password", password)
+            if (!organizationId.isNullOrBlank()) {
+                put("organizationId", organizationId)
+            }
         }
 
         val response = executeRequest(endpoint, "POST", payload, emptyMap())
@@ -99,15 +98,16 @@ object ApiClient {
         return LoginResponse(
             accessToken = data.getString("accessToken"),
             refreshToken = data.getString("refreshToken"),
-            organizationId = if (user.has("organizationId")) user.optString("organizationId", null) else null,
-            organizationName = if (user.has("organizationName")) user.optString("organizationName", null) else null
+            organizationId = user.optString("organizationId", null),
+            organizationName = user.optString("organizationName", null)
         )
     }
 
     fun refreshTokens(baseUrl: String, refreshToken: String): RefreshResponse {
         val endpoint = baseUrl.trimEnd('/') + "/api/auth/refresh"
-        val payload = JSONObject()
-        payload.put("refreshToken", refreshToken)
+        val payload = JSONObject().apply {
+            put("refreshToken", refreshToken)
+        }
 
         val response = executeRequest(endpoint, "POST", payload, emptyMap())
         if (response.statusCode !in 200..299) {
@@ -116,6 +116,7 @@ object ApiClient {
 
         val root = JSONObject(response.body)
         val data = root.getJSONObject("data")
+
         return RefreshResponse(
             accessToken = data.getString("accessToken"),
             refreshToken = data.getString("refreshToken")
@@ -124,6 +125,7 @@ object ApiClient {
 
     fun fetchActiveOrders(baseUrl: String, accessToken: String): List<ActiveOrder> {
         val endpoint = baseUrl.trimEnd('/') + "/api/orders/active"
+
         val response = executeRequest(
             endpoint,
             "GET",
@@ -137,11 +139,13 @@ object ApiClient {
 
         val root = JSONObject(response.body)
         val dataArray = root.optJSONArray("data") ?: JSONArray()
+
         val orders = mutableListOf<ActiveOrder>()
 
         for (i in 0 until dataArray.length()) {
             val orderJson = dataArray.optJSONObject(i) ?: continue
             val itemsArray = orderJson.optJSONArray("items") ?: JSONArray()
+
             val items = mutableListOf<OrderItem>()
 
             for (j in 0 until itemsArray.length()) {
@@ -194,6 +198,7 @@ object ApiClient {
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError("evotor-rootca", "initialize SSL", error))
         }
+    }
 
     private fun executeRequest(
         endpoint: String,
@@ -201,47 +206,30 @@ object ApiClient {
         payload: JSONObject?,
         extraHeaders: Map<String, String>
     ): HttpResponse {
+
         val requestBuilder = Request.Builder()
             .url(endpoint)
             .header("Accept", "application/json")
             .header("User-Agent", "YagoEvotor/1.0")
 
-        for ((key, value) in extraHeaders) {
-            requestBuilder.header(key, value)
-        }
+        extraHeaders.forEach { (k, v) -> requestBuilder.header(k, v) }
 
-        val requestBody = if (payload != null) {
-            payload.toString().toRequestBody(JSON_MEDIA_TYPE)
-        } else {
-            null
-        }
-
-        if (requestBody != null) {
-            requestBuilder.header("Content-Type", "application/json")
-        }
+        val requestBody = payload?.toString()?.toRequestBody(JSON_MEDIA_TYPE)
 
         when (method) {
             "GET" -> requestBuilder.get()
             "POST" -> requestBuilder.post(requestBody ?: "{}".toRequestBody(JSON_MEDIA_TYPE))
             "PUT" -> requestBuilder.put(requestBody ?: "{}".toRequestBody(JSON_MEDIA_TYPE))
             "PATCH" -> requestBuilder.patch(requestBody ?: "{}".toRequestBody(JSON_MEDIA_TYPE))
-            "DELETE" -> {
-                if (requestBody != null) {
-                    requestBuilder.delete(requestBody)
-                } else {
-                    requestBuilder.delete()
-                }
-            }
+            "DELETE" -> if (requestBody != null) requestBuilder.delete(requestBody) else requestBuilder.delete()
             else -> throw ApiException(null, "Unsupported HTTP method: $method")
         }
 
         val client = httpClient
-            ?: throw ApiException(null, "ApiClient is not initialized. Call ApiClient.initialize(context) before network requests.")
+            ?: throw ApiException(null, "ApiClient is not initialized. Call initialize() first.")
 
         return try {
-            val call = client.newCall(requestBuilder.build())
-            val response = call.execute()
-            response.use {
+            client.newCall(requestBuilder.build()).execute().use { response ->
                 HttpResponse(
                     statusCode = response.code,
                     body = response.body?.string().orEmpty()
@@ -250,14 +238,12 @@ object ApiClient {
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError(endpoint, "execute request", error))
         }
-
-        throw ApiException(null, "Unable to create X509TrustManager for Evotor certificate")
     }
 
     private fun buildEvotorTrustManager(context: Context): X509TrustManager {
         val certFactory = CertificateFactory.getInstance("X.509")
-        val certificate = context.resources.openRawResource(R.raw.rootca2025).use { input ->
-            certFactory.generateCertificate(input) as X509Certificate
+        val certificate = context.resources.openRawResource(R.raw.rootca2025).use {
+            certFactory.generateCertificate(it) as X509Certificate
         }
 
         val keyStore = KeyStore.getInstance(KeyStore.getDefaultType())
@@ -267,34 +253,25 @@ object ApiClient {
         val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
         trustManagerFactory.init(keyStore)
 
-        val trustManagers = trustManagerFactory.trustManagers
-        for (trustManager in trustManagers) {
-            if (trustManager is X509TrustManager) {
-                return trustManager
-            }
-        }
-
-        throw ApiException(null, "Unable to create X509TrustManager for Evotor certificate")
+        return trustManagerFactory.trustManagers
+            .filterIsInstance<X509TrustManager>()
+            .first()
     }
 
     private fun buildSystemTrustManager(): X509TrustManager {
         val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
         trustManagerFactory.init(null as KeyStore?)
 
-        val trustManagers = trustManagerFactory.trustManagers
-        for (trustManager in trustManagers) {
-            if (trustManager is X509TrustManager) {
-                return trustManager
-            }
-        }
-
-        throw ApiException(null, "Unable to create default X509TrustManager")
+        return trustManagerFactory.trustManagers
+            .filterIsInstance<X509TrustManager>()
+            .first()
     }
 
     private class CompositeTrustManager(
         private val primary: X509TrustManager,
         private val fallback: X509TrustManager
     ) : X509TrustManager {
+
         override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
             try {
                 primary.checkClientTrusted(chain, authType)
@@ -312,45 +289,43 @@ object ApiClient {
         }
 
         override fun getAcceptedIssuers(): Array<X509Certificate> {
-            val allIssuers = primary.acceptedIssuers.asList() + fallback.acceptedIssuers.asList()
-            return allIssuers
-                .distinctBy { it.subjectX500Principal.name + it.serialNumber.toString() }
+            return (primary.acceptedIssuers + fallback.acceptedIssuers)
+                .distinctBy { it.subjectX500Principal.name + it.serialNumber }
                 .toTypedArray()
         }
     }
 
     private fun formatConnectionError(endpoint: String, phase: String, error: Throwable): String {
         val chain = generateSequence(error) { it.cause }
-            .mapNotNull { cause ->
-                val name = cause::class.java.simpleName
-                val message = cause.message?.trim().orEmpty()
-                if (message.isBlank()) name else "$name: $message"
+            .mapNotNull {
+                val name = it::class.java.simpleName
+                val msg = it.message?.trim().orEmpty()
+                if (msg.isBlank()) name else "$name: $msg"
             }
             .toList()
 
         val details = chain.joinToString(" -> ")
-        val prefix = "Network error during $phase ($endpoint)."
 
         return if (
             error is SSLHandshakeException ||
-            chain.any { it.contains("SSL", ignoreCase = true) || it.contains("certificate", ignoreCase = true) }
+            chain.any { it.contains("SSL", true) || it.contains("certificate", true) }
         ) {
-            "$prefix TLS/SSL error. Проверьте сертификат сервера и цепочку доверия. $details"
+            "TLS/SSL error during $phase ($endpoint). Проверьте цепочку сертификатов. $details"
         } else {
-            "$prefix ${details.ifBlank { "Unknown network error" }}"
+            "Network error during $phase ($endpoint): ${details.ifBlank { "Unknown error" }}"
         }
     }
 
-    private fun extractErrorMessage(responseText: String): String {
+    private fun extractErrorMessage(text: String): String {
         return try {
-            val json = JSONObject(responseText)
+            val json = JSONObject(text)
             when {
-                json.has("error") -> json.optString("error", "Unknown error")
-                json.has("message") -> json.optString("message", "Unknown error")
-                else -> responseText.ifBlank { "Unknown error" }
+                json.has("error") -> json.optString("error")
+                json.has("message") -> json.optString("message")
+                else -> text.ifBlank { "Unknown error" }
             }
         } catch (_: Exception) {
-            responseText.ifBlank { "Unknown error" }
+            text.ifBlank { "Unknown error" }
         }
     }
 }
