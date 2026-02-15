@@ -58,37 +58,11 @@ object ApiClient {
     )
 
     fun initialize(context: Context) {
-        if (httpClient != null) {
-            return
-        }
+        if (httpClient != null) return
 
         synchronized(this) {
-            if (httpClient != null) {
-                return
-            }
-
-            try {
-                val evotorTrustManager = buildEvotorTrustManager(context)
-                val systemTrustManager = buildSystemTrustManager()
-                val compositeTrustManager = CompositeTrustManager(
-                    primary = evotorTrustManager,
-                    fallback = systemTrustManager
-                )
-
-                val sslContext = SSLContext.getInstance("TLS")
-                sslContext.init(null, arrayOf(compositeTrustManager), null)
-
-                httpClient = OkHttpClient.Builder()
-                    // Evotor proxy docs: connection timeout 5s, response timeout 10s.
-                    .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                    .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                    .sslSocketFactory(sslContext.socketFactory, compositeTrustManager)
-                    // Evotor proxy certificate chain may not contain valid SAN.
-                    .hostnameVerifier { _, _ -> true }
-                    .build()
-            } catch (error: Exception) {
-                throw ApiException(null, formatConnectionError("evotor-rootca", "initialize SSL", error))
-            }
+            if (httpClient != null) return
+            httpClient = createHttpClient(context)
         }
     }
 
@@ -96,27 +70,24 @@ object ApiClient {
         val endpoint = baseUrl.trimEnd('/') + "/healthz"
         val response = executeRequest(endpoint = endpoint, method = "GET")
         if (response.statusCode !in 200..299) {
-            val errorMessage = extractErrorMessage(response.body)
-            throw ApiException(response.statusCode, "Healthcheck failed for $endpoint: $errorMessage")
+            throw ApiException(response.statusCode, "Healthcheck failed for $endpoint: ${extractErrorMessage(response.body)}")
         }
-
         return HealthCheckResult(endpoint = endpoint, statusCode = response.statusCode)
     }
 
     fun login(baseUrl: String, email: String, password: String, organizationId: String?): LoginResponse {
         val endpoint = baseUrl.trimEnd('/') + "/api/auth/login"
-
-        val payload = JSONObject()
-        payload.put("email", email)
-        payload.put("password", password)
-        if (!organizationId.isNullOrBlank()) {
-            payload.put("organizationId", organizationId)
+        val payload = JSONObject().apply {
+            put("email", email)
+            put("password", password)
+            if (!organizationId.isNullOrBlank()) {
+                put("organizationId", organizationId)
+            }
         }
 
         val response = executeRequest(endpoint = endpoint, method = "POST", payload = payload)
         if (response.statusCode !in 200..299) {
-            val errorMessage = extractErrorMessage(response.body)
-            throw ApiException(response.statusCode, errorMessage)
+            throw ApiException(response.statusCode, extractErrorMessage(response.body))
         }
 
         val json = JSONObject(response.body)
@@ -133,14 +104,11 @@ object ApiClient {
 
     fun refreshTokens(baseUrl: String, refreshToken: String): RefreshResponse {
         val endpoint = baseUrl.trimEnd('/') + "/api/auth/refresh"
-
-        val payload = JSONObject()
-        payload.put("refreshToken", refreshToken)
+        val payload = JSONObject().apply { put("refreshToken", refreshToken) }
 
         val response = executeRequest(endpoint = endpoint, method = "POST", payload = payload)
         if (response.statusCode !in 200..299) {
-            val errorMessage = extractErrorMessage(response.body)
-            throw ApiException(response.statusCode, errorMessage)
+            throw ApiException(response.statusCode, extractErrorMessage(response.body))
         }
 
         val json = JSONObject(response.body)
@@ -161,8 +129,7 @@ object ApiClient {
         )
 
         if (response.statusCode !in 200..299) {
-            val errorMessage = extractErrorMessage(response.body)
-            throw ApiException(response.statusCode, errorMessage)
+            throw ApiException(response.statusCode, extractErrorMessage(response.body))
         }
 
         val json = JSONObject(response.body)
@@ -202,6 +169,27 @@ object ApiClient {
         val body: String
     )
 
+    private fun createHttpClient(context: Context): OkHttpClient {
+        return try {
+            val evotorTrustManager = buildEvotorTrustManager(context)
+            val systemTrustManager = buildSystemTrustManager()
+            val trustManager = CompositeTrustManager(primary = evotorTrustManager, fallback = systemTrustManager)
+
+            val sslContext = SSLContext.getInstance("TLS")
+            sslContext.init(null, arrayOf(trustManager), null)
+
+            OkHttpClient.Builder()
+                // Evotor proxy docs: connection timeout 5s, response timeout 10s.
+                .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .sslSocketFactory(sslContext.socketFactory, trustManager)
+                // Evotor proxy certificate chain may not contain valid SAN.
+                .hostnameVerifier { _, _ -> true }
+                .build()
+        } catch (error: Exception) {
+            throw ApiException(null, formatConnectionError("evotor-rootca", "initialize SSL", error))
+        }
+
     private fun executeRequest(
         endpoint: String,
         method: String,
@@ -213,9 +201,7 @@ object ApiClient {
             .header("Accept", "application/json")
             .header("User-Agent", "YagoEvotor/1.0")
 
-        extraHeaders.forEach { (key, value) ->
-            requestBuilder.header(key, value)
-        }
+        extraHeaders.forEach { (key, value) -> requestBuilder.header(key, value) }
 
         val requestBody = payload?.toString()?.toRequestBody(JSON_MEDIA_TYPE)
         if (requestBody != null) {
@@ -227,38 +213,29 @@ object ApiClient {
             "POST" -> requestBuilder.post(requestBody ?: "{}".toRequestBody(JSON_MEDIA_TYPE))
             "PUT" -> requestBuilder.put(requestBody ?: "{}".toRequestBody(JSON_MEDIA_TYPE))
             "PATCH" -> requestBuilder.patch(requestBody ?: "{}".toRequestBody(JSON_MEDIA_TYPE))
-            "DELETE" -> {
-                if (requestBody != null) {
-                    requestBuilder.delete(requestBody)
-                } else {
-                    requestBuilder.delete()
-                }
-            }
+            "DELETE" -> if (requestBody != null) requestBuilder.delete(requestBody) else requestBuilder.delete()
             else -> throw ApiException(null, "Unsupported HTTP method: $method")
         }
 
-        val request = requestBuilder.build()
         val client = httpClient ?: throw ApiException(
             null,
             "ApiClient is not initialized. Call ApiClient.initialize(context) before network requests."
         )
 
         val call = try {
-            client.newCall(request)
+            client.newCall(requestBuilder.build())
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError(endpoint, "prepare request", error))
         }
 
         return try {
             call.execute().use { response ->
-                HttpResponse(
-                    statusCode = response.code,
-                    body = response.body?.string().orEmpty()
-                )
+                HttpResponse(statusCode = response.code, body = response.body?.string().orEmpty())
             }
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError(endpoint, "execute request", error))
         }
+    }
 
     private fun buildEvotorTrustManager(context: Context): X509TrustManager {
         val certFactory = CertificateFactory.getInstance("X.509")
@@ -273,14 +250,20 @@ object ApiClient {
 
         val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
         trustManagerFactory.init(keyStore)
-        return trustManagerFactory.trustManagers.filterIsInstance<X509TrustManager>().firstOrNull()
+
+        return trustManagerFactory.trustManagers
+            .filterIsInstance<X509TrustManager>()
+            .firstOrNull()
             ?: throw ApiException(null, "Unable to create X509TrustManager for Evotor certificate")
     }
 
     private fun buildSystemTrustManager(): X509TrustManager {
         val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
         trustManagerFactory.init(null as KeyStore?)
-        return trustManagerFactory.trustManagers.filterIsInstance<X509TrustManager>().firstOrNull()
+
+        return trustManagerFactory.trustManagers
+            .filterIsInstance<X509TrustManager>()
+            .firstOrNull()
             ?: throw ApiException(null, "Unable to create default X509TrustManager")
     }
 
@@ -322,7 +305,8 @@ object ApiClient {
 
         val details = chain.joinToString(" -> ")
         val prefix = "Network error during $phase ($endpoint)."
-        return if (error is SSLHandshakeException || chain.any { it.contains("SSL", ignoreCase = true) || it.contains("certificate", ignoreCase = true) }) {
+
+        return if (error is SSLHandshakeException || chain.any { it.contains("SSL", true) || it.contains("certificate", true) }) {
             "$prefix TLS/SSL error. Проверьте сертификат сервера и цепочку доверия. $details"
         } else {
             "$prefix ${details.ifBlank { "Unknown network error" }}"
@@ -337,7 +321,7 @@ object ApiClient {
                 json.has("message") -> json.optString("message", "Unknown error")
                 else -> responseText.ifBlank { "Unknown error" }
             }
-        } catch (error: Exception) {
+        } catch (_: Exception) {
             responseText.ifBlank { "Unknown error" }
         }
     }
