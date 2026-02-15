@@ -50,21 +50,19 @@ object ApiClient {
         val items: List<OrderItem>
     )
 
-    class ApiException(val statusCode: Int?, override val message: String) : Exception(message)
-
     data class HealthCheckResult(
         val endpoint: String,
         val statusCode: Int
     )
 
+    class ApiException(val statusCode: Int?, override val message: String) : Exception(message)
+
     fun initialize(context: Context) {
-        if (httpClient != null) {
-            return
-        }
+        if (httpClient != null) return
 
         synchronized(this) {
             if (httpClient == null) {
-                httpClient = createHttpClient(context)
+                httpClient = buildHttpClient(context)
             }
         }
     }
@@ -73,8 +71,8 @@ object ApiClient {
         val endpoint = baseUrl.trimEnd('/') + "/healthz"
         val response = executeRequest(endpoint, "GET", null, emptyMap())
         if (response.statusCode !in 200..299) {
-            val errorMessage = extractErrorMessage(response.body)
-            throw ApiException(response.statusCode, "Healthcheck failed for $endpoint: $errorMessage")
+            val message = extractErrorMessage(response.body)
+            throw ApiException(response.statusCode, "Healthcheck failed for $endpoint: $message")
         }
 
         return HealthCheckResult(endpoint, response.statusCode)
@@ -94,8 +92,8 @@ object ApiClient {
             throw ApiException(response.statusCode, extractErrorMessage(response.body))
         }
 
-        val json = JSONObject(response.body)
-        val data = json.getJSONObject("data")
+        val root = JSONObject(response.body)
+        val data = root.getJSONObject("data")
         val user = data.getJSONObject("user")
 
         return LoginResponse(
@@ -116,9 +114,8 @@ object ApiClient {
             throw ApiException(response.statusCode, extractErrorMessage(response.body))
         }
 
-        val json = JSONObject(response.body)
-        val data = json.getJSONObject("data")
-
+        val root = JSONObject(response.body)
+        val data = root.getJSONObject("data")
         return RefreshResponse(
             accessToken = data.getString("accessToken"),
             refreshToken = data.getString("refreshToken")
@@ -138,8 +135,8 @@ object ApiClient {
             throw ApiException(response.statusCode, extractErrorMessage(response.body))
         }
 
-        val json = JSONObject(response.body)
-        val dataArray = json.optJSONArray("data") ?: JSONArray()
+        val root = JSONObject(response.body)
+        val dataArray = root.optJSONArray("data") ?: JSONArray()
         val orders = mutableListOf<ActiveOrder>()
 
         for (i in 0 until dataArray.length()) {
@@ -150,9 +147,7 @@ object ApiClient {
             for (j in 0 until itemsArray.length()) {
                 val itemJson = itemsArray.optJSONObject(j) ?: continue
                 val name = itemJson.optString("name", "")
-                if (name.isBlank()) {
-                    continue
-                }
+                if (name.isBlank()) continue
 
                 items.add(
                     OrderItem(
@@ -181,7 +176,7 @@ object ApiClient {
         val body: String
     )
 
-    private fun createHttpClient(context: Context): OkHttpClient {
+    private fun buildHttpClient(context: Context): OkHttpClient {
         try {
             val evotorTrustManager = buildEvotorTrustManager(context)
             val systemTrustManager = buildSystemTrustManager()
@@ -240,18 +235,24 @@ object ApiClient {
             else -> throw ApiException(null, "Unsupported HTTP method: $method")
         }
 
-        val client = httpClient ?: throw ApiException(
-            null,
-            "ApiClient is not initialized. Call ApiClient.initialize(context) before network requests."
-        )
+        val client = httpClient
+            ?: throw ApiException(null, "ApiClient is not initialized. Call ApiClient.initialize(context) before network requests.")
 
-        try {
-            client.newCall(requestBuilder.build()).execute().use { response ->
-                return HttpResponse(response.code, response.body?.string().orEmpty())
+        return try {
+            val call = client.newCall(requestBuilder.build())
+            val response = call.execute()
+            response.use {
+                HttpResponse(
+                    statusCode = response.code,
+                    body = response.body?.string().orEmpty()
+                )
             }
         } catch (error: Exception) {
             throw ApiException(null, formatConnectionError(endpoint, "execute request", error))
         }
+
+        throw ApiException(null, "Unable to create X509TrustManager for Evotor certificate")
+    }
 
     private fun buildEvotorTrustManager(context: Context): X509TrustManager {
         val certFactory = CertificateFactory.getInstance("X.509")
