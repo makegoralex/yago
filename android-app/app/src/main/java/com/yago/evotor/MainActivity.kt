@@ -23,6 +23,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        ApiClient.initialize(applicationContext)
+
         val sessionStorage = SessionStorage(this)
         val session = sessionStorage.loadSession()
         if (session == null) {
