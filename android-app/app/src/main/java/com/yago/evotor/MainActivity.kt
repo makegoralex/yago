@@ -18,8 +18,11 @@ import com.yago.evotor.auth.ApiClient
 import com.yago.evotor.auth.LoginActivity
 import com.yago.evotor.auth.Session
 import com.yago.evotor.auth.SessionStorage
+import java.math.BigDecimal
 import java.text.DecimalFormat
 import kotlin.math.roundToLong
+import ru.evotor.framework.core.IntegrationApi
+import ru.evotor.framework.receipt.Position
 
 class MainActivity : AppCompatActivity() {
 
@@ -173,14 +176,21 @@ class MainActivity : AppCompatActivity() {
         val priceInKopecks =
             (firstItem.total / firstItem.qty * 100.0).roundToLong()
 
-        return Intent(EVOTOR_ACTION_SELL)
-            .putExtra(EVOTOR_EXTRA_POSITION_NAME, firstItem.name)
-            .putExtra(EVOTOR_EXTRA_POSITION_PRICE, priceInKopecks)
-            .putExtra(EVOTOR_EXTRA_POSITION_QUANTITY, firstItem.qty)
-            .putExtra(
+        val position =
+            Position.Builder(firstItem.name, priceInKopecks)
+                .setQuantity(BigDecimal.valueOf(firstItem.qty))
+                .build()
+
+        // Evotor docs: https://docs.evotor.ru/docs/integraciya/otkrytie-ekrana-prodazhi .
+        // Используем IntegrationApi + Position, чтобы не возвращаться
+        // к ручной сборке Intent строковыми action/extra-константами.
+        return IntegrationApi.createSellReceiptIntent(
+            listOf(position),
+            Intent().putExtra(
                 Intent.EXTRA_TEXT,
                 getString(R.string.sale_order_comment, order.id)
             )
+        )
     }
 
     private fun updateOrders(orders: List<ApiClient.ActiveOrder>) {
@@ -265,17 +275,4 @@ class MainActivity : AppCompatActivity() {
         return "$header\n$lines"
     }
 
-    private companion object {
-        const val EVOTOR_ACTION_SELL =
-            "ru.evotor.intent.action.payment.SELL"
-
-        const val EVOTOR_EXTRA_POSITION_NAME =
-            "ru.evotor.intent.extra.POSITION_NAME"
-
-        const val EVOTOR_EXTRA_POSITION_PRICE =
-            "ru.evotor.intent.extra.POSITION_PRICE"
-
-        const val EVOTOR_EXTRA_POSITION_QUANTITY =
-            "ru.evotor.intent.extra.POSITION_QUANTITY"
-    }
 }
