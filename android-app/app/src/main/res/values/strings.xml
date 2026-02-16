@@ -15,6 +15,13 @@
     <string name="login_error_network">Ошибка подключения: %1$s</string>
     <string name="login_error_generic">Не удалось войти: %1$s</string>
     <string name="logout_button">Выйти</string>
+    <string name="sale_button">Продажа</string>
+    <string name="order_select_required">Выберите заказ для продажи.</string>
+    <string name="order_items_empty">В заказе нет позиций для чека.</string>
+    <string name="sale_success">Чек успешно пробит.</string>
+    <string name="sale_canceled">Оплата отменена или не завершена.</string>
+    <string name="sale_order_comment">Заказ %1$s</string>
+    <string name="orders_item_line">• %1$s x%2$.2f = %3$s ₽ (%4$d коп.)</string>
     <string name="pos_ready_message">Эвотор POS готов. Организация: %1$s</string>
     <string name="orders_loading">Загружаем активные заказы...</string>
     <string name="orders_empty">Нет активных заказов.</string>
