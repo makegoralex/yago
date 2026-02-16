@@ -16,7 +16,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.yago.evotor.auth.ApiClient
 import com.yago.evotor.auth.LoginActivity
-import com.yago.evotor.auth.Session
 import com.yago.evotor.auth.SessionStorage
 import java.math.BigDecimal
 import java.text.DecimalFormat
@@ -166,30 +165,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun createSellIntent(order: ApiClient.ActiveOrder): Intent? {
 
-        val firstItem =
-            order.items.firstOrNull {
-                it.name.isNotBlank() &&
-                        it.qty > 0.0 &&
-                        it.total > 0.0
-            } ?: return null
+        val firstItem = order.items.firstOrNull {
+            it.name.isNotBlank() &&
+                    it.qty > 0.0 &&
+                    it.total > 0.0
+        } ?: return null
 
         val priceInKopecks =
             (firstItem.total / firstItem.qty * 100.0).roundToLong()
 
-        val position =
-            Position.Builder(firstItem.name, priceInKopecks)
-                .setQuantity(BigDecimal.valueOf(firstItem.qty))
-                .build()
+        val position = Position.Builder()
+            .setName(firstItem.name)
+            .setPrice(priceInKopecks)
+            .setQuantity(BigDecimal.valueOf(firstItem.qty))
+            .build()
 
-        // Evotor docs: https://docs.evotor.ru/docs/integraciya/otkrytie-ekrana-prodazhi .
-        // Используем IntegrationApi + Position, чтобы не возвращаться
-        // к ручной сборке Intent строковыми action/extra-константами.
         return IntegrationApi.createSellReceiptIntent(
-            listOf(position),
-            Intent().putExtra(
-                Intent.EXTRA_TEXT,
-                getString(R.string.sale_order_comment, order.id)
-            )
+            listOf(position)
         )
     }
 
@@ -274,5 +266,4 @@ class MainActivity : AppCompatActivity() {
 
         return "$header\n$lines"
     }
-
 }
