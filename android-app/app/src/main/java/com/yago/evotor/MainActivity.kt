@@ -1,17 +1,25 @@
 package com.yago.evotor
 
+import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
+import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.ListView
 import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.yago.evotor.auth.ApiClient
 import com.yago.evotor.auth.LoginActivity
 import com.yago.evotor.auth.Session
 import com.yago.evotor.auth.SessionStorage
 import java.text.DecimalFormat
+import kotlin.math.roundToLong
 
 class MainActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
@@ -19,6 +27,9 @@ class MainActivity : AppCompatActivity() {
     private val currencyFormat = DecimalFormat("0.00")
 
     private var pollingRunnable: Runnable? = null
+    private val activeOrders = mutableListOf<ApiClient.ActiveOrder>()
+    private lateinit var ordersAdapter: ArrayAdapter<String>
+    private lateinit var sellReceiptLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,12 +46,53 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_main)
         val statusText = findViewById<TextView>(R.id.statusText)
-        val ordersText = findViewById<TextView>(R.id.ordersText)
+        val ordersListView = findViewById<ListView>(R.id.ordersList)
+        val saleButton = findViewById<Button>(R.id.saleButton)
         val logoutButton = findViewById<Button>(R.id.logoutButton)
+
+        sellReceiptLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val messageRes = if (result.resultCode == Activity.RESULT_OK) {
+                R.string.sale_success
+            } else {
+                R.string.sale_canceled
+            }
+            Toast.makeText(this, getString(messageRes), Toast.LENGTH_SHORT).show()
+        }
+
+        ordersAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_single_choice, mutableListOf())
+        ordersListView.adapter = ordersAdapter
+        ordersListView.choiceMode = ListView.CHOICE_MODE_SINGLE
 
         val organizationLabel = session.organizationName ?: session.organizationId ?: "—"
         statusText.text = getString(R.string.pos_ready_message, organizationLabel)
-        ordersText.text = getString(R.string.orders_loading)
+
+        saleButton.isEnabled = false
+        saleButton.text = getString(R.string.sale_button)
+
+        ordersListView.onItemClickListener = android.widget.AdapterView.OnItemClickListener { _, _, position, _ ->
+            saleButton.isEnabled = position in activeOrders.indices
+        }
+
+        saleButton.setOnClickListener {
+            val checkedPosition = ordersListView.checkedItemPosition
+            if (checkedPosition !in activeOrders.indices) {
+                Toast.makeText(this, getString(R.string.order_select_required), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val order = activeOrders[checkedPosition]
+            val sellIntent = createSellIntent(order)
+            if (sellIntent == null) {
+                Toast.makeText(this, getString(R.string.order_items_empty), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            try {
+                sellReceiptLauncher.launch(sellIntent)
+            } catch (error: Exception) {
+                Toast.makeText(this, getString(R.string.orders_error, error.message ?: ""), Toast.LENGTH_LONG).show()
+            }
+        }
 
         logoutButton.setOnClickListener {
             sessionStorage.clear()
@@ -55,19 +107,20 @@ class MainActivity : AppCompatActivity() {
                     try {
                         val orders = ApiClient.fetchActiveOrders(refreshedSession.baseUrl, refreshedSession.accessToken)
                         runOnUiThread {
-                            ordersText.text = renderOrders(orders)
+                            updateOrders(orders)
+                            saleButton.isEnabled = ordersListView.checkedItemPosition in activeOrders.indices
                         }
                     } catch (error: ApiClient.ApiException) {
                         if (error.statusCode == 401) {
-                            handleTokenRefresh(sessionStorage, refreshedSession, ordersText)
+                            handleTokenRefresh(sessionStorage, refreshedSession, ordersListView, saleButton)
                         } else {
                             runOnUiThread {
-                                ordersText.text = getString(R.string.orders_error, error.message)
+                                showErrorRow(getString(R.string.orders_error, error.message), ordersListView, saleButton)
                             }
                         }
                     } catch (error: Exception) {
                         runOnUiThread {
-                            ordersText.text = getString(R.string.orders_error, error.message ?: "")
+                            showErrorRow(getString(R.string.orders_error, error.message ?: ""), ordersListView, saleButton)
                         }
                     }
                 }.start()
@@ -89,7 +142,8 @@ class MainActivity : AppCompatActivity() {
     private fun handleTokenRefresh(
         sessionStorage: SessionStorage,
         session: Session,
-        ordersText: TextView
+        ordersListView: ListView,
+        saleButton: View
     ) {
         try {
             val refreshed = ApiClient.refreshTokens(session.baseUrl, session.refreshToken)
@@ -100,39 +154,91 @@ class MainActivity : AppCompatActivity() {
             sessionStorage.saveSession(updatedSession)
             val orders = ApiClient.fetchActiveOrders(updatedSession.baseUrl, updatedSession.accessToken)
             runOnUiThread {
-                ordersText.text = renderOrders(orders)
+                updateOrders(orders)
+                saleButton.isEnabled = ordersListView.checkedItemPosition in activeOrders.indices
             }
         } catch (error: Exception) {
             runOnUiThread {
-                ordersText.text = getString(R.string.orders_error, error.message ?: "")
+                showErrorRow(getString(R.string.orders_error, error.message ?: ""), ordersListView, saleButton)
             }
         }
     }
 
-    private fun renderOrders(orders: List<ApiClient.ActiveOrder>): String {
-        if (orders.isEmpty()) {
-            return getString(R.string.orders_empty)
+    private fun createSellIntent(order: ApiClient.ActiveOrder): Intent? {
+        val firstItem = order.items.firstOrNull { it.name.isNotBlank() && it.qty > 0.0 && it.total > 0.0 } ?: return null
+
+        val priceInKopecks = (firstItem.total / firstItem.qty * 100.0).roundToLong()
+        val intent = Intent(EVOTOR_ACTION_SELL)
+            .putExtra(EVOTOR_EXTRA_POSITION_NAME, firstItem.name)
+            .putExtra(EVOTOR_EXTRA_POSITION_PRICE, priceInKopecks)
+            .putExtra(EVOTOR_EXTRA_POSITION_QUANTITY, firstItem.qty)
+            .putExtra(Intent.EXTRA_TEXT, getString(R.string.sale_order_comment, order.id))
+
+        return intent
+    }
+
+    private fun updateOrders(orders: List<ApiClient.ActiveOrder>) {
+        val previouslySelectedOrderId = getSelectedOrderId()
+        activeOrders.clear()
+        activeOrders.addAll(orders)
+
+        val rows = if (orders.isEmpty()) {
+            listOf(getString(R.string.orders_empty))
+        } else {
+            orders.map { renderOrderRow(it) }
         }
 
-        val builder = StringBuilder()
-        orders.forEachIndexed { index, order ->
-            if (index > 0) {
-                builder.append("\n\n")
-            }
-            val shortId = if (order.id.length > 6) order.id.takeLast(6) else order.id
-            builder.append(getString(R.string.orders_header, shortId, order.status, currencyFormat.format(order.total)))
-            if (order.items.isNotEmpty()) {
-                order.items.forEach { item ->
-                    builder.append("\n")
-                    builder.append("• ")
-                    builder.append(item.name)
-                    builder.append(" x")
-                    builder.append(item.qty)
-                    builder.append(" = ")
-                    builder.append(currencyFormat.format(item.total))
-                }
-            }
+        ordersAdapter.clear()
+        ordersAdapter.addAll(rows)
+        ordersAdapter.notifyDataSetChanged()
+
+        if (orders.isEmpty()) {
+            return
         }
-        return builder.toString()
+
+        val restoreSelectionIndex = previouslySelectedOrderId?.let { selectedId ->
+            activeOrders.indexOfFirst { it.id == selectedId }
+        } ?: -1
+
+        if (restoreSelectionIndex >= 0) {
+            findViewById<ListView>(R.id.ordersList).setItemChecked(restoreSelectionIndex, true)
+        }
+    }
+
+    private fun showErrorRow(message: String, ordersListView: ListView, saleButton: View) {
+        activeOrders.clear()
+        ordersAdapter.clear()
+        ordersAdapter.add(message)
+        ordersAdapter.notifyDataSetChanged()
+        ordersListView.clearChoices()
+        saleButton.isEnabled = false
+    }
+
+    private fun getSelectedOrderId(): String? {
+        val checkedPosition = findViewById<ListView>(R.id.ordersList).checkedItemPosition
+        return if (checkedPosition in activeOrders.indices) activeOrders[checkedPosition].id else null
+    }
+
+    private fun renderOrderRow(order: ApiClient.ActiveOrder): String {
+        val shortId = if (order.id.length > 6) order.id.takeLast(6) else order.id
+        val header = getString(R.string.orders_header, shortId, order.status, currencyFormat.format(order.total))
+        if (order.items.isEmpty()) {
+            return header
+        }
+
+        val lines = order.items.joinToString(separator = "\n") { item ->
+            val itemTotalKopecks = (item.total * 100.0).roundToLong()
+            val itemLine = "${item.name} x${"%.2f".format(item.qty)} = ${currencyFormat.format(item.total)} ₽ (${itemTotalKopecks} коп.)"
+            getString(R.string.orders_item_line, itemLine)
+        }
+
+        return "$header\n$lines"
+    }
+
+    private companion object {
+        const val EVOTOR_ACTION_SELL = "ru.evotor.intent.action.payment.SELL"
+        const val EVOTOR_EXTRA_POSITION_NAME = "ru.evotor.intent.extra.POSITION_NAME"
+        const val EVOTOR_EXTRA_POSITION_PRICE = "ru.evotor.intent.extra.POSITION_PRICE"
+        const val EVOTOR_EXTRA_POSITION_QUANTITY = "ru.evotor.intent.extra.POSITION_QUANTITY"
     }
 }
