@@ -11,6 +11,8 @@ import android.widget.Button
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.yago.evotor.auth.ApiClient
 import com.yago.evotor.auth.LoginActivity
@@ -31,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     private var pollingRunnable: Runnable? = null
     private val activeOrders = mutableListOf<ApiClient.ActiveOrder>()
     private lateinit var ordersAdapter: ArrayAdapter<String>
+    private lateinit var sellReceiptLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +53,15 @@ class MainActivity : AppCompatActivity() {
         val ordersListView = findViewById<ListView>(R.id.ordersList)
         val saleButton = findViewById<Button>(R.id.saleButton)
         val logoutButton = findViewById<Button>(R.id.logoutButton)
+
+        sellReceiptLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val messageRes = if (result.resultCode == Activity.RESULT_OK) {
+                R.string.sale_success
+            } else {
+                R.string.sale_canceled
+            }
+            Toast.makeText(this, getString(messageRes), Toast.LENGTH_SHORT).show()
+        }
 
         ordersAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_single_choice, mutableListOf())
         ordersListView.adapter = ordersAdapter
@@ -73,14 +85,17 @@ class MainActivity : AppCompatActivity() {
             }
 
             val order = activeOrders[checkedPosition]
-            val positions = buildReceiptPositions(order)
-            if (positions.isEmpty()) {
+            val sellIntent = createSellIntent(order)
+            if (sellIntent == null) {
                 Toast.makeText(this, getString(R.string.order_items_empty), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            val sellIntent = SellApi.createSellIntent(this, positions, null)
-            startActivityForResult(sellIntent, SellApi.REQUEST_CODE_SELL)
+            try {
+                sellReceiptLauncher.launch(sellIntent)
+            } catch (error: Exception) {
+                Toast.makeText(this, getString(R.string.orders_error, error.message ?: ""), Toast.LENGTH_LONG).show()
+            }
         }
 
         logoutButton.setOnClickListener {
@@ -163,19 +178,6 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 showErrorRow(getString(R.string.orders_error, error.message ?: ""), ordersListView, saleButton)
             }
-        }
-    }
-
-    private fun buildReceiptPositions(order: ApiClient.ActiveOrder): List<Position> {
-        return order.items.mapNotNull { item ->
-            if (item.name.isBlank() || item.qty <= 0.0) {
-                return@mapNotNull null
-            }
-
-            val unitPrice = item.total / item.qty
-            if (unitPrice <= 0.0) {
-                return@mapNotNull null
-            }
 
             Position.Builder(
                 item.name,
@@ -184,6 +186,19 @@ class MainActivity : AppCompatActivity() {
                 Tax.NO_VAT
             ).build()
         }
+    }
+
+    private fun createSellIntent(order: ApiClient.ActiveOrder): Intent? {
+        val firstItem = order.items.firstOrNull { it.name.isNotBlank() && it.qty > 0.0 && it.total > 0.0 } ?: return null
+
+        val priceInKopecks = (firstItem.total / firstItem.qty * 100.0).roundToLong()
+        val intent = Intent(EVOTOR_ACTION_SELL)
+            .putExtra(EVOTOR_EXTRA_POSITION_NAME, firstItem.name)
+            .putExtra(EVOTOR_EXTRA_POSITION_PRICE, priceInKopecks)
+            .putExtra(EVOTOR_EXTRA_POSITION_QUANTITY, firstItem.qty)
+            .putExtra(Intent.EXTRA_TEXT, getString(R.string.sale_order_comment, order.id))
+
+        return intent
     }
 
     private fun updateOrders(orders: List<ApiClient.ActiveOrder>) {
@@ -247,5 +262,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         return "$header\n$lines"
+    }
+
+    private companion object {
+        const val EVOTOR_ACTION_SELL = "ru.evotor.intent.action.payment.SELL"
+        const val EVOTOR_EXTRA_POSITION_NAME = "ru.evotor.intent.extra.POSITION_NAME"
+        const val EVOTOR_EXTRA_POSITION_PRICE = "ru.evotor.intent.extra.POSITION_PRICE"
+        const val EVOTOR_EXTRA_POSITION_QUANTITY = "ru.evotor.intent.extra.POSITION_QUANTITY"
     }
 }
