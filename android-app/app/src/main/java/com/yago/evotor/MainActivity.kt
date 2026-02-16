@@ -18,6 +18,10 @@ import com.yago.evotor.auth.ApiClient
 import com.yago.evotor.auth.LoginActivity
 import com.yago.evotor.auth.Session
 import com.yago.evotor.auth.SessionStorage
+import ru.evotor.framework.receipt.Position
+import ru.evotor.framework.receipt.SellApi
+import ru.evotor.framework.receipt.Tax
+import java.math.BigDecimal
 import java.text.DecimalFormat
 import kotlin.math.roundToLong
 
@@ -139,6 +143,19 @@ class MainActivity : AppCompatActivity() {
         pollingRunnable?.let { handler.removeCallbacks(it) }
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == SellApi.REQUEST_CODE_SELL) {
+            val messageRes = if (resultCode == Activity.RESULT_OK) {
+                R.string.sale_success
+            } else {
+                R.string.sale_canceled
+            }
+            Toast.makeText(this, getString(messageRes), Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun handleTokenRefresh(
         sessionStorage: SessionStorage,
         session: Session,
@@ -161,6 +178,13 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 showErrorRow(getString(R.string.orders_error, error.message ?: ""), ordersListView, saleButton)
             }
+
+            Position.Builder(
+                item.name,
+                item.qty,
+                BigDecimal.valueOf(unitPrice),
+                Tax.NO_VAT
+            ).build()
         }
     }
 
