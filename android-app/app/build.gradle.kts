@@ -11,8 +11,8 @@ android {
         applicationId = "com.yago.evotor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 17
-        versionName = "0.2.8"
+        versionCode = 20
+        versionName = "0.2.92"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -43,6 +43,7 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("com.google.android.material:material:1.12.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.github.evotor:integration-library:v0.4.8")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
