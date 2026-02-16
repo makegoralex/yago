@@ -7,13 +7,19 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLPeerUnverifiedException
+import javax.net.ssl.X509TrustManager
 
 object ApiClient {
 
     private const val CONNECT_TIMEOUT_MS = 5_000L
     private const val READ_TIMEOUT_MS = 10_000L
+    private const val ALLOW_INSECURE_SSL_FOR_EVOTOR_WORKAROUND = true
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
     @Volatile
@@ -174,10 +180,32 @@ object ApiClient {
     )
 
     private fun buildHttpClient(): OkHttpClient {
-        return OkHttpClient.Builder()
+        val clientBuilder = OkHttpClient.Builder()
             .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            .build()
+
+        if (ALLOW_INSECURE_SSL_FOR_EVOTOR_WORKAROUND) {
+            // Временный workaround для Evotor/Android 10+ с проксированием,
+            // когда endpoint может отдавать сертификат без SAN и ломать hostname verification.
+            val trustAllManager = createTrustAllManager()
+            val insecureSslContext = SSLContext.getInstance("TLS").apply {
+                init(null, arrayOf(trustAllManager), SecureRandom())
+            }
+
+            clientBuilder
+                .sslSocketFactory(insecureSslContext.socketFactory, trustAllManager)
+                .hostnameVerifier(HostnameVerifier { _, _ -> true })
+        }
+
+        return clientBuilder.build()
+    }
+
+    private fun createTrustAllManager(): X509TrustManager {
+        return object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) = Unit
+            override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) = Unit
+            override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
+        }
     }
 
     private fun executeRequest(
@@ -233,9 +261,15 @@ object ApiClient {
 
         return if (
             error is SSLHandshakeException ||
+            error is SSLPeerUnverifiedException ||
             chain.any { it.contains("SSL", true) || it.contains("certificate", true) }
         ) {
-            "TLS/SSL error during $phase ($endpoint). Проверьте цепочку сертификатов. $details"
+            val insecureHint = if (ALLOW_INSECURE_SSL_FOR_EVOTOR_WORKAROUND) {
+                " Включен insecure SSL workaround (trust-all + hostname verifier), но TLS всё равно не прошёл."
+            } else {
+                ""
+            }
+            "TLS/SSL error during $phase ($endpoint). Проверьте цепочку сертификатов. $details$insecureHint"
         } else {
             "Network error during $phase ($endpoint): ${details.ifBlank { "Unknown error" }}"
         }
