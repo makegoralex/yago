@@ -252,13 +252,8 @@ class MainActivity : AppCompatActivity() {
 
         val lines = order.items.joinToString(separator = "\n") { item ->
             val itemTotalKopecks = (item.total * 100.0).roundToLong()
-            getString(
-                R.string.orders_item_line,
-                item.name,
-                item.qty,
-                currencyFormat.format(item.total),
-                itemTotalKopecks
-            )
+            val itemLine = "${item.name} x${"%.2f".format(item.qty)} = ${currencyFormat.format(item.total)} ₽ (${itemTotalKopecks} коп.)"
+            getString(R.string.orders_item_line, itemLine)
         }
 
         return "$header\n$lines"
