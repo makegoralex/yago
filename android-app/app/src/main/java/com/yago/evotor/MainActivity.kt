@@ -20,7 +20,7 @@ import com.yago.evotor.auth.SessionStorage
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import kotlin.math.roundToLong
-import ru.evotor.framework.core.IntegrationApi
+import ru.evotor.framework.core.IntegrationAPI
 import ru.evotor.framework.receipt.Position
 
 class MainActivity : AppCompatActivity() {
@@ -174,13 +174,12 @@ class MainActivity : AppCompatActivity() {
         val priceInKopecks =
             (firstItem.total / firstItem.qty * 100.0).roundToLong()
 
-        val position = Position.Builder()
-            .setName(firstItem.name)
+        val position = Position.Builder(firstItem.name)
             .setPrice(priceInKopecks)
             .setQuantity(BigDecimal.valueOf(firstItem.qty))
             .build()
 
-        return IntegrationApi.createSellReceiptIntent(
+        return IntegrationAPI.createSellReceiptIntent(
             listOf(position)
         )
     }
