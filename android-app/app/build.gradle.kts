@@ -11,8 +11,8 @@ android {
         applicationId = "com.yago.evotor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 24
-        versionName = "0.2.94"
+        versionCode = 25
+        versionName = "0.2.943"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
