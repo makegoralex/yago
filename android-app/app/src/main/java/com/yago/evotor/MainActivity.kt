@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
+import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -163,33 +164,59 @@ class MainActivity : AppCompatActivity() {
 
     private fun createSellIntent(order: ApiClient.ActiveOrder): Intent? {
 
-        val firstItem = order.items.firstOrNull {
-            it.name.isNotBlank() &&
-                    it.qty > 0.0 &&
-                    it.total > 0.0
-        } ?: return null
-
-        val priceInKopecks =
-            (firstItem.total / firstItem.qty * 100.0).roundToLong()
+        val receiptItems = buildReceiptItems(order)
+        if (receiptItems.isEmpty()) {
+            Log.w("YagoEvotor", "Order ${order.id} has no valid receipt items")
+            return null
+        }
 
         return try {
-            createSellIntentViaReflection(
-                itemName = firstItem.name,
-                priceInKopecks = priceInKopecks,
-                quantity = BigDecimal.valueOf(firstItem.qty)
-            )
-        } catch (_: Exception) {
+            createSellIntentViaReflection(receiptItems)
+        } catch (error: Exception) {
+            Log.e("YagoEvotor", "Failed to create sell intent", error)
             null
         }
     }
 
+    private data class ReceiptItem(
+        val name: String,
+        val priceInKopecks: Long,
+        val quantity: BigDecimal
+    )
+
+    private fun buildReceiptItems(order: ApiClient.ActiveOrder): List<ReceiptItem> {
+        val fallbackOrderTotal = order.total
+        val fallbackItemTotal =
+            if (order.items.isNotEmpty() && fallbackOrderTotal > 0.0)
+                fallbackOrderTotal / order.items.size
+            else 0.0
+
+        return order.items.mapNotNull { item ->
+            if (item.name.isBlank() || item.qty <= 0.0) return@mapNotNull null
+
+            val lineTotal = when {
+                item.total > 0.0 -> item.total
+                fallbackItemTotal > 0.0 -> fallbackItemTotal
+                else -> return@mapNotNull null
+            }
+
+            val unitPrice = (lineTotal / item.qty).coerceAtLeast(0.01)
+            val priceInKopecks = (unitPrice * 100.0).roundToLong().coerceAtLeast(1L)
+
+            ReceiptItem(
+                name = item.name,
+                priceInKopecks = priceInKopecks,
+                quantity = BigDecimal.valueOf(item.qty)
+            )
+        }
+    }
 
     private fun createSellIntentViaReflection(
-        itemName: String,
-        priceInKopecks: Long,
-        quantity: BigDecimal
+        receiptItems: List<ReceiptItem>
     ): Intent? {
-        val position = createPositionViaReflection(itemName, priceInKopecks, quantity)
+        val positions = receiptItems.map {
+            createPositionViaReflection(it.name, it.priceInKopecks, it.quantity)
+        }
 
         val integrationClass =
             sequenceOf(
@@ -215,7 +242,7 @@ class MainActivity : AppCompatActivity() {
                 integrationClass.getField("INSTANCE").get(null)
             }.getOrNull() ?: return null
 
-        return method.invoke(receiver, listOf(position)) as? Intent
+        return method.invoke(receiver, positions) as? Intent
     }
 
     private fun createPositionViaReflection(
