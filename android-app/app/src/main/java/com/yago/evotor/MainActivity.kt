@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
+import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -20,8 +21,6 @@ import com.yago.evotor.auth.SessionStorage
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import kotlin.math.roundToLong
-import ru.evotor.framework.core.IntegrationApi
-import ru.evotor.framework.receipt.Position
 
 class MainActivity : AppCompatActivity() {
 
@@ -165,24 +164,180 @@ class MainActivity : AppCompatActivity() {
 
     private fun createSellIntent(order: ApiClient.ActiveOrder): Intent? {
 
-        val firstItem = order.items.firstOrNull {
-            it.name.isNotBlank() &&
-                    it.qty > 0.0 &&
-                    it.total > 0.0
-        } ?: return null
+        val receiptItems = buildReceiptItems(order)
+        if (receiptItems.isEmpty()) {
+            Log.w("YagoEvotor", "Order ${order.id} has no valid receipt items")
+            return null
+        }
 
-        val priceInKopecks =
-            (firstItem.total / firstItem.qty * 100.0).roundToLong()
+        return try {
+            createSellIntentViaReflection(receiptItems)
+        } catch (error: Exception) {
+            Log.e("YagoEvotor", "Failed to create sell intent", error)
+            null
+        }
+    }
 
-        val position = Position.Builder()
-            .setName(firstItem.name)
-            .setPrice(priceInKopecks)
-            .setQuantity(BigDecimal.valueOf(firstItem.qty))
-            .build()
+    private data class ReceiptItem(
+        val name: String,
+        val priceInKopecks: Long,
+        val quantity: BigDecimal
+    )
 
-        return IntegrationApi.createSellReceiptIntent(
-            listOf(position)
-        )
+    private fun buildReceiptItems(order: ApiClient.ActiveOrder): List<ReceiptItem> {
+        val fallbackOrderTotal = order.total
+        val fallbackItemTotal =
+            if (order.items.isNotEmpty() && fallbackOrderTotal > 0.0)
+                fallbackOrderTotal / order.items.size
+            else 0.0
+
+        return order.items.mapNotNull { item ->
+            if (item.name.isBlank() || item.qty <= 0.0) return@mapNotNull null
+
+            val lineTotal = when {
+                item.total > 0.0 -> item.total
+                fallbackItemTotal > 0.0 -> fallbackItemTotal
+                else -> return@mapNotNull null
+            }
+
+            val unitPrice = (lineTotal / item.qty).coerceAtLeast(0.01)
+            val priceInKopecks = (unitPrice * 100.0).roundToLong().coerceAtLeast(1L)
+
+            ReceiptItem(
+                name = item.name,
+                priceInKopecks = priceInKopecks,
+                quantity = BigDecimal.valueOf(item.qty)
+            )
+        }
+    }
+
+    private fun createSellIntentViaReflection(
+        receiptItems: List<ReceiptItem>
+    ): Intent? {
+        val positions = receiptItems.map {
+            createPositionViaReflection(it.name, it.priceInKopecks, it.quantity)
+        }
+
+        val integrationClass =
+            sequenceOf(
+                "ru.evotor.framework.core.IntegrationApi",
+                "ru.evotor.framework.core.IntegrationAPI"
+            )
+                .mapNotNull {
+                    runCatching { Class.forName(it) }.getOrNull()
+                }
+                .firstOrNull()
+                ?: return null
+
+        val method =
+            integrationClass.methods.firstOrNull {
+                it.name == "createSellReceiptIntent" &&
+                        it.parameterTypes.size == 1 &&
+                        List::class.java.isAssignableFrom(it.parameterTypes[0])
+            } ?: return null
+
+        val receiver =
+            if (java.lang.reflect.Modifier.isStatic(method.modifiers)) null
+            else runCatching {
+                integrationClass.getField("INSTANCE").get(null)
+            }.getOrNull() ?: return null
+
+        return method.invoke(receiver, positions) as? Intent
+    }
+
+    private fun createPositionViaReflection(
+        itemName: String,
+        priceInKopecks: Long,
+        quantity: BigDecimal
+    ): Any {
+        val positionClass = Class.forName("ru.evotor.framework.receipt.Position")
+        val builderClass = Class.forName("ru.evotor.framework.receipt.Position\$Builder")
+
+        val builder =
+            runCatching { builderClass.getConstructor(String::class.java).newInstance(itemName) }
+                .getOrElse {
+                    val directPosition = instantiatePosition(positionClass, itemName, priceInKopecks, quantity)
+                    builderClass.getConstructor(positionClass).newInstance(directPosition)
+                }
+
+        val setPriceMethod =
+            builderClass.methods.firstOrNull { it.name == "setPrice" && it.parameterTypes.size == 1 }
+                ?: error("Position.Builder.setPrice not found")
+
+        when (setPriceMethod.parameterTypes[0]) {
+            java.lang.Long.TYPE,
+            java.lang.Long::class.java -> setPriceMethod.invoke(builder, priceInKopecks)
+
+            BigDecimal::class.java -> setPriceMethod.invoke(builder, BigDecimal.valueOf(priceInKopecks))
+            else -> error("Unsupported price type for Position.Builder.setPrice")
+        }
+
+        builderClass.methods
+            .firstOrNull {
+                it.name == "setQuantity" &&
+                        it.parameterTypes.size == 1 &&
+                        it.parameterTypes[0] == BigDecimal::class.java
+            }
+            ?.invoke(builder, quantity)
+
+        return builderClass.getMethod("build").invoke(builder)
+            ?: error("Position.Builder.build returned null")
+    }
+
+    private fun instantiatePosition(
+        positionClass: Class<*>,
+        itemName: String,
+        priceInKopecks: Long,
+        quantity: BigDecimal
+    ): Any {
+        val constructors = positionClass.declaredConstructors.sortedBy { it.parameterCount }
+
+        constructors.forEach { constructor ->
+            val args = mutableListOf<Any?>()
+            var bigDecimalIndex = 0
+            var canUse = true
+
+            constructor.parameterTypes.forEach { param ->
+                val value = when (param) {
+                    String::class.java -> itemName
+                    java.lang.Long.TYPE,
+                    java.lang.Long::class.java -> priceInKopecks
+
+                    java.lang.Integer.TYPE,
+                    java.lang.Integer::class.java -> 0
+
+                    java.lang.Boolean.TYPE,
+                    java.lang.Boolean::class.java -> false
+
+                    BigDecimal::class.java -> {
+                        bigDecimalIndex += 1
+                        if (bigDecimalIndex == 1) BigDecimal.valueOf(priceInKopecks) else quantity
+                    }
+
+                    List::class.java,
+                    MutableList::class.java,
+                    java.util.Collection::class.java -> emptyList<Any>()
+
+                    else -> if (!param.isPrimitive) null else {
+                        canUse = false
+                        null
+                    }
+                }
+
+                args += value
+            }
+
+            if (!canUse) return@forEach
+
+            val instance = runCatching {
+                constructor.isAccessible = true
+                constructor.newInstance(*args.toTypedArray())
+            }.getOrNull()
+
+            if (instance != null) return instance
+        }
+
+        error("Cannot instantiate ru.evotor.framework.receipt.Position")
     }
 
     private fun updateOrders(orders: List<ApiClient.ActiveOrder>) {
