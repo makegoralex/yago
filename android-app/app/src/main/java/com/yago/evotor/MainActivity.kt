@@ -70,6 +70,7 @@ class MainActivity : AppCompatActivity() {
 
         ordersListView.adapter = ordersAdapter
         ordersListView.choiceMode = ListView.CHOICE_MODE_SINGLE
+        ordersAdapter.add(getString(R.string.orders_loading))
 
         val organizationLabel =
             session.organizationName ?: session.organizationId ?: "—"
@@ -120,13 +121,7 @@ class MainActivity : AppCompatActivity() {
             override fun run() {
                 Thread {
                     try {
-                        val refreshedSession =
-                            sessionStorage.loadSession() ?: session
-
-                        val orders = ApiClient.fetchActiveOrders(
-                            refreshedSession.baseUrl,
-                            refreshedSession.accessToken
-                        )
+                        val orders = fetchOrdersWithRefresh(sessionStorage)
 
                         runOnUiThread {
                             updateOrders(orders)
@@ -134,13 +129,24 @@ class MainActivity : AppCompatActivity() {
                                 ordersListView.checkedItemPosition in activeOrders.indices
                         }
 
+                    } catch (error: SessionExpiredException) {
+                        runOnUiThread {
+                            sessionStorage.clear()
+                            Toast.makeText(
+                                this@MainActivity,
+                                getString(R.string.session_expired),
+                                Toast.LENGTH_LONG
+                            ).show()
+                            startActivity(Intent(this@MainActivity, LoginActivity::class.java))
+                            finish()
+                        }
                     } catch (error: Exception) {
+                        val details = error.message?.takeIf { it.isNotBlank() }
+                            ?: getString(R.string.error_unknown)
+
                         runOnUiThread {
                             showErrorRow(
-                                getString(
-                                    R.string.orders_error,
-                                    error.message ?: ""
-                                ),
+                                getString(R.string.orders_error, details),
                                 ordersListView,
                                 saleButton
                             )
@@ -161,6 +167,33 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         pollingRunnable?.let { handler.removeCallbacks(it) }
+    }
+
+    private class SessionExpiredException : Exception()
+
+    private fun fetchOrdersWithRefresh(sessionStorage: SessionStorage): List<ApiClient.ActiveOrder> {
+        val currentSession = sessionStorage.loadSession() ?: throw SessionExpiredException()
+
+        return try {
+            ApiClient.fetchActiveOrders(currentSession.baseUrl, currentSession.accessToken)
+        } catch (error: ApiClient.ApiException) {
+            if (error.statusCode != 401 && error.statusCode != 403) throw error
+
+            val refreshed = try {
+                ApiClient.refreshTokens(currentSession.baseUrl, currentSession.refreshToken)
+            } catch (_: Exception) {
+                throw SessionExpiredException()
+            }
+
+            val updatedSession =
+                currentSession.copy(
+                    accessToken = refreshed.accessToken,
+                    refreshToken = refreshed.refreshToken
+                )
+            sessionStorage.saveSession(updatedSession)
+
+            ApiClient.fetchActiveOrders(updatedSession.baseUrl, updatedSession.accessToken)
+        }
     }
 
     private fun createSellIntent(order: ApiClient.ActiveOrder): Intent? {
