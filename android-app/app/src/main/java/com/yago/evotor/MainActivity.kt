@@ -20,6 +20,7 @@ import com.yago.evotor.auth.LoginActivity
 import com.yago.evotor.auth.SessionStorage
 import java.math.BigDecimal
 import java.text.DecimalFormat
+import java.util.UUID
 import kotlin.math.roundToLong
 
 class MainActivity : AppCompatActivity() {
@@ -69,6 +70,7 @@ class MainActivity : AppCompatActivity() {
 
         ordersListView.adapter = ordersAdapter
         ordersListView.choiceMode = ListView.CHOICE_MODE_SINGLE
+        ordersAdapter.add(getString(R.string.orders_loading))
 
         val organizationLabel =
             session.organizationName ?: session.organizationId ?: "—"
@@ -119,13 +121,7 @@ class MainActivity : AppCompatActivity() {
             override fun run() {
                 Thread {
                     try {
-                        val refreshedSession =
-                            sessionStorage.loadSession() ?: session
-
-                        val orders = ApiClient.fetchActiveOrders(
-                            refreshedSession.baseUrl,
-                            refreshedSession.accessToken
-                        )
+                        val orders = fetchOrdersWithRefresh(sessionStorage)
 
                         runOnUiThread {
                             updateOrders(orders)
@@ -133,13 +129,24 @@ class MainActivity : AppCompatActivity() {
                                 ordersListView.checkedItemPosition in activeOrders.indices
                         }
 
+                    } catch (error: SessionExpiredException) {
+                        runOnUiThread {
+                            sessionStorage.clear()
+                            Toast.makeText(
+                                this@MainActivity,
+                                getString(R.string.session_expired),
+                                Toast.LENGTH_LONG
+                            ).show()
+                            startActivity(Intent(this@MainActivity, LoginActivity::class.java))
+                            finish()
+                        }
                     } catch (error: Exception) {
+                        val details = error.message?.takeIf { it.isNotBlank() }
+                            ?: getString(R.string.error_unknown)
+
                         runOnUiThread {
                             showErrorRow(
-                                getString(
-                                    R.string.orders_error,
-                                    error.message ?: ""
-                                ),
+                                getString(R.string.orders_error, details),
                                 ordersListView,
                                 saleButton
                             )
@@ -162,6 +169,33 @@ class MainActivity : AppCompatActivity() {
         pollingRunnable?.let { handler.removeCallbacks(it) }
     }
 
+    private class SessionExpiredException : Exception()
+
+    private fun fetchOrdersWithRefresh(sessionStorage: SessionStorage): List<ApiClient.ActiveOrder> {
+        val currentSession = sessionStorage.loadSession() ?: throw SessionExpiredException()
+
+        return try {
+            ApiClient.fetchActiveOrders(currentSession.baseUrl, currentSession.accessToken)
+        } catch (error: ApiClient.ApiException) {
+            if (error.statusCode != 401 && error.statusCode != 403) throw error
+
+            val refreshed = try {
+                ApiClient.refreshTokens(currentSession.baseUrl, currentSession.refreshToken)
+            } catch (_: Exception) {
+                throw SessionExpiredException()
+            }
+
+            val updatedSession =
+                currentSession.copy(
+                    accessToken = refreshed.accessToken,
+                    refreshToken = refreshed.refreshToken
+                )
+            sessionStorage.saveSession(updatedSession)
+
+            ApiClient.fetchActiveOrders(updatedSession.baseUrl, updatedSession.accessToken)
+        }
+    }
+
     private fun createSellIntent(order: ApiClient.ActiveOrder): Intent? {
 
         val receiptItems = buildReceiptItems(order)
@@ -180,7 +214,7 @@ class MainActivity : AppCompatActivity() {
 
     private data class ReceiptItem(
         val name: String,
-        val priceInKopecks: Long,
+        val price: BigDecimal,
         val quantity: BigDecimal
     )
 
@@ -201,11 +235,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             val unitPrice = (lineTotal / item.qty).coerceAtLeast(0.01)
-            val priceInKopecks = (unitPrice * 100.0).roundToLong().coerceAtLeast(1L)
+            val roundedUnitPrice = (unitPrice * 100.0).roundToLong().coerceAtLeast(1L) / 100.0
 
             ReceiptItem(
                 name = item.name,
-                priceInKopecks = priceInKopecks,
+                price = BigDecimal.valueOf(roundedUnitPrice),
                 quantity = BigDecimal.valueOf(item.qty)
             )
         }
@@ -214,8 +248,9 @@ class MainActivity : AppCompatActivity() {
     private fun createSellIntentViaReflection(
         receiptItems: List<ReceiptItem>
     ): Intent? {
-        val positions = receiptItems.map {
-            createPositionViaReflection(it.name, it.priceInKopecks, it.quantity)
+        val positionChanges = receiptItems.map {
+            val position = createPositionViaReflection(it.name, it.price, it.quantity)
+            createPositionAddViaReflection(position)
         }
 
         val integrationClass =
@@ -242,21 +277,50 @@ class MainActivity : AppCompatActivity() {
                 integrationClass.getField("INSTANCE").get(null)
             }.getOrNull() ?: return null
 
-        return method.invoke(receiver, positions) as? Intent
+        return method.invoke(receiver, positionChanges) as? Intent
+    }
+
+    private fun createPositionAddViaReflection(position: Any): Any {
+        val positionAddClass = Class.forName("ru.evotor.framework.receipt.changes.position.PositionAdd")
+        return positionAddClass.getConstructor(position.javaClass).newInstance(position)
     }
 
     private fun createPositionViaReflection(
         itemName: String,
-        priceInKopecks: Long,
+        price: BigDecimal,
         quantity: BigDecimal
     ): Any {
         val positionClass = Class.forName("ru.evotor.framework.receipt.Position")
         val builderClass = Class.forName("ru.evotor.framework.receipt.Position\$Builder")
 
+        val newInstanceMethod =
+            builderClass.methods.firstOrNull {
+                it.name == "newInstance" &&
+                        it.parameterTypes.size == 7 &&
+                        it.parameterTypes[0] == String::class.java &&
+                        it.parameterTypes[2] == String::class.java
+            }
+
+        if (newInstanceMethod != null) {
+            val builder = newInstanceMethod.invoke(
+                null,
+                UUID.randomUUID().toString(),
+                null,
+                itemName,
+                "шт",
+                0,
+                price,
+                quantity
+            )
+
+            return builderClass.getMethod("build").invoke(builder)
+                ?: error("Position.Builder.build returned null")
+        }
+
         val builder =
             runCatching { builderClass.getConstructor(String::class.java).newInstance(itemName) }
                 .getOrElse {
-                    val directPosition = instantiatePosition(positionClass, itemName, priceInKopecks, quantity)
+                    val directPosition = instantiatePosition(positionClass, itemName, price, quantity)
                     builderClass.getConstructor(positionClass).newInstance(directPosition)
                 }
 
@@ -266,9 +330,9 @@ class MainActivity : AppCompatActivity() {
 
         when (setPriceMethod.parameterTypes[0]) {
             java.lang.Long.TYPE,
-            java.lang.Long::class.java -> setPriceMethod.invoke(builder, priceInKopecks)
+            java.lang.Long::class.java -> setPriceMethod.invoke(builder, price.multiply(BigDecimal.valueOf(100)).longValueExact())
 
-            BigDecimal::class.java -> setPriceMethod.invoke(builder, BigDecimal.valueOf(priceInKopecks))
+            BigDecimal::class.java -> setPriceMethod.invoke(builder, price)
             else -> error("Unsupported price type for Position.Builder.setPrice")
         }
 
@@ -287,7 +351,7 @@ class MainActivity : AppCompatActivity() {
     private fun instantiatePosition(
         positionClass: Class<*>,
         itemName: String,
-        priceInKopecks: Long,
+        price: BigDecimal,
         quantity: BigDecimal
     ): Any {
         val constructors = positionClass.declaredConstructors.sortedBy { it.parameterCount }
@@ -301,7 +365,7 @@ class MainActivity : AppCompatActivity() {
                 val value = when (param) {
                     String::class.java -> itemName
                     java.lang.Long.TYPE,
-                    java.lang.Long::class.java -> priceInKopecks
+                    java.lang.Long::class.java -> price.multiply(BigDecimal.valueOf(100)).longValueExact()
 
                     java.lang.Integer.TYPE,
                     java.lang.Integer::class.java -> 0
@@ -311,7 +375,7 @@ class MainActivity : AppCompatActivity() {
 
                     BigDecimal::class.java -> {
                         bigDecimalIndex += 1
-                        if (bigDecimalIndex == 1) BigDecimal.valueOf(priceInKopecks) else quantity
+                        if (bigDecimalIndex == 1) price else quantity
                     }
 
                     List::class.java,
