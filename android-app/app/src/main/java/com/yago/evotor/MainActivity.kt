@@ -90,8 +90,8 @@ class MainActivity : IntegrationAppCompatActivity() {
 
             try {
                 PendingSellOrderStore.set(order)
-                startActivity(NavigationApi.createIntentForSellReceiptEdit(false)
-
+                val intent = NavigationApi.createIntentForSellReceiptEdit(false)
+                startActivity(intent)
             } catch (_: Throwable) {
                 Toast.makeText(
                     this,
