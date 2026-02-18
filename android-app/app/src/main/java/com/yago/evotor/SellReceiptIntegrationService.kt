@@ -1,12 +1,13 @@
 package com.yago.evotor
 
-import ru.evotor.framework.component.Position
 import ru.evotor.framework.core.IntegrationService
-import ru.evotor.framework.core.action.event.receipt.changes_accepted.BeforePositionsEditedEvent
-import ru.evotor.framework.core.action.event.receipt.changes_accepted.BeforePositionsEditedEventProcessor
-import ru.evotor.framework.core.action.event.receipt.changes_accepted.BeforePositionsEditedEventResult
+import ru.evotor.framework.core.action.event.receipt.before_positions_edited.BeforePositionsEditedEvent
+import ru.evotor.framework.core.action.event.receipt.before_positions_edited.BeforePositionsEditedEventResult
 import ru.evotor.framework.core.action.event.receipt.position.PositionAdd
 import ru.evotor.framework.core.action.processor.ActionProcessor
+import ru.evotor.framework.core.action.processor.BeforePositionsEditedEventProcessor
+import ru.evotor.framework.receipt.Measure
+import ru.evotor.framework.receipt.Position
 import java.math.BigDecimal
 import java.util.UUID
 import kotlin.math.roundToLong
@@ -41,8 +42,7 @@ class SellReceiptIntegrationService : IntegrationService() {
                             UUID.randomUUID().toString(),
                             null,
                             item.name,
-                            "шт",
-                            0,
+                            Measure("шт", 0),
                             BigDecimal.valueOf(rounded),
                             BigDecimal.valueOf(item.qty)
                         ).build()
