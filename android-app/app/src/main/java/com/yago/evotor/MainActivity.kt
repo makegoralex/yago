@@ -97,18 +97,30 @@ class MainActivity : AppCompatActivity() {
             }
 
             val order = activeOrders[checkedPosition]
-            val sellIntent = createSellIntent(order)
-
-            if (sellIntent == null) {
-                Toast.makeText(
-                    this,
-                    getString(R.string.order_items_empty),
-                    Toast.LENGTH_SHORT
-                ).show()
-                return@setOnClickListener
+            when (val sellResult = createSellIntent(order)) {
+                is SellIntentResult.Ready -> sellReceiptLauncher.launch(sellResult.intent)
+                SellIntentResult.NoItems -> {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.order_items_empty),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                SellIntentResult.EvotorUnavailable -> {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.evotor_unavailable),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                SellIntentResult.Error -> {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.sale_intent_error),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
-
-            sellReceiptLauncher.launch(sellIntent)
         }
 
         logoutButton.setOnClickListener {
@@ -196,19 +208,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun createSellIntent(order: ApiClient.ActiveOrder): Intent? {
+    private sealed class SellIntentResult {
+        data class Ready(val intent: Intent) : SellIntentResult()
+        data object NoItems : SellIntentResult()
+        data object EvotorUnavailable : SellIntentResult()
+        data object Error : SellIntentResult()
+    }
+
+    private fun createSellIntent(order: ApiClient.ActiveOrder): SellIntentResult {
 
         val receiptItems = buildReceiptItems(order)
         if (receiptItems.isEmpty()) {
             Log.w("YagoEvotor", "Order ${order.id} has no valid receipt items")
-            return null
+            return SellIntentResult.NoItems
         }
 
         return try {
-            createSellIntentViaReflection(receiptItems)
+            val intent = createSellIntentViaReflection(receiptItems)
+            if (intent == null) {
+                SellIntentResult.EvotorUnavailable
+            } else {
+                SellIntentResult.Ready(intent)
+            }
         } catch (error: Exception) {
             Log.e("YagoEvotor", "Failed to create sell intent", error)
-            null
+            SellIntentResult.Error
         }
     }
 
@@ -282,7 +306,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun createPositionAddViaReflection(position: Any): Any {
         val positionAddClass = Class.forName("ru.evotor.framework.receipt.changes.position.PositionAdd")
-        return positionAddClass.getConstructor(position.javaClass).newInstance(position)
+        val constructor = positionAddClass.constructors.firstOrNull { candidate ->
+            candidate.parameterTypes.size == 1 && candidate.parameterTypes[0].isAssignableFrom(position.javaClass)
+        } ?: error("PositionAdd constructor not found")
+
+        return constructor.newInstance(position)
     }
 
     private fun createPositionViaReflection(
