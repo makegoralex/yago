@@ -3505,10 +3505,15 @@ const AdminPage: React.FC = () => {
     }
 
     const handleDocumentClick = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (actionMenuRef.current?.contains(target) || actionMenuButtonRef.current?.contains(target)) {
+      const target = event.target as HTMLElement | null;
+      if (!target) {
         return;
       }
+
+      if (target.closest('[data-action-menu]') || target.closest('[data-action-menu-button]')) {
+        return;
+      }
+
       setOpenActionMenuId(null);
     };
 
@@ -5611,6 +5616,7 @@ const AdminPage: React.FC = () => {
                                         className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-50"
                                         aria-haspopup="menu"
                                         aria-expanded={openActionMenuId === product._id}
+                                        data-action-menu-button
                                       >
                                         ⋯
                                       </button>
@@ -5619,6 +5625,7 @@ const AdminPage: React.FC = () => {
                                           ref={actionMenuRef}
                                           className="absolute right-0 z-10 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-2 text-xs shadow-lg"
                                           role="menu"
+                                          data-action-menu
                                         >
                                           <button
                                             type="button"
@@ -5710,6 +5717,7 @@ const AdminPage: React.FC = () => {
                                       className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500"
                                       aria-haspopup="menu"
                                       aria-expanded={openActionMenuId === product._id}
+                                      data-action-menu-button
                                     >
                                       ⋯
                                     </button>
@@ -5718,6 +5726,7 @@ const AdminPage: React.FC = () => {
                                         ref={actionMenuRef}
                                         className="absolute right-0 z-10 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-2 text-xs shadow-lg"
                                         role="menu"
+                                        data-action-menu
                                       >
                                         <button
                                           type="button"
