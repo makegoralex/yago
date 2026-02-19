@@ -134,15 +134,6 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           >
             Добавить клиента
           </button>
-          {onClearCustomer ? (
-            <button
-              type="button"
-              onClick={onClearCustomer}
-              className="h-10 rounded-lg border border-slate-200 px-3 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-100"
-            >
-              Сброс клиента
-            </button>
-          ) : null}
         </div>
       </div>
       {orderTagsEnabled ? (
@@ -177,9 +168,22 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
               <p className="truncate text-sm font-semibold text-slate-900">{customer.name}</p>
               <p className="truncate text-xs text-slate-500">{customer.phone ?? '—'}</p>
             </div>
-            <div className="text-right">
-              <p className="text-[11px] uppercase text-slate-400">Баллы</p>
-              <p className="text-base font-semibold text-emerald-600">{customerPoints.toFixed(0)}</p>
+            <div className="flex items-start gap-2">
+              <div className="text-right">
+                <p className="text-[11px] uppercase text-slate-400">Баллы</p>
+                <p className="text-base font-semibold text-emerald-600">{customerPoints.toFixed(0)}</p>
+              </div>
+              {onClearCustomer ? (
+                <button
+                  type="button"
+                  onClick={onClearCustomer}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 text-sm font-semibold leading-none text-slate-500 transition hover:bg-white"
+                  aria-label="Удалить клиента"
+                  title="Удалить клиента"
+                >
+                  ×
+                </button>
+              ) : null}
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
