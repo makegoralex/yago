@@ -1,6 +1,5 @@
 package com.yago.evotor
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -12,27 +11,27 @@ import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import android.util.Log
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import com.yago.evotor.auth.ApiClient
 import com.yago.evotor.auth.LoginActivity
 import com.yago.evotor.auth.SessionStorage
+import ru.evotor.framework.core.IntegrationAppCompatActivity
+import ru.evotor.framework.navigation.NavigationApi
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.util.UUID
 import kotlin.math.roundToLong
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : IntegrationAppCompatActivity() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val pollingIntervalMs = 3000L
     private val currencyFormat = DecimalFormat("0.00")
 
     private var pollingRunnable: Runnable? = null
+    @Volatile private var isProcessingRemoteSaleCommand = false
+    @Volatile private var pendingRemoteOrderId: String? = null
     private val activeOrders = mutableListOf<ApiClient.ActiveOrder>()
     private lateinit var ordersAdapter: ArrayAdapter<String>
-    private lateinit var sellReceiptLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,17 +52,6 @@ class MainActivity : AppCompatActivity() {
         val ordersListView = findViewById<ListView>(R.id.ordersList)
         val saleButton = findViewById<Button>(R.id.saleButton)
         val logoutButton = findViewById<Button>(R.id.logoutButton)
-
-        sellReceiptLauncher =
-            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-                val messageRes =
-                    if (result.resultCode == Activity.RESULT_OK)
-                        R.string.sale_success
-                    else
-                        R.string.sale_canceled
-
-                Toast.makeText(this, getString(messageRes), Toast.LENGTH_SHORT).show()
-            }
 
         ordersAdapter =
             ArrayAdapter(this, android.R.layout.simple_list_item_single_choice, mutableListOf())
@@ -97,29 +85,30 @@ class MainActivity : AppCompatActivity() {
             }
 
             val order = activeOrders[checkedPosition]
-            when (val sellResult = createSellIntent(order)) {
-                is SellIntentResult.Ready -> sellReceiptLauncher.launch(sellResult.intent)
-                SellIntentResult.NoItems -> {
-                    Toast.makeText(
-                        this,
-                        getString(R.string.order_items_empty),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                SellIntentResult.EvotorUnavailable -> {
-                    Toast.makeText(
-                        this,
-                        getString(R.string.evotor_unavailable),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                SellIntentResult.Error -> {
+            if (order.items.none { it.name.isNotBlank() && it.qty > 0.0 && it.total > 0.0 }) {
+                Toast.makeText(
+                    this,
+                    getString(R.string.order_items_empty),
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@setOnClickListener
+            }
+
+            try {
+                if (!openSellReceiptWithItems(order)) {
                     Toast.makeText(
                         this,
                         getString(R.string.sale_intent_error),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
+            } catch (error: Throwable) {
+                Log.e("YagoEvotor", "Manual sale launch failed", error)
+                Toast.makeText(
+                    this,
+                    getString(R.string.sale_intent_error),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
 
@@ -139,6 +128,11 @@ class MainActivity : AppCompatActivity() {
                             updateOrders(orders)
                             saleButton.isEnabled =
                                 ordersListView.checkedItemPosition in activeOrders.indices
+                        }
+
+                        val latestSession = sessionStorage.loadSession()
+                        if (latestSession != null) {
+                            processRemoteSaleCommandIfAny(latestSession)
                         }
 
                     } catch (error: SessionExpiredException) {
@@ -208,230 +202,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private sealed class SellIntentResult {
-        data class Ready(val intent: Intent) : SellIntentResult()
-        data object NoItems : SellIntentResult()
-        data object EvotorUnavailable : SellIntentResult()
-        data object Error : SellIntentResult()
-    }
-
-    private fun createSellIntent(order: ApiClient.ActiveOrder): SellIntentResult {
-
-        val receiptItems = buildReceiptItems(order)
-        if (receiptItems.isEmpty()) {
-            Log.w("YagoEvotor", "Order ${order.id} has no valid receipt items")
-            return SellIntentResult.NoItems
-        }
-
-        return try {
-            val intent = createSellIntentViaReflection(receiptItems)
-            if (intent == null) {
-                SellIntentResult.EvotorUnavailable
-            } else {
-                SellIntentResult.Ready(intent)
-            }
-        } catch (error: Exception) {
-            Log.e("YagoEvotor", "Failed to create sell intent", error)
-            SellIntentResult.Error
-        }
-    }
-
-    private data class ReceiptItem(
-        val name: String,
-        val price: BigDecimal,
-        val quantity: BigDecimal
-    )
-
-    private fun buildReceiptItems(order: ApiClient.ActiveOrder): List<ReceiptItem> {
-        val fallbackOrderTotal = order.total
-        val fallbackItemTotal =
-            if (order.items.isNotEmpty() && fallbackOrderTotal > 0.0)
-                fallbackOrderTotal / order.items.size
-            else 0.0
-
-        return order.items.mapNotNull { item ->
-            if (item.name.isBlank() || item.qty <= 0.0) return@mapNotNull null
-
-            val lineTotal = when {
-                item.total > 0.0 -> item.total
-                fallbackItemTotal > 0.0 -> fallbackItemTotal
-                else -> return@mapNotNull null
-            }
-
-            val unitPrice = (lineTotal / item.qty).coerceAtLeast(0.01)
-            val roundedUnitPrice = (unitPrice * 100.0).roundToLong().coerceAtLeast(1L) / 100.0
-
-            ReceiptItem(
-                name = item.name,
-                price = BigDecimal.valueOf(roundedUnitPrice),
-                quantity = BigDecimal.valueOf(item.qty)
-            )
-        }
-    }
-
-    private fun createSellIntentViaReflection(
-        receiptItems: List<ReceiptItem>
-    ): Intent? {
-        val positionChanges = receiptItems.map {
-            val position = createPositionViaReflection(it.name, it.price, it.quantity)
-            createPositionAddViaReflection(position)
-        }
-
-        val integrationClass =
-            sequenceOf(
-                "ru.evotor.framework.core.IntegrationApi",
-                "ru.evotor.framework.core.IntegrationAPI"
-            )
-                .mapNotNull {
-                    runCatching { Class.forName(it) }.getOrNull()
-                }
-                .firstOrNull()
-                ?: return null
-
-        val method =
-            integrationClass.methods.firstOrNull {
-                it.name == "createSellReceiptIntent" &&
-                        it.parameterTypes.size == 1 &&
-                        List::class.java.isAssignableFrom(it.parameterTypes[0])
-            } ?: return null
-
-        val receiver =
-            if (java.lang.reflect.Modifier.isStatic(method.modifiers)) null
-            else runCatching {
-                integrationClass.getField("INSTANCE").get(null)
-            }.getOrNull() ?: return null
-
-        return method.invoke(receiver, positionChanges) as? Intent
-    }
-
-    private fun createPositionAddViaReflection(position: Any): Any {
-        val positionAddClass = Class.forName("ru.evotor.framework.receipt.changes.position.PositionAdd")
-        val constructor = positionAddClass.constructors.firstOrNull { candidate ->
-            candidate.parameterTypes.size == 1 && candidate.parameterTypes[0].isAssignableFrom(position.javaClass)
-        } ?: error("PositionAdd constructor not found")
-
-        return constructor.newInstance(position)
-    }
-
-    private fun createPositionViaReflection(
-        itemName: String,
-        price: BigDecimal,
-        quantity: BigDecimal
-    ): Any {
-        val positionClass = Class.forName("ru.evotor.framework.receipt.Position")
-        val builderClass = Class.forName("ru.evotor.framework.receipt.Position\$Builder")
-
-        val newInstanceMethod =
-            builderClass.methods.firstOrNull {
-                it.name == "newInstance" &&
-                        it.parameterTypes.size == 7 &&
-                        it.parameterTypes[0] == String::class.java &&
-                        it.parameterTypes[2] == String::class.java
-            }
-
-        if (newInstanceMethod != null) {
-            val builder = newInstanceMethod.invoke(
-                null,
-                UUID.randomUUID().toString(),
-                null,
-                itemName,
-                "шт",
-                0,
-                price,
-                quantity
-            )
-
-            return builderClass.getMethod("build").invoke(builder)
-                ?: error("Position.Builder.build returned null")
-        }
-
-        val builder =
-            runCatching { builderClass.getConstructor(String::class.java).newInstance(itemName) }
-                .getOrElse {
-                    val directPosition = instantiatePosition(positionClass, itemName, price, quantity)
-                    builderClass.getConstructor(positionClass).newInstance(directPosition)
-                }
-
-        val setPriceMethod =
-            builderClass.methods.firstOrNull { it.name == "setPrice" && it.parameterTypes.size == 1 }
-                ?: error("Position.Builder.setPrice not found")
-
-        when (setPriceMethod.parameterTypes[0]) {
-            java.lang.Long.TYPE,
-            java.lang.Long::class.java -> setPriceMethod.invoke(builder, price.multiply(BigDecimal.valueOf(100)).longValueExact())
-
-            BigDecimal::class.java -> setPriceMethod.invoke(builder, price)
-            else -> error("Unsupported price type for Position.Builder.setPrice")
-        }
-
-        builderClass.methods
-            .firstOrNull {
-                it.name == "setQuantity" &&
-                        it.parameterTypes.size == 1 &&
-                        it.parameterTypes[0] == BigDecimal::class.java
-            }
-            ?.invoke(builder, quantity)
-
-        return builderClass.getMethod("build").invoke(builder)
-            ?: error("Position.Builder.build returned null")
-    }
-
-    private fun instantiatePosition(
-        positionClass: Class<*>,
-        itemName: String,
-        price: BigDecimal,
-        quantity: BigDecimal
-    ): Any {
-        val constructors = positionClass.declaredConstructors.sortedBy { it.parameterCount }
-
-        constructors.forEach { constructor ->
-            val args = mutableListOf<Any?>()
-            var bigDecimalIndex = 0
-            var canUse = true
-
-            constructor.parameterTypes.forEach { param ->
-                val value = when (param) {
-                    String::class.java -> itemName
-                    java.lang.Long.TYPE,
-                    java.lang.Long::class.java -> price.multiply(BigDecimal.valueOf(100)).longValueExact()
-
-                    java.lang.Integer.TYPE,
-                    java.lang.Integer::class.java -> 0
-
-                    java.lang.Boolean.TYPE,
-                    java.lang.Boolean::class.java -> false
-
-                    BigDecimal::class.java -> {
-                        bigDecimalIndex += 1
-                        if (bigDecimalIndex == 1) price else quantity
-                    }
-
-                    List::class.java,
-                    MutableList::class.java,
-                    java.util.Collection::class.java -> emptyList<Any>()
-
-                    else -> if (!param.isPrimitive) null else {
-                        canUse = false
-                        null
-                    }
-                }
-
-                args += value
-            }
-
-            if (!canUse) return@forEach
-
-            val instance = runCatching {
-                constructor.isAccessible = true
-                constructor.newInstance(*args.toTypedArray())
-            }.getOrNull()
-
-            if (instance != null) return instance
-        }
-
-        error("Cannot instantiate ru.evotor.framework.receipt.Position")
-    }
-
     private fun updateOrders(orders: List<ApiClient.ActiveOrder>) {
 
         val previouslySelectedOrderId = getSelectedOrderId()
@@ -460,6 +230,14 @@ class MainActivity : AppCompatActivity() {
         if (restoreIndex >= 0) {
             findViewById<ListView>(R.id.ordersList)
                 .setItemChecked(restoreIndex, true)
+        }
+
+        val remoteOrderId = pendingRemoteOrderId
+        if (!remoteOrderId.isNullOrBlank()) {
+            val remoteIndex = activeOrders.indexOfFirst { it.id == remoteOrderId }
+            if (remoteIndex >= 0) {
+                findViewById<ListView>(R.id.ordersList).setItemChecked(remoteIndex, true)
+            }
         }
     }
 
@@ -505,12 +283,242 @@ class MainActivity : AppCompatActivity() {
             order.items.joinToString(separator = "\n") { item ->
                 getString(
                     R.string.orders_item_line,
-                    item.name,
-                    item.qty,
-                    currencyFormat.format(item.total)
+                    "${item.name} x${item.qty} = ${currencyFormat.format(item.total)}"
                 )
             }
 
         return "$header\n$lines"
+    }
+
+    private fun processRemoteSaleCommandIfAny(session: com.yago.evotor.auth.Session) {
+        if (isProcessingRemoteSaleCommand) return
+
+        val command = try {
+            ApiClient.fetchPendingSaleCommand(session.baseUrl, session.accessToken)
+        } catch (_: Exception) {
+            return
+        } ?: return
+
+        isProcessingRemoteSaleCommand = true
+        pendingRemoteOrderId = command.targetOrderId
+
+        Log.i("YagoEvotor", "Received remote sale command ${command.id} for order ${command.targetOrderId}")
+
+        runOnUiThread {
+            try {
+                if (!openSellReceiptWithItems(command.order)) {
+                    Toast.makeText(
+                        this,
+                        "Не удалось открыть окно продажи (проверьте Эвотор среду)",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    Thread {
+                        try {
+                            ApiClient.ackSaleCommand(
+                                session.baseUrl,
+                                session.accessToken,
+                                command.id,
+                                "failed",
+                                "evotor_sale_receipt_activity_not_available"
+                            )
+                        } catch (ackError: Exception) {
+                            Log.e("YagoEvotor", "Failed to ack unavailable activity", ackError)
+                        } finally {
+                            isProcessingRemoteSaleCommand = false
+                            pendingRemoteOrderId = null
+                        }
+                    }.start()
+                    return@runOnUiThread
+                }
+
+                Toast.makeText(this, "Команда продажи получена: открываю чек", Toast.LENGTH_SHORT).show()
+
+                Thread {
+                    try {
+                        ApiClient.ackSaleCommand(
+                            session.baseUrl,
+                            session.accessToken,
+                            command.id,
+                            "accepted"
+                        )
+                    } catch (error: Exception) {
+                        Log.e("YagoEvotor", "Failed to ack accepted sale command", error)
+                    } finally {
+                        isProcessingRemoteSaleCommand = false
+                        pendingRemoteOrderId = null
+                    }
+                }.start()
+            } catch (error: Exception) {
+                Log.e("YagoEvotor", "Remote sale command handling failed", error)
+                Thread {
+                    try {
+                        ApiClient.ackSaleCommand(
+                            session.baseUrl,
+                            session.accessToken,
+                            command.id,
+                            "failed",
+                            error.message ?: "Failed to open sell receipt"
+                        )
+                    } catch (ackError: Exception) {
+                        Log.e("YagoEvotor", "Failed to ack failed sale command", ackError)
+                    } finally {
+                        isProcessingRemoteSaleCommand = false
+                        pendingRemoteOrderId = null
+                    }
+                }.start()
+            }
+        }
+    }
+
+    private fun openSellReceiptEditor(): Boolean {
+        return try {
+            val intent = NavigationApi.createIntentForSellReceiptEdit(false)
+            val canHandle = intent.resolveActivity(packageManager) != null
+            if (!canHandle) {
+                Log.w("YagoEvotor", "No activity found for Evotor sell receipt intent")
+                false
+            } else {
+                startActivity(intent)
+                true
+            }
+        } catch (error: Throwable) {
+            Log.e("YagoEvotor", "Failed to start Evotor sell receipt activity", error)
+            false
+        }
+    }
+
+    private fun openSellReceiptWithItems(order: ApiClient.ActiveOrder): Boolean {
+        return runCatching {
+            val positionAdds = buildPositionAdds(order)
+            if (positionAdds.isEmpty()) return false
+
+            val commandClass = Class.forName("ru.evotor.framework.core.action.command.open_receipt.OpenSellReceiptCommand")
+
+            val constructor = commandClass.constructors
+                .firstOrNull { ctor ->
+                    val params = ctor.parameterTypes
+                    params.isNotEmpty() && List::class.java.isAssignableFrom(params[0])
+                }
+                ?: return false
+
+            val command = when (constructor.parameterCount) {
+                1 -> constructor.newInstance(positionAdds)
+                else -> {
+                    val args = Array<Any?>(constructor.parameterCount) { null }
+                    args[0] = positionAdds
+                    constructor.newInstance(*args)
+                }
+            }
+
+            val processMethod = commandClass.methods.firstOrNull { method ->
+                method.name == "process" &&
+                    method.parameterTypes.size == 2 &&
+                    android.content.Context::class.java.isAssignableFrom(method.parameterTypes[0])
+            }
+
+            if (processMethod != null) {
+                processMethod.invoke(command, this, null)
+                true
+            } else {
+                openSellReceiptEditor()
+            }
+        }.getOrElse { error ->
+            Log.e("YagoEvotor", "openSellReceiptWithItems failed", error)
+            PendingSellOrderStore.set(order)
+            openSellReceiptEditor()
+        }
+    }
+
+    private fun buildPositionAdds(order: ApiClient.ActiveOrder): List<Any> {
+        val builderClass = Class.forName("ru.evotor.framework.receipt.Position\$Builder")
+        val buildMethod = builderClass.getMethod("build")
+        val newInstanceMethods = builderClass.methods.filter { it.name == "newInstance" }
+
+        val positionAddClass = sequenceOf(
+            "ru.evotor.framework.core.action.event.receipt.changes.position.PositionAdd",
+            "ru.evotor.framework.receipt.changes.position.PositionAdd"
+        ).mapNotNull { runCatching { Class.forName(it) }.getOrNull() }
+            .firstOrNull() ?: return emptyList()
+
+        val positionAddCtor = positionAddClass.constructors.minByOrNull { it.parameterCount } ?: return emptyList()
+
+        return order.items.mapNotNull { item ->
+            if (item.name.isBlank() || item.qty <= 0.0 || item.total <= 0.0) return@mapNotNull null
+
+            val unitPrice = item.total / item.qty
+            val rounded = (unitPrice * 100.0).roundToLong().coerceAtLeast(1L) / 100.0
+
+            val position =
+                newInstanceMethods.firstOrNull { method ->
+                    val p = method.parameterTypes
+                    p.size == 7 && p[0] == String::class.java && p[3] == String::class.java
+                }?.let { method ->
+                    val builder = method.invoke(
+                        null,
+                        UUID.randomUUID().toString(),
+                        null,
+                        item.name,
+                        "шт",
+                        0,
+                        BigDecimal.valueOf(rounded),
+                        BigDecimal.valueOf(item.qty)
+                    )
+                    buildMethod.invoke(builder)
+                } ?: run {
+                    val methodWithMeasure = newInstanceMethods.firstOrNull { m ->
+                        val p = m.parameterTypes
+                        p.size == 6 && p.any { t -> t.name.endsWith("Measure") }
+                    } ?: return@mapNotNull null
+
+                    val args = arrayOfNulls<Any>(methodWithMeasure.parameterCount)
+                    val params = methodWithMeasure.parameterTypes
+                    var bigDecimalCount = 0
+                    for (index in params.indices) {
+                        args[index] = when {
+                            params[index] == String::class.java && index == 0 -> UUID.randomUUID().toString()
+                            params[index] == String::class.java && index == 2 -> item.name
+                            params[index] == BigDecimal::class.java -> {
+                                bigDecimalCount += 1
+                                if (bigDecimalCount == 1) BigDecimal.valueOf(rounded) else BigDecimal.valueOf(item.qty)
+                            }
+                            params[index].name.endsWith("Measure") -> instantiateMeasure(params[index])
+                            params[index] == Int::class.javaPrimitiveType || params[index] == Int::class.java -> 0
+                            else -> null
+                        }
+                    }
+
+                    val builder = methodWithMeasure.invoke(null, *args)
+                    buildMethod.invoke(builder)
+                }
+
+            val positionAddArgs = positionAddCtor.parameterTypes.map { type ->
+                when {
+                    type.isAssignableFrom(position.javaClass) -> position
+                    type == Int::class.javaPrimitiveType || type == Int::class.java -> 0
+                    type == Boolean::class.javaPrimitiveType || type == Boolean::class.java -> false
+                    type == String::class.java -> ""
+                    else -> null
+                }
+            }.toTypedArray()
+
+            positionAddCtor.newInstance(*positionAddArgs)
+        }
+    }
+
+    private fun instantiateMeasure(measureClass: Class<*>): Any {
+        for (constructor in measureClass.constructors.sortedBy { it.parameterCount }) {
+            val args = constructor.parameterTypes.map { type ->
+                when (type) {
+                    String::class.java -> "шт"
+                    Int::class.javaPrimitiveType, Int::class.java -> 0
+                    Boolean::class.javaPrimitiveType, Boolean::class.java -> false
+                    else -> null
+                }
+            }.toTypedArray()
+
+            runCatching { constructor.newInstance(*args) }.getOrNull()?.let { return it }
+        }
+
+        error("Cannot instantiate measure class: ${measureClass.name}")
     }
 }

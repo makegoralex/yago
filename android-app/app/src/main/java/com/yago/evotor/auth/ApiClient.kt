@@ -50,6 +50,12 @@ object ApiClient {
         val items: List<OrderItem>
     )
 
+    data class SaleCommand(
+        val id: String,
+        val targetOrderId: String,
+        val order: ActiveOrder
+    )
+
     data class HealthCheckResult(
         val endpoint: String,
         val statusCode: Int
@@ -172,6 +178,85 @@ object ApiClient {
         }
 
         return orders
+    }
+
+    fun fetchPendingSaleCommand(baseUrl: String, accessToken: String): SaleCommand? {
+        val endpoint = baseUrl.trimEnd('/') + "/api/evotor/sale-commands/pending"
+
+        val response = executeRequest(
+            endpoint,
+            "GET",
+            null,
+            mapOf("X-Yago-App-Token" to accessToken)
+        )
+
+        if (response.statusCode !in 200..299) {
+            throw ApiException(response.statusCode, extractErrorMessage(response.body))
+        }
+
+        val root = JSONObject(response.body)
+        val data = root.optJSONObject("data") ?: return null
+
+        val commandId = data.optString("id", "")
+        val orderJson = data.optJSONObject("order") ?: return null
+
+        if (commandId.isBlank()) return null
+
+        val itemsArray = orderJson.optJSONArray("items") ?: JSONArray()
+        val items = mutableListOf<OrderItem>()
+
+        for (i in 0 until itemsArray.length()) {
+            val itemJson = itemsArray.optJSONObject(i) ?: continue
+            val name = itemJson.optString("name", "")
+            if (name.isBlank()) continue
+
+            items.add(
+                OrderItem(
+                    name = name,
+                    qty = itemJson.optDouble("qty", 0.0),
+                    total = itemJson.optDouble("total", 0.0)
+                )
+            )
+        }
+
+        return SaleCommand(
+            id = commandId,
+            targetOrderId = orderJson.optString("id", ""),
+            order = ActiveOrder(
+                id = orderJson.optString("id", ""),
+                status = orderJson.optString("status", ""),
+                total = orderJson.optDouble("total", 0.0),
+                items = items
+            )
+        )
+    }
+
+    fun ackSaleCommand(
+        baseUrl: String,
+        accessToken: String,
+        commandId: String,
+        status: String,
+        errorMessage: String? = null
+    ) {
+        val endpoint = baseUrl.trimEnd('/') + "/api/evotor/sale-commands/$commandId/ack"
+
+        val payload = JSONObject().apply {
+            put("status", status)
+            if (!errorMessage.isNullOrBlank()) {
+                put("errorMessage", errorMessage)
+            }
+        }
+
+        val response = executeRequest(
+            endpoint,
+            "POST",
+            payload,
+            mapOf("X-Yago-App-Token" to accessToken)
+        )
+
+        if (response.statusCode !in 200..299) {
+            throw ApiException(response.statusCode, extractErrorMessage(response.body))
+        }
     }
 
     private data class HttpResponse(
