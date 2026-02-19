@@ -444,7 +444,7 @@ class MainActivity : IntegrationAppCompatActivity() {
             if (item.name.isBlank() || item.qty <= 0.0 || item.total <= 0.0) return@mapNotNull null
 
             val unitPrice = item.total / item.qty
-            val rounded = (unitPrice * 100.0).roundToLong().coerceAtLeast(1L) / 100.0
+            val rounded = (Math.round(unitPrice * 100.0)).coerceAtLeast(1L) / 100.0
 
             val position =
                 newInstanceMethods.firstOrNull { method ->
@@ -453,13 +453,13 @@ class MainActivity : IntegrationAppCompatActivity() {
                 }?.let { method ->
                     val builder = method.invoke(
                         null,
-                        UUID.randomUUID().toString(),
+                        java.util.UUID.randomUUID().toString(),
                         null,
                         item.name,
                         "шт",
                         0,
-                        BigDecimal.valueOf(rounded),
-                        BigDecimal.valueOf(item.qty)
+                        BigDecimal.valueOf(rounded.toDouble()),
+                        BigDecimal.valueOf(item.qty.toDouble())
                     )
                     buildMethod.invoke(builder)
                 } ?: run {
@@ -473,11 +473,14 @@ class MainActivity : IntegrationAppCompatActivity() {
                     var bigDecimalCount = 0
                     for (index in params.indices) {
                         args[index] = when {
-                            params[index] == String::class.java && index == 0 -> UUID.randomUUID().toString()
+                            params[index] == String::class.java && index == 0 -> java.util.UUID.randomUUID().toString()
                             params[index] == String::class.java && index == 2 -> item.name
                             params[index] == BigDecimal::class.java -> {
                                 bigDecimalCount += 1
-                                if (bigDecimalCount == 1) BigDecimal.valueOf(rounded) else BigDecimal.valueOf(item.qty)
+                                if (bigDecimalCount == 1)
+                                    BigDecimal.valueOf(rounded.toDouble())
+                                else
+                                    BigDecimal.valueOf(item.qty.toDouble())
                             }
                             params[index].name.endsWith("Measure") -> instantiateMeasure(params[index])
                             params[index] == Int::class.javaPrimitiveType || params[index] == Int::class.java -> 0
