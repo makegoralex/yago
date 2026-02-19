@@ -660,6 +660,7 @@ const AdminPage: React.FC = () => {
     imageUrl: '',
   });
   const [newProductModifierIds, setNewProductModifierIds] = useState<string[]>([]);
+  const [newProductError, setNewProductError] = useState<string | null>(null);
   const [productIngredients, setProductIngredients] = useState<
     Array<{ ingredientId: string; quantity: string; unit?: string }>
   >([{ ingredientId: '', quantity: '', unit: '' }]);
@@ -2822,6 +2823,7 @@ const AdminPage: React.FC = () => {
     });
     setNewProductModifierIds([]);
     setProductIngredients([{ ingredientId: '', quantity: '' }]);
+    setNewProductError(null);
   }, []);
 
   const mapProductIngredientsToForm = useCallback(
@@ -3264,9 +3266,6 @@ const AdminPage: React.FC = () => {
 
   const handleDeleteProduct = async (productId: string) => {
     if (!productId) return;
-    if (!window.confirm('Удалить позицию? Действие нельзя отменить.')) {
-      return;
-    }
 
     try {
       await api.delete(`/api/catalog/products/${productId}`);
@@ -3277,7 +3276,7 @@ const AdminPage: React.FC = () => {
       }
       await loadMenuData();
     } catch (error) {
-      notify({ title: 'Не удалось удалить позицию', type: 'error' });
+      notify({ title: extractErrorMessage(error, 'Не удалось удалить позицию'), type: 'error' });
     }
   };
 
@@ -3346,10 +3345,14 @@ const AdminPage: React.FC = () => {
 
   const handleCreateProduct = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!newProduct.name.trim() || !newProduct.categoryId) {
-      notify({ title: 'Заполните название и категорию', type: 'info' });
+    if (!newProduct.name.trim() || !newProduct.categoryId || !newProduct.basePrice.trim()) {
+      const message = 'Заполните обязательные поля: название, категорию и цену';
+      setNewProductError(message);
+      notify({ title: message, type: 'info' });
       return;
     }
+
+    setNewProductError(null);
 
     try {
       const payload: Record<string, unknown> = {
@@ -3398,7 +3401,9 @@ const AdminPage: React.FC = () => {
       }
       void loadMenuData();
     } catch (error) {
-      notify({ title: 'Не удалось создать позицию', type: 'error' });
+      const message = extractErrorMessage(error, 'Не удалось создать позицию');
+      setNewProductError(message);
+      notify({ title: message, type: 'error' });
     }
   };
 
@@ -5639,8 +5644,8 @@ const AdminPage: React.FC = () => {
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => {
-                                              handleDeleteProduct(product._id);
+                                            onClick={async () => {
+                                              await handleDeleteProduct(product._id);
                                               setOpenActionMenuId(null);
                                             }}
                                             className="w-full rounded-lg px-2 py-1 text-left text-red-600 hover:bg-red-50"
@@ -5738,8 +5743,8 @@ const AdminPage: React.FC = () => {
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => {
-                                            handleDeleteProduct(product._id);
+                                          onClick={async () => {
+                                            await handleDeleteProduct(product._id);
                                             setOpenActionMenuId(null);
                                           }}
                                           className="w-full rounded-lg px-2 py-1 text-left text-red-600 hover:bg-red-50"
@@ -5853,10 +5858,17 @@ const AdminPage: React.FC = () => {
                                 value={isCreatingProduct ? newProduct.name : productEditForm.name}
                                 onChange={(event) =>
                                   isCreatingProduct
-                                    ? setNewProduct((prev) => ({ ...prev, name: event.target.value }))
+                                    ? (() => {
+                                        setNewProduct((prev) => ({ ...prev, name: event.target.value }));
+                                        if (newProductError) setNewProductError(null);
+                                      })()
                                     : handleProductEditFieldChange('name', event.target.value)
                                 }
-                                className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                                className={`w-full rounded-2xl border px-3 py-2 ${
+                                  isCreatingProduct && !newProduct.name.trim() && newProductError
+                                    ? 'border-red-300'
+                                    : 'border-slate-200'
+                                }`}
                               />
                             </div>
                             <div className="space-y-2">
@@ -5865,10 +5877,17 @@ const AdminPage: React.FC = () => {
                                 value={isCreatingProduct ? newProduct.categoryId : productEditForm.categoryId}
                                 onChange={(event) =>
                                   isCreatingProduct
-                                    ? setNewProduct((prev) => ({ ...prev, categoryId: event.target.value }))
+                                    ? (() => {
+                                        setNewProduct((prev) => ({ ...prev, categoryId: event.target.value }));
+                                        if (newProductError) setNewProductError(null);
+                                      })()
                                     : handleProductEditFieldChange('categoryId', event.target.value)
                                 }
-                                className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                                className={`w-full rounded-2xl border px-3 py-2 ${
+                                  isCreatingProduct && !newProduct.categoryId && newProductError
+                                    ? 'border-red-300'
+                                    : 'border-slate-200'
+                                }`}
                               >
                                 <option value="">Выберите категорию</option>
                                 {categories.map((category) => (
@@ -5917,12 +5936,22 @@ const AdminPage: React.FC = () => {
                                 }
                                 onChange={(event) =>
                                   isCreatingProduct
-                                    ? setNewProduct((prev) => ({ ...prev, basePrice: event.target.value }))
+                                    ? (() => {
+                                        setNewProduct((prev) => ({ ...prev, basePrice: event.target.value }));
+                                        if (newProductError) setNewProductError(null);
+                                      })()
                                     : handleProductEditFieldChange('basePrice', event.target.value)
                                 }
-                                className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                                className={`w-full rounded-2xl border px-3 py-2 ${
+                                  isCreatingProduct && !newProduct.basePrice.trim() && newProductError
+                                    ? 'border-red-300'
+                                    : 'border-slate-200'
+                                }`}
                               />
                             </div>
+                            {isCreatingProduct && newProductError ? (
+                              <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{newProductError}</p>
+                            ) : null}
                             {!isCreatingProduct ? (
                               <div className="space-y-2">
                                 <label className="text-xs font-semibold uppercase text-slate-400">Статус</label>
