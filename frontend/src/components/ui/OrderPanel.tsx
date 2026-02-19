@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 
 import type {
   AppliedDiscount,
@@ -110,6 +110,13 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
     return `−${discount.value.toFixed(2)} ₽`;
   };
 
+  const [isDiscountPickerOpen, setDiscountPickerOpen] = useState(false);
+
+  const selectedManualDiscounts = useMemo(
+    () => selectableDiscounts.filter((discountOption) => selectedDiscountIds.includes(discountOption._id)),
+    [selectableDiscounts, selectedDiscountIds]
+  );
+
   return (
     <aside
       className={`custom-scrollbar flex h-full w-full min-h-0 flex-col overflow-y-auto overflow-x-hidden overscroll-x-none rounded-xl bg-white shadow-soft transition-transform ${
@@ -208,8 +215,15 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
       ) : null}
       {selectableDiscounts.length > 0 ? (
         <div className="mx-4 mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
-          {onClearDiscount && hasResettableDiscounts ? (
-            <div className="flex items-center justify-end">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setDiscountPickerOpen((prev) => !prev)}
+              className="h-9 rounded-lg border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-800 transition hover:border-amber-400"
+            >
+              + Добавить скидку
+            </button>
+            {onClearDiscount && hasResettableDiscounts ? (
               <button
                 type="button"
                 onClick={onClearDiscount}
@@ -217,30 +231,49 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
               >
                 Сбросить все
               </button>
-            </div>
-          ) : null}
-          <div className={`flex flex-wrap gap-2 ${onClearDiscount && hasResettableDiscounts ? 'mt-3' : ''}`}>
-            {selectableDiscounts.map((discountOption) => {
-              const isSelected = selectedDiscountIds.includes(discountOption._id);
-              return (
+            ) : null}
+          </div>
+
+          {isDiscountPickerOpen ? (
+            <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-lg border border-amber-200 bg-white p-2">
+              {selectableDiscounts.map((discountOption) => (
                 <button
                   key={discountOption._id}
                   type="button"
-                  onClick={() => onToggleDiscount?.(discountOption._id)}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                    isSelected
-                      ? 'border-amber-500 bg-amber-500 text-white'
-                      : 'border-amber-200 bg-white text-amber-700 hover:border-amber-400'
-                  }`}
+                  onClick={() => {
+                    onToggleDiscount?.(discountOption._id);
+                    setDiscountPickerOpen(false);
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-amber-800 transition hover:bg-amber-50"
                 >
-                  <span>{discountOption.name}</span>
-                  <span className="ml-2 text-[10px] uppercase text-amber-200">
-                    {formatDiscountValue(discountOption)}
-                  </span>
+                  <span className="truncate">{discountOption.name}</span>
+                  <span className="ml-2 shrink-0 text-[11px] text-amber-700">{formatDiscountValue(discountOption)}</span>
                 </button>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : null}
+
+          {selectedManualDiscounts.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {selectedManualDiscounts.map((discountOption) => (
+                <div
+                  key={`selected-${discountOption._id}`}
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-amber-800"
+                >
+                  <span className="max-w-[160px] truncate">{discountOption.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => onToggleDiscount?.(discountOption._id)}
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] leading-none text-amber-700 transition hover:bg-amber-100"
+                    aria-label={`Убрать скидку ${discountOption.name}`}
+                    title={`Убрать скидку ${discountOption.name}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
       <div className="flex-1 px-4">
