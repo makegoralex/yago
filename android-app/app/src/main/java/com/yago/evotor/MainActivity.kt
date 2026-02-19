@@ -26,6 +26,7 @@ class MainActivity : IntegrationAppCompatActivity() {
 
     private var pollingRunnable: Runnable? = null
     @Volatile private var isProcessingRemoteSaleCommand = false
+    @Volatile private var pendingRemoteOrderId: String? = null
     private val activeOrders = mutableListOf<ApiClient.ActiveOrder>()
     private lateinit var ordersAdapter: ArrayAdapter<String>
 
@@ -92,9 +93,15 @@ class MainActivity : IntegrationAppCompatActivity() {
 
             try {
                 PendingSellOrderStore.set(order)
-                val intent = NavigationApi.createIntentForSellReceiptEdit(false)
-                startActivity(intent)
-            } catch (_: Throwable) {
+                if (!openSellReceiptEditor()) {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.sale_intent_error),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (error: Throwable) {
+                Log.e("YagoEvotor", "Manual sale launch failed", error)
                 Toast.makeText(
                     this,
                     getString(R.string.sale_intent_error),
@@ -222,6 +229,14 @@ class MainActivity : IntegrationAppCompatActivity() {
             findViewById<ListView>(R.id.ordersList)
                 .setItemChecked(restoreIndex, true)
         }
+
+        val remoteOrderId = pendingRemoteOrderId
+        if (!remoteOrderId.isNullOrBlank()) {
+            val remoteIndex = activeOrders.indexOfFirst { it.id == remoteOrderId }
+            if (remoteIndex >= 0) {
+                findViewById<ListView>(R.id.ordersList).setItemChecked(remoteIndex, true)
+            }
+        }
     }
 
     private fun showErrorRow(
@@ -283,11 +298,41 @@ class MainActivity : IntegrationAppCompatActivity() {
         } ?: return
 
         isProcessingRemoteSaleCommand = true
+        pendingRemoteOrderId = command.targetOrderId
+
+        Log.i("YagoEvotor", "Received remote sale command ${command.id} for order ${command.targetOrderId}")
 
         runOnUiThread {
             try {
                 PendingSellOrderStore.set(command.order)
-                startActivity(NavigationApi.createIntentForSellReceiptEdit(false))
+
+                if (!openSellReceiptEditor()) {
+                    Toast.makeText(
+                        this,
+                        "Не удалось открыть окно продажи (проверьте Эвотор среду)",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    Thread {
+                        try {
+                            ApiClient.ackSaleCommand(
+                                session.baseUrl,
+                                session.accessToken,
+                                command.id,
+                                "failed",
+                                "evotor_sale_receipt_activity_not_available"
+                            )
+                        } catch (ackError: Exception) {
+                            Log.e("YagoEvotor", "Failed to ack unavailable activity", ackError)
+                        } finally {
+                            isProcessingRemoteSaleCommand = false
+                            pendingRemoteOrderId = null
+                        }
+                    }.start()
+                    return@runOnUiThread
+                }
+
+                Toast.makeText(this, "Команда продажи получена: открываю чек", Toast.LENGTH_SHORT).show()
+
                 Thread {
                     try {
                         ApiClient.ackSaleCommand(
@@ -300,9 +345,11 @@ class MainActivity : IntegrationAppCompatActivity() {
                         Log.e("YagoEvotor", "Failed to ack accepted sale command", error)
                     } finally {
                         isProcessingRemoteSaleCommand = false
+                        pendingRemoteOrderId = null
                     }
                 }.start()
             } catch (error: Exception) {
+                Log.e("YagoEvotor", "Remote sale command handling failed", error)
                 Thread {
                     try {
                         ApiClient.ackSaleCommand(
@@ -316,9 +363,27 @@ class MainActivity : IntegrationAppCompatActivity() {
                         Log.e("YagoEvotor", "Failed to ack failed sale command", ackError)
                     } finally {
                         isProcessingRemoteSaleCommand = false
+                        pendingRemoteOrderId = null
                     }
                 }.start()
             }
+        }
+    }
+
+    private fun openSellReceiptEditor(): Boolean {
+        return try {
+            val intent = NavigationApi.createIntentForSellReceiptEdit(false)
+            val canHandle = intent.resolveActivity(packageManager) != null
+            if (!canHandle) {
+                Log.w("YagoEvotor", "No activity found for Evotor sell receipt intent")
+                false
+            } else {
+                startActivity(intent)
+                true
+            }
+        } catch (error: Throwable) {
+            Log.e("YagoEvotor", "Failed to start Evotor sell receipt activity", error)
+            false
         }
     }
 }

@@ -52,6 +52,7 @@ object ApiClient {
 
     data class SaleCommand(
         val id: String,
+        val targetOrderId: String,
         val order: ActiveOrder
     )
 
@@ -220,6 +221,7 @@ object ApiClient {
 
         return SaleCommand(
             id = commandId,
+            targetOrderId = orderJson.optString("id", ""),
             order = ActiveOrder(
                 id = orderJson.optString("id", ""),
                 status = orderJson.optString("status", ""),
