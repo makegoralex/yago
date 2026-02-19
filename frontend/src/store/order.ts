@@ -554,6 +554,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         ...nextState,
         selectedDiscountIds,
       }));
+
       void get().fetchActiveOrders();
     } finally {
       set({ loading: false });
@@ -663,6 +664,13 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         ...nextState,
         selectedDiscountIds,
       }));
+
+      try {
+        await api.post('/api/evotor/sale-commands', { orderId });
+      } catch (error) {
+        console.warn('Failed to enqueue Evotor sale command', error);
+      }
+
       void get().fetchActiveOrders();
     } finally {
       set({ loading: false });

@@ -10,6 +10,7 @@ import android.widget.Button
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
+import android.util.Log
 import com.yago.evotor.auth.ApiClient
 import com.yago.evotor.auth.LoginActivity
 import com.yago.evotor.auth.SessionStorage
@@ -24,6 +25,7 @@ class MainActivity : IntegrationAppCompatActivity() {
     private val currencyFormat = DecimalFormat("0.00")
 
     private var pollingRunnable: Runnable? = null
+    @Volatile private var isProcessingRemoteSaleCommand = false
     private val activeOrders = mutableListOf<ApiClient.ActiveOrder>()
     private lateinit var ordersAdapter: ArrayAdapter<String>
 
@@ -117,6 +119,11 @@ class MainActivity : IntegrationAppCompatActivity() {
                             updateOrders(orders)
                             saleButton.isEnabled =
                                 ordersListView.checkedItemPosition in activeOrders.indices
+                        }
+
+                        val latestSession = sessionStorage.loadSession()
+                        if (latestSession != null) {
+                            processRemoteSaleCommandIfAny(latestSession)
                         }
 
                     } catch (error: SessionExpiredException) {
@@ -264,5 +271,54 @@ class MainActivity : IntegrationAppCompatActivity() {
             }
 
         return "$header\n$lines"
+    }
+
+    private fun processRemoteSaleCommandIfAny(session: com.yago.evotor.auth.Session) {
+        if (isProcessingRemoteSaleCommand) return
+
+        val command = try {
+            ApiClient.fetchPendingSaleCommand(session.baseUrl, session.accessToken)
+        } catch (_: Exception) {
+            return
+        } ?: return
+
+        isProcessingRemoteSaleCommand = true
+
+        runOnUiThread {
+            try {
+                PendingSellOrderStore.set(command.order)
+                startActivity(NavigationApi.createIntentForSellReceiptEdit(false))
+                Thread {
+                    try {
+                        ApiClient.ackSaleCommand(
+                            session.baseUrl,
+                            session.accessToken,
+                            command.id,
+                            "accepted"
+                        )
+                    } catch (error: Exception) {
+                        Log.e("YagoEvotor", "Failed to ack accepted sale command", error)
+                    } finally {
+                        isProcessingRemoteSaleCommand = false
+                    }
+                }.start()
+            } catch (error: Exception) {
+                Thread {
+                    try {
+                        ApiClient.ackSaleCommand(
+                            session.baseUrl,
+                            session.accessToken,
+                            command.id,
+                            "failed",
+                            error.message ?: "Failed to open sell receipt"
+                        )
+                    } catch (ackError: Exception) {
+                        Log.e("YagoEvotor", "Failed to ack failed sale command", ackError)
+                    } finally {
+                        isProcessingRemoteSaleCommand = false
+                    }
+                }.start()
+            }
+        }
     }
 }
