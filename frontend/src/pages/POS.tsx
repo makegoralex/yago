@@ -22,11 +22,13 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useShiftStore, type ShiftSummary } from '../store/shift';
 import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
+import { useToast } from '../providers/ToastProvider';
 
 const POSPage: React.FC = () => {
   const navigate = useNavigate();
   const isDesktop = useMediaQuery('(min-width: 1280px)');
   const isTablet = useMediaQuery('(min-width: 1024px)');
+  const { notify } = useToast();
   const {
     billing,
     billingEnabled,
@@ -754,7 +756,15 @@ const POSPage: React.FC = () => {
               availableDiscounts={availableDiscounts}
               appliedDiscounts={appliedDiscounts}
               selectedDiscountIds={selectedDiscountIds}
-              onToggleDiscount={(discountId) => void toggleDiscount(discountId).catch(() => undefined)}
+              onToggleDiscount={async (discountId) => {
+                try {
+                  await toggleDiscount(discountId);
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : 'Не удалось применить скидку';
+                  notify({ title: message, type: 'error' });
+                  throw error;
+                }
+              }}
               visible
             />
           </div>

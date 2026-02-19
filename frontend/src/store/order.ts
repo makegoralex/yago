@@ -913,6 +913,10 @@ export const useOrderStore = create<OrderState>((set, get) => ({
 
     try {
       await state.syncItems(state.items, { discountIds: nextSelection });
+      const resolvedSelection = get().selectedDiscountIds;
+      if (!hasDiscount && !resolvedSelection.includes(discountId)) {
+        throw new Error('Скидка не применена к текущему заказу');
+      }
     } catch (error) {
       set({ selectedDiscountIds: current });
       throw error;

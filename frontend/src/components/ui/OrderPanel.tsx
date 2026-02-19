@@ -32,7 +32,7 @@ type OrderPanelProps = {
   availableDiscounts?: DiscountSummary[];
   appliedDiscounts?: AppliedDiscount[];
   selectedDiscountIds?: string[];
-  onToggleDiscount?: (discountId: string) => void;
+  onToggleDiscount?: (discountId: string) => Promise<void> | void;
   isCompleting?: boolean;
   orderTagsEnabled?: boolean;
   orderTag?: OrderTag | null;
@@ -240,9 +240,13 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
                 <button
                   key={discountOption._id}
                   type="button"
-                  onClick={() => {
-                    onToggleDiscount?.(discountOption._id);
-                    setDiscountPickerOpen(false);
+                  onClick={async () => {
+                    try {
+                      await onToggleDiscount?.(discountOption._id);
+                      setDiscountPickerOpen(false);
+                    } catch (error) {
+                      // Ошибка отображается в родительском компоненте.
+                    }
                   }}
                   className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-amber-800 transition hover:bg-amber-50"
                 >
