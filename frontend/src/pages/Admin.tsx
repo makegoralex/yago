@@ -3266,9 +3266,6 @@ const AdminPage: React.FC = () => {
 
   const handleDeleteProduct = async (productId: string) => {
     if (!productId) return;
-    if (!window.confirm('Удалить позицию? Действие нельзя отменить.')) {
-      return;
-    }
 
     try {
       await api.delete(`/api/catalog/products/${productId}`);
