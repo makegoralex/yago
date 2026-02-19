@@ -2,6 +2,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="ru.evotor.permission.INTEGRATION" />
+    <uses-permission android:name="ru.evotor.permission.SALE" />
 
     <application
         android:allowBackup="false"
@@ -33,6 +35,16 @@
         <activity
             android:name=".MainActivity"
             android:exported="false" />
+
+        <service
+            android:name=".SellReceiptIntegrationService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <category android:name="android.intent.category.DEFAULT" />
+                <action android:name="evo.v2.receipt.sell.beforePositionsEdited" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

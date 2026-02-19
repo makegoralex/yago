@@ -3,14 +3,18 @@ import { Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { EvotorDeviceModel } from './evotor.model';
+import { EvotorSaleCommandModel } from './evotorSaleCommand.model';
 import { appConfig } from '../../config/env';
 import { authenticateUser } from '../../services/authService';
+import { OrderModel } from '../orders/order.model';
 const asyncHandler =
   (fn: (req: any, res: any) => Promise<void>) =>
   (req: any, res: any, next: any) =>
     Promise.resolve(fn(req, res)).catch(next);
 
 const evotorRouter = Router();
+const CASHIER_ROLES = ['cashier', 'owner', 'superAdmin'];
+const SALE_COMMAND_TTL_MS = 5 * 60 * 1000;
 
 const maskSecret = (value: string | undefined): string | undefined => {
   if (!value) {
@@ -269,6 +273,173 @@ evotorRouter.get(
       },
       error: null,
     });
+  })
+);
+
+evotorRouter.post(
+  '/sale-commands',
+  authMiddleware,
+  requireRole(CASHIER_ROLES),
+  asyncHandler(async (req, res) => {
+    const organizationId = req.user?.organizationId;
+    const orderId = typeof req.body?.orderId === 'string' ? req.body.orderId : '';
+
+    if (!organizationId || !Types.ObjectId.isValid(organizationId)) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    if (!Types.ObjectId.isValid(orderId)) {
+      res.status(400).json({ data: null, error: 'Valid orderId is required' });
+      return;
+    }
+
+    const order = await OrderModel.findOne({
+      _id: new Types.ObjectId(orderId),
+      organizationId: new Types.ObjectId(organizationId),
+    }).select('_id status total items');
+
+    if (!order) {
+      res.status(404).json({ data: null, error: 'Order not found' });
+      return;
+    }
+
+    const items = (order.items ?? [])
+      .filter((item) => item.name && item.qty > 0)
+      .map((item) => ({
+        name: item.name,
+        qty: item.qty,
+        total: item.total,
+      }));
+
+    if (!items.length) {
+      res.status(400).json({ data: null, error: 'Order does not have valid items' });
+      return;
+    }
+
+    const command = await EvotorSaleCommandModel.create({
+      organizationId: new Types.ObjectId(organizationId),
+      orderId: order._id,
+      requestedByUserId: req.user?.id && Types.ObjectId.isValid(req.user.id)
+        ? new Types.ObjectId(req.user.id)
+        : undefined,
+      orderSnapshot: {
+        id: order._id.toString(),
+        status: order.status,
+        total: order.total,
+        items,
+      },
+      status: 'pending',
+      expiresAt: new Date(Date.now() + SALE_COMMAND_TTL_MS),
+    });
+
+    res.status(201).json({
+      data: {
+        id: command._id,
+        status: command.status,
+        orderId: command.orderSnapshot.id,
+        createdAt: command.createdAt,
+      },
+      error: null,
+    });
+  })
+);
+
+evotorRouter.get(
+  '/sale-commands/pending',
+  authMiddleware,
+  asyncHandler(async (req, res) => {
+    const organizationId = req.user?.organizationId;
+
+    if (!organizationId || !Types.ObjectId.isValid(organizationId)) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const now = new Date();
+
+    await EvotorSaleCommandModel.updateMany(
+      {
+        organizationId: new Types.ObjectId(organizationId),
+        status: 'pending',
+        expiresAt: { $lte: now },
+      },
+      {
+        $set: {
+          status: 'failed',
+          errorMessage: 'Command expired before terminal pickup',
+          processedAt: now,
+        },
+      }
+    );
+
+    const command = await EvotorSaleCommandModel.findOne({
+      organizationId: new Types.ObjectId(organizationId),
+      status: 'pending',
+      expiresAt: { $gt: now },
+    }).sort({ createdAt: 1 });
+
+    if (!command) {
+      res.json({ data: null, error: null });
+      return;
+    }
+
+    res.json({
+      data: {
+        id: command._id,
+        order: command.orderSnapshot,
+        createdAt: command.createdAt,
+      },
+      error: null,
+    });
+  })
+);
+
+evotorRouter.post(
+  '/sale-commands/:commandId/ack',
+  authMiddleware,
+  asyncHandler(async (req, res) => {
+    const organizationId = req.user?.organizationId;
+    const commandId = req.params.commandId;
+    const status = req.body?.status;
+    const errorMessage = typeof req.body?.errorMessage === 'string' ? req.body.errorMessage : undefined;
+
+    if (!organizationId || !Types.ObjectId.isValid(organizationId)) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    if (!Types.ObjectId.isValid(commandId)) {
+      res.status(400).json({ data: null, error: 'Valid commandId is required' });
+      return;
+    }
+
+    if (status !== 'accepted' && status !== 'failed') {
+      res.status(400).json({ data: null, error: "status must be 'accepted' or 'failed'" });
+      return;
+    }
+
+    const command = await EvotorSaleCommandModel.findOneAndUpdate(
+      {
+        _id: new Types.ObjectId(commandId),
+        organizationId: new Types.ObjectId(organizationId),
+      },
+      {
+        $set: {
+          status,
+          errorMessage: status === 'failed' ? errorMessage ?? 'Unknown terminal error' : undefined,
+          processedAt: new Date(),
+        },
+      },
+      { new: true }
+    );
+
+    if (!command) {
+      res.status(404).json({ data: null, error: 'Command not found' });
+      return;
+    }
+
+    res.json({ data: { id: command._id, status: command.status }, error: null });
   })
 );
 
