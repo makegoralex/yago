@@ -18,8 +18,6 @@ import ru.evotor.framework.core.IntegrationAppCompatActivity
 import ru.evotor.framework.navigation.NavigationApi
 import java.math.BigDecimal
 import java.text.DecimalFormat
-import java.util.UUID
-import kotlin.math.roundToLong
 
 class MainActivity : IntegrationAppCompatActivity() {
 
