@@ -140,7 +140,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
               onClick={onClearCustomer}
               className="h-10 rounded-lg border border-slate-200 px-3 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-100"
             >
-              Сбросить
+              Сброс клиента
             </button>
           ) : null}
         </div>
