@@ -360,7 +360,7 @@ const LandingPage: React.FC = () => {
                   <span>
                     Я согласен на обработку персональных данных и принимаю условия{' '}
                     <a
-                      href="/documents/personal-data-policy.pdf"
+                      href="/license-agreement.pdf"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-semibold text-primary hover:text-primary-dark"
@@ -414,7 +414,7 @@ const LandingPage: React.FC = () => {
               <div className="px-2 text-[11px] uppercase tracking-wide text-slate-500">Документы</div>
               <div className="flex flex-wrap items-center gap-2">
                 <a
-                  href="/documents/oferta.pdf"
+                  href="/license-agreement.pdf"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
@@ -422,7 +422,7 @@ const LandingPage: React.FC = () => {
                   Оферта
                 </a>
                 <a
-                  href="/documents/personal-data-policy.pdf"
+                  href="/privacy-policy.pdf"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
@@ -430,7 +430,7 @@ const LandingPage: React.FC = () => {
                   Политика обработки персональных данных
                 </a>
                 <a
-                  href="/documents/rekvizity.pdf"
+                  href="/company-details.pdf"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
