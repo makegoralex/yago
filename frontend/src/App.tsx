@@ -76,7 +76,7 @@ const App: React.FC = () => {
           <Route path="/pos" element={<POSPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
-        <Route element={<ProtectedRoute allowed={['owner']} />}>
+        <Route element={<ProtectedRoute allowed={['owner', 'superAdmin']} />}>
           <Route path="/admin" element={<AdminPage />} />
         </Route>
         <Route element={<ProtectedRoute allowed={['superAdmin']} />}>
