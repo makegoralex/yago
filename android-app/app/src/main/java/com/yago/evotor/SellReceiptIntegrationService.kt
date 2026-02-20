@@ -22,8 +22,11 @@ class SellReceiptIntegrationService : IntegrationService() {
                     event: BeforePositionsEditedEvent,
                     callback: Callback
                 ) {
-                    val order = PendingSellOrderStore.consume()
+                    val order = PendingSellOrderStore.peek()
                     if (order == null || order.items.isEmpty()) {
+                        if (order != null) {
+                            PendingSellOrderStore.consumeFirst()
+                        }
                         callback.skip()
                         return
                     }
@@ -49,12 +52,14 @@ class SellReceiptIntegrationService : IntegrationService() {
                     }
 
                     if (changes.isEmpty()) {
+                        PendingSellOrderStore.consumeFirst()
                         callback.skip()
                         return
                     }
 
                     try {
                         callback.onResult(buildBeforePositionsEditedEventResult(changes))
+                        PendingSellOrderStore.consumeFirst()
                     } catch (error: Throwable) {
                         Log.e(TAG, "Failed to return BeforePositionsEditedEventResult", error)
                         callback.skip()
