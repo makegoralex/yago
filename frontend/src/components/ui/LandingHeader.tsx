@@ -13,12 +13,14 @@ const navItems = [
 type LandingHeaderProps = {
   onCtaClick?: () => void;
   ctaLabel?: string;
+  ctaMobileLabel?: string;
   ctaHref?: string;
 };
 
 const LandingHeader: React.FC<LandingHeaderProps> = ({
   onCtaClick,
   ctaLabel = 'Попробовать бесплатно 14 дней',
+  ctaMobileLabel = '14 дней бесплатно',
   ctaHref = '/#signup',
 }) => {
   const [compact, setCompact] = useState(false);
@@ -85,16 +87,18 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
             <button
               type="button"
               onClick={onCtaClick}
-              className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark"
+              className="rounded-[12px] bg-primary px-3 py-2 text-xs font-semibold whitespace-nowrap text-white shadow-sm transition hover:bg-primary-dark sm:px-4 sm:text-sm"
             >
-              {ctaLabel}
+              <span className="hidden sm:inline">{ctaLabel}</span>
+              <span className="sm:hidden">{ctaMobileLabel}</span>
             </button>
           ) : (
             <a
               href={ctaHref}
-              className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark"
+              className="rounded-[12px] bg-primary px-3 py-2 text-xs font-semibold whitespace-nowrap text-white shadow-sm transition hover:bg-primary-dark sm:px-4 sm:text-sm"
             >
-              {ctaLabel}
+              <span className="hidden sm:inline">{ctaLabel}</span>
+              <span className="sm:hidden">{ctaMobileLabel}</span>
             </a>
           )}
           <button
@@ -136,11 +140,13 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
                   }}
                   className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm"
                 >
-                  {ctaLabel}
+                  <span className="hidden sm:inline">{ctaLabel}</span>
+              <span className="sm:hidden">{ctaMobileLabel}</span>
                 </button>
               ) : (
                 <a href={ctaHref} className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm">
-                  {ctaLabel}
+                  <span className="hidden sm:inline">{ctaLabel}</span>
+              <span className="sm:hidden">{ctaMobileLabel}</span>
                 </a>
               )}
             </div>

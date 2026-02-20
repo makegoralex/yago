@@ -258,7 +258,7 @@ const LandingPage: React.FC = () => {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="heading-font text-3xl font-semibold text-slate-900">Новости продукта</h2>
-              <p className="mt-2 text-sm text-slate-500">Мы постоянно дорабатываем функционал</p>
+              <p className="mt-2 text-sm text-slate-500">Мы постоянно разрабатываем функционал</p>
             </div>
             <Link to="/news" className="text-sm font-semibold text-primary">
               Все новости
