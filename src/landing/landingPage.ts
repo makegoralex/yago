@@ -4,6 +4,40 @@ export const renderLandingPage = (): string => `
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <meta name="yandex-verification" content="4817e4cbcc2bb50d" />
+      <!-- Yandex.Metrika counter -->
+      <script type="text/javascript">
+        (function (m, e, t, r, i, k, a) {
+          m[i] =
+            m[i] ||
+            function () {
+              (m[i].a = m[i].a || []).push(arguments);
+            };
+          m[i].l = 1 * new Date();
+          for (var j = 0; j < document.scripts.length; j++) {
+            if (document.scripts[j].src === r) {
+              return;
+            }
+          }
+          k = e.createElement(t);
+          a = e.getElementsByTagName(t)[0];
+          k.async = 1;
+          k.src = r;
+          a.parentNode.insertBefore(k, a);
+        })(window, document, 'script', 'https://mc.yandex.ru/metrika/tag.js?id=106927062', 'ym');
+
+        ym(106927062, 'init', {
+          ssr: true,
+          webvisor: true,
+          clickmap: true,
+          ecommerce: 'dataLayer',
+          referrer: document.referrer,
+          url: location.href,
+          accurateTrackBounce: true,
+          trackLinks: true,
+        });
+      </script>
+      <!-- /Yandex.Metrika counter -->
       <title>Yago POS — платформа для современной торговли</title>
       <style>
         :root {
@@ -275,6 +309,9 @@ export const renderLandingPage = (): string => `
       </style>
     </head>
     <body>
+      <noscript>
+        <div><img src="https://mc.yandex.ru/watch/106927062" style="position:absolute; left:-9999px;" alt="" /></div>
+      </noscript>
       <header>
         <div class="logo" aria-label="Логотип Yago POS">
           <div class="logo-mark">Y</div>
