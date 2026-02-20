@@ -360,7 +360,7 @@ const LandingPage: React.FC = () => {
                   <span>
                     Я согласен на обработку персональных данных и принимаю условия{' '}
                     <a
-                      href="/license-agreement.pdf"
+                      href="/privacy-policy.pdf"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-semibold text-primary hover:text-primary-dark"
