@@ -63,7 +63,7 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
             YG
           </div>
           <div>
-            <div className="heading-font text-lg font-semibold text-slate-900">Yago POS</div>
+            <div className="heading-font text-lg font-semibold text-slate-900">Yago App</div>
             <div className="text-xs text-slate-500">Облачная POS-система</div>
           </div>
         </Link>
