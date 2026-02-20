@@ -4,18 +4,24 @@ import com.yago.evotor.auth.ApiClient
 
 object PendingSellOrderStore {
 
-    @Volatile
-    private var order: ApiClient.ActiveOrder? = null
+    private val queue = ArrayDeque<ApiClient.ActiveOrder>()
 
     @Synchronized
     fun set(order: ApiClient.ActiveOrder) {
-        this.order = order
+        // Keep queue bounded and deduplicate by order id to avoid stale growth
+        queue.removeAll { it.id == order.id }
+        queue.addLast(order)
+
+        while (queue.size > 5) {
+            queue.removeFirstOrNull()
+        }
     }
 
     @Synchronized
-    fun consume(): ApiClient.ActiveOrder? {
-        val current = order
-        order = null
-        return current
+    fun peek(): ApiClient.ActiveOrder? = queue.firstOrNull()
+
+    @Synchronized
+    fun consumeFirst() {
+        queue.removeFirstOrNull()
     }
 }

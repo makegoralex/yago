@@ -388,7 +388,10 @@ class MainActivity : IntegrationAppCompatActivity() {
     private fun openSellReceiptWithItems(order: ApiClient.ActiveOrder): Boolean {
         return runCatching {
             val positionAdds = buildPositionAdds(order)
-            if (positionAdds.isEmpty()) return false
+            if (positionAdds.isEmpty()) {
+                Log.w("YagoEvotor", "No valid position adds for order ${order.id}, fallback to integration service")
+                return openSellReceiptEditorWithPendingOrder(order)
+            }
 
             val commandClass = Class.forName("ru.evotor.framework.core.action.command.open_receipt.OpenSellReceiptCommand")
 
@@ -397,7 +400,7 @@ class MainActivity : IntegrationAppCompatActivity() {
                     val params = ctor.parameterTypes
                     params.isNotEmpty() && List::class.java.isAssignableFrom(params[0])
                 }
-                ?: return false
+                ?: return openSellReceiptEditorWithPendingOrder(order)
 
             val command = when (constructor.parameterCount) {
                 1 -> constructor.newInstance(positionAdds)
@@ -418,13 +421,17 @@ class MainActivity : IntegrationAppCompatActivity() {
                 processMethod.invoke(command, this, null)
                 true
             } else {
-                openSellReceiptEditor()
+                openSellReceiptEditorWithPendingOrder(order)
             }
         }.getOrElse { error ->
             Log.e("YagoEvotor", "openSellReceiptWithItems failed", error)
-            PendingSellOrderStore.set(order)
-            openSellReceiptEditor()
+            openSellReceiptEditorWithPendingOrder(order)
         }
+    }
+
+    private fun openSellReceiptEditorWithPendingOrder(order: ApiClient.ActiveOrder): Boolean {
+        PendingSellOrderStore.set(order)
+        return openSellReceiptEditor()
     }
 
     private fun buildPositionAdds(order: ApiClient.ActiveOrder): List<Any> {
