@@ -46,7 +46,14 @@ const LandingPage: React.FC = () => {
   const [ownerName, setOwnerName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [personalDataConsent, setPersonalDataConsent] = useState(false);
+  const [cookieConsent, setCookieConsent] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
+
+  useEffect(() => {
+    const consent = window.localStorage.getItem('landingCookieConsent') === 'accepted';
+    setCookieConsent(consent);
+  }, []);
 
   const primaryButtonClass =
     'inline-flex items-center justify-center rounded-[12px] bg-primary px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark';
@@ -78,6 +85,16 @@ const LandingPage: React.FC = () => {
 
   const handleSignup = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    if (!personalDataConsent) {
+      notify({
+        title: 'Нужно согласие на обработку данных',
+        description: 'Подтвердите согласие на обработку персональных данных, чтобы завершить регистрацию.',
+        type: 'error',
+      });
+      return;
+    }
+
     setSignupLoading(true);
     try {
       const response = await api.post('/api/organizations/public/create', {
@@ -104,6 +121,11 @@ const LandingPage: React.FC = () => {
     } finally {
       setSignupLoading(false);
     }
+  };
+
+  const acceptCookieConsent = () => {
+    window.localStorage.setItem('landingCookieConsent', 'accepted');
+    setCookieConsent(true);
   };
 
   useEffect(() => {
@@ -327,6 +349,27 @@ const LandingPage: React.FC = () => {
                     placeholder="Придумайте надёжный пароль"
                   />
                 </div>
+                <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={personalDataConsent}
+                    onChange={(event) => setPersonalDataConsent(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    required
+                  />
+                  <span>
+                    Я согласен на обработку персональных данных и принимаю условия{' '}
+                    <a
+                      href="/documents/personal-data-policy.pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-primary hover:text-primary-dark"
+                    >
+                      политики обработки персональных данных
+                    </a>
+                    .
+                  </span>
+                </label>
                 <button
                   type="submit"
                   disabled={signupLoading}
@@ -355,25 +398,68 @@ const LandingPage: React.FC = () => {
             <div className="heading-font text-lg font-semibold text-slate-900">Yago POS</div>
             <div className="text-xs text-slate-500">Текущая версия: v0.8.1</div>
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-700">
-            <Link to="/help" className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary">
-              Инструкции
-            </Link>
-            <Link to="/blog" className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary">
-              Блог
-            </Link>
-            <Link to="/news" className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary">
-              Новости
-            </Link>
-            <a href="/rules" className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary">
-              Правила
-            </a>
-            <a href="/policy" className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary">
-              Политика
-            </a>
+          <div className="flex flex-wrap items-start gap-6 text-xs font-semibold text-slate-700">
+            <div className="flex flex-wrap items-center gap-3">
+              <Link to="/help" className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary">
+                Инструкции
+              </Link>
+              <Link to="/blog" className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary">
+                Блог
+              </Link>
+              <Link to="/news" className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary">
+                Новости
+              </Link>
+            </div>
+            <div className="space-y-1">
+              <div className="px-2 text-[11px] uppercase tracking-wide text-slate-500">Документы</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <a
+                  href="/documents/oferta.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
+                >
+                  Оферта
+                </a>
+                <a
+                  href="/documents/personal-data-policy.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
+                >
+                  Политика обработки персональных данных
+                </a>
+                <a
+                  href="/documents/rekvizity.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
+                >
+                  Реквизиты
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       </footer>
+
+      {!cookieConsent && (
+        <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-slate-600">
+              Мы используем cookie, чтобы сайт работал корректно и помогал улучшать сервис. Продолжая пользоваться сайтом,
+              вы соглашаетесь с использованием cookie.
+            </p>
+            <button
+              type="button"
+              onClick={acceptCookieConsent}
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-dark"
+            >
+              Принять
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
