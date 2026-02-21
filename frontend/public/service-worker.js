@@ -1,9 +1,10 @@
-const CACHE_NAME = 'yago-pos-cache-v2';
+const CACHE_NAME = 'yago-pos-cache-v3';
 const APP_SHELL = [
   '/manifest.json',
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
   );
@@ -17,6 +18,8 @@ self.addEventListener('activate', (event) => {
       )
     )
   );
+
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener('fetch', (event) => {

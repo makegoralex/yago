@@ -4666,7 +4666,7 @@ const AdminPage: React.FC = () => {
               {restaurantLogo ? (
                 <img
                   src={restaurantLogo}
-                  alt={restaurantName || 'Yago POS'}
+                  alt={restaurantName || 'Yago App'}
                   className="h-10 w-10 rounded-xl border border-slate-200 bg-white object-cover shadow-soft"
                 />
               ) : (
@@ -4676,7 +4676,7 @@ const AdminPage: React.FC = () => {
               )}
               <div className="leading-tight">
                 <p className="text-xs uppercase tracking-wide text-slate-400">Админ-панель</p>
-                <p className="text-sm font-semibold text-slate-900">{restaurantName || 'Yago POS'}</p>
+                <p className="text-sm font-semibold text-slate-900">{restaurantName || 'Yago App'}</p>
               </div>
             </div>
             <div className="hidden flex-1 items-center justify-center md:flex">

@@ -1456,7 +1456,7 @@ const SuperAdminPage: React.FC = () => {
                       value={newsForm.seoTitle}
                       onChange={(event) => setNewsForm((form) => ({ ...form, seoTitle: event.target.value }))}
                       className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                      placeholder="Yago POS обновления"
+                      placeholder="Yago App обновления"
                     />
                   </label>
                 </div>
@@ -1487,7 +1487,7 @@ const SuperAdminPage: React.FC = () => {
                     value={newsForm.seoKeywords}
                     onChange={(event) => setNewsForm((form) => ({ ...form, seoKeywords: event.target.value }))}
                     className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                    placeholder="Yago POS, новости, касса"
+                    placeholder="Yago App, новости, касса"
                   />
                 </label>
                 <label className="text-sm text-slate-700">

@@ -38,7 +38,7 @@ export const renderLandingPage = (): string => `
         });
       </script>
       <!-- /Yandex.Metrika counter -->
-      <title>Yago POS — платформа для современной торговли</title>
+      <title>Yago App — платформа для современной торговли</title>
       <style>
         :root {
           --bg: #0b1221;
@@ -313,9 +313,9 @@ export const renderLandingPage = (): string => `
         <div><img src="https://mc.yandex.ru/watch/106927062" style="position:absolute; left:-9999px;" alt="" /></div>
       </noscript>
       <header>
-        <div class="logo" aria-label="Логотип Yago POS">
+        <div class="logo" aria-label="Логотип Yago App">
           <div class="logo-mark">Y</div>
-          <div>Yago POS</div>
+          <div>Yago App</div>
         </div>
         <div class="cta-row">
           <a class="cta-button" href="#signup">Регистрация</a>
@@ -333,7 +333,7 @@ export const renderLandingPage = (): string => `
         <section class="hero">
           <h1>Ваш бизнес под контролем: POS, склад, лояльность и аналитика в одном окне</h1>
           <p>
-            Yago POS — облачная платформа для кафе, магазинов и dark kitchen. Управляйте сменами, меню, скидками и заказами
+            Yago App — облачная платформа для кафе, магазинов и dark kitchen. Управляйте сменами, меню, скидками и заказами
             без сложных интеграций, а встроенные API позволяют подключать витрины и внешние сервисы.
           </p>
           <div class="metrics">

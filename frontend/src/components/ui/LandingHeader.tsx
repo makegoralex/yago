@@ -2,25 +2,26 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 const navItems = [
-  { label: 'О продукте', href: '/#about' },
-  { label: 'Что уже есть', href: '/#features' },
-  { label: 'Развитие', href: '/#progress' },
-  { label: 'Обратная связь', href: '/#feedback' },
+  { label: 'Возможности', href: '/#features' },
+  { label: 'Интеграции', href: '/#integrations' },
+  { label: 'Тарифы', href: '/#pricing' },
+  { label: 'Новости', href: '/#news' },
+  { label: 'Как начать', href: '/#how-to-start' },
   { label: 'Инструкции', href: '/help' },
-  { label: 'Новости', href: '/news' },
-  { label: 'Блог', href: '/blog' },
 ];
 
 type LandingHeaderProps = {
   onCtaClick?: () => void;
   ctaLabel?: string;
+  ctaMobileLabel?: string;
   ctaHref?: string;
 };
 
 const LandingHeader: React.FC<LandingHeaderProps> = ({
   onCtaClick,
-  ctaLabel = 'Создать организацию',
-  ctaHref = '/login',
+  ctaLabel = 'Попробовать бесплатно 14 дней',
+  ctaMobileLabel = '14 дней бесплатно',
+  ctaHref = '/#signup',
 }) => {
   const [compact, setCompact] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -49,26 +50,23 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
   }, [menuOpen]);
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-white shadow-sm">
-      <div
-        className={`mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 sm:px-6 ${
-          compact ? 'py-2' : 'py-4'
-        }`}
-      >
-        <Link to="/" className="flex items-center gap-3">
+    <header className="sticky top-0 z-50 w-full bg-white/95 shadow-sm backdrop-blur">
+      <div className={`mx-auto flex max-w-6xl items-center gap-3 px-4 sm:px-6 ${compact ? 'py-2' : 'py-4'}`}>
+        <Link to="/" className="flex min-w-0 items-center gap-3">
           <div
-            className={`flex items-center justify-center rounded-2xl bg-primary/10 text-lg font-bold text-primary ${
+            className={`flex shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-lg font-bold text-primary ${
               compact ? 'h-9 w-9' : 'h-11 w-11'
             }`}
           >
             YG
           </div>
-          <div>
-            <div className="heading-font text-lg font-semibold text-slate-900">Yago POS</div>
-            <div className="text-xs text-slate-500">Система для кофейни</div>
+          <div className="min-w-0">
+            <div className="truncate heading-font text-lg font-semibold text-slate-900">Yago App</div>
+            <div className="truncate text-xs text-slate-500">Облачная POS-система</div>
           </div>
         </Link>
-        <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
+
+        <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
           <nav className="hidden items-center gap-2 text-sm font-medium lg:flex">
             {navItems.map((item) => (
               <a key={item.label} href={item.href} className="rounded-lg px-3 py-2 text-nav transition hover:text-navHover">
@@ -76,28 +74,33 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
               </a>
             ))}
           </nav>
+
           <Link
             to="/login"
             className="hidden rounded-[12px] border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900 sm:inline-flex"
           >
             Вход
           </Link>
+
           {onCtaClick ? (
             <button
               type="button"
               onClick={onCtaClick}
-              className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark"
+              className="rounded-[12px] bg-primary px-3 py-2 text-xs font-semibold whitespace-nowrap text-white shadow-sm transition hover:bg-primary-dark sm:px-4 sm:text-sm"
             >
-              {ctaLabel}
+              <span className="hidden sm:inline">{ctaLabel}</span>
+              <span className="sm:hidden">{ctaMobileLabel}</span>
             </button>
           ) : (
             <a
               href={ctaHref}
-              className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark"
+              className="rounded-[12px] bg-primary px-3 py-2 text-xs font-semibold whitespace-nowrap text-white shadow-sm transition hover:bg-primary-dark sm:px-4 sm:text-sm"
             >
-              {ctaLabel}
+              <span className="hidden sm:inline">{ctaLabel}</span>
+              <span className="sm:hidden">{ctaMobileLabel}</span>
             </a>
           )}
+
           <button
             type="button"
             onClick={() => setMenuOpen((prev) => !prev)}
@@ -113,6 +116,7 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
           </button>
         </div>
       </div>
+
       {menuOpen ? (
         <div className="border-t border-slate-200 bg-white px-4 py-4 shadow-sm lg:hidden">
           <div className="mx-auto flex max-w-6xl flex-col gap-3">

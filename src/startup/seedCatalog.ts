@@ -239,7 +239,7 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
       await ProductModel.insertMany(productsToInsert);
     }
 
-    console.log('Seeded demo catalog for Yago POS');
+    console.log('Seeded demo catalog for Yago App');
   }
 
   if (warehouseCount === 0) {
@@ -354,6 +354,6 @@ export const ensureDemoCatalogSeeded = async (): Promise<void> => {
     }
 
     await DiscountModel.insertMany(demoDiscounts);
-    console.log('Seeded demo discounts for Yago POS');
+    console.log('Seeded demo discounts for Yago App');
   }
 };

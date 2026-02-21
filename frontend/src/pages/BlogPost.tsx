@@ -24,7 +24,7 @@ const BlogPostPage: React.FC = () => {
   useEffect(() => {
     if (!post) {
       applySeo({
-        title: 'Статья не найдена | Yago POS',
+        title: 'Статья не найдена | Yago App',
         description: 'Страница не найдена. Вернитесь в блог.',
       });
       return;
@@ -33,7 +33,7 @@ const BlogPostPage: React.FC = () => {
     applySeo({
       title: post.seoTitle || post.title,
       description: post.seoDescription || post.excerpt,
-      keywords: post.seoKeywords || 'Yago POS, блог, кофейня, статьи, POS',
+      keywords: post.seoKeywords || 'Yago App, блог, кофейня, статьи, POS',
     });
   }, [post]);
 

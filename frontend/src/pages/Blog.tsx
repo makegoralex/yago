@@ -21,9 +21,9 @@ const BlogPage: React.FC = () => {
 
   useEffect(() => {
     applySeo({
-      title: 'Блог Yago POS',
+      title: 'Блог Yago App',
       description: 'Статьи и советы для владельцев кофеен: учет, маркетинг, развитие бизнеса.',
-      keywords: 'Yago POS, блог, кофейня, статьи, бизнес, учет',
+      keywords: 'Yago App, блог, кофейня, статьи, бизнес, учет',
     });
   }, []);
 

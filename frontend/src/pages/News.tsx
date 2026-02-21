@@ -22,9 +22,9 @@ const NewsPage: React.FC = () => {
 
   useEffect(() => {
     applySeo({
-      title: 'Новости Yago POS',
-      description: 'Свежие обновления, новые функции и улучшения в Yago POS.',
-      keywords: 'Yago POS, новости, обновления, касса, POS',
+      title: 'Новости Yago App',
+      description: 'Свежие обновления, новые функции и улучшения в Yago App.',
+      keywords: 'Yago App, новости, обновления, касса, POS',
     });
   }, []);
 
@@ -36,7 +36,7 @@ const NewsPage: React.FC = () => {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wide text-secondary">Новости</p>
-              <h1 className="text-3xl font-semibold text-text sm:text-4xl">Что нового в Yago POS</h1>
+              <h1 className="text-3xl font-semibold text-text sm:text-4xl">Что нового в Yago App</h1>
               <p className="mt-2 text-base text-slate-600">Лаконичный changelog для владельцев. Последние обновления ниже.</p>
             </div>
             <Link to="/" className="rounded-xl px-4 py-2 text-sm font-semibold text-secondary hover:bg-secondary/10">
