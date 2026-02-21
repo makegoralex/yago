@@ -3,6 +3,7 @@ import fetch from 'node-fetch';
 import { appConfig } from '../../config/env';
 import { EvotorDeviceModel } from './evotor.model';
 import type { OrderDocument } from '../orders/order.model';
+import { buildEvotorOrderSnapshot } from './orderTotals';
 
 const EVOTOR_PUSH_URL = 'https://api.evotor.ru/api/apps';
 
@@ -20,11 +21,7 @@ const buildOrderPayload = (order: OrderDocument): EvotorPushPayload => ({
   orderId: order._id.toString(),
   status: order.status,
   total: order.total,
-  items: (order.items ?? []).map((item) => ({
-    name: item.name,
-    qty: item.qty,
-    total: item.total,
-  })),
+  items: buildEvotorOrderSnapshot(order),
   updatedAt: order.updatedAt.toISOString(),
 });
 
