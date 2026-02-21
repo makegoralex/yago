@@ -6,8 +6,7 @@ const navItems = [
   { label: 'Интеграции', href: '/#integrations' },
   { label: 'Тарифы', href: '/#pricing' },
   { label: 'Новости', href: '/#news' },
-  { label: 'Как начать', href: '/#how-to-start' },
-  { label: 'Инструкции', href: '/help' },
+
 ];
 
 type LandingHeaderProps = {
