@@ -8,31 +8,23 @@ import LandingHeader from '../components/ui/LandingHeader';
 import { fetchContent, loadContent, subscribeContentUpdates } from '../lib/contentStore';
 import { applySeo } from '../lib/seo';
 
-const featureGroups = [
-  {
-    title: 'Касса (интерфейс кассира)',
-    items: [
-      'выбор категории и товара',
-      'добавление клиента к чеку',
-      'выбор способа оплаты',
-      'простой поток продажи',
-    ],
-  },
-  {
-    title: 'Админ-панель',
-    items: [
-      'создание и редактирование меню',
-      'ингредиенты в позициях',
-      'расчёт себестоимости',
-      'учёт остатков на складе',
-      'базовая статистика продаж',
-    ],
-  },
-  {
-    title: 'Лояльность',
-    items: ['скидки и бонусы', 'начисление внутри системы'],
-  },
+const featureItems = [
+  'Управление продажами и заказами',
+  'Работа с меню и товарами',
+  'Складской учёт',
+  'Система скидок и акций',
+  'Программы лояльности',
+  'Отчёты и аналитика',
+  'Облачный доступ с любого устройства',
 ];
+
+const howToStartSteps = ['Зарегистрируйтесь', 'Настройте товары и кассу', 'Начните продажи'];
+
+const monthlyPrice = 1490;
+const yearlyPrice = 12000;
+const yearlyRegular = monthlyPrice * 12;
+const yearlySavings = yearlyRegular - yearlyPrice;
+const yearlySavingsPercent = Math.round((yearlySavings / yearlyRegular) * 100);
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -40,7 +32,7 @@ const LandingPage: React.FC = () => {
   const { notify } = useToast();
   const authSectionRef = useRef<HTMLDivElement | null>(null);
   const [content, setContent] = useState(loadContent());
-  const { blogPosts, newsItems } = content;
+  const { newsItems } = content;
 
   const [organizationName, setOrganizationName] = useState('');
   const [ownerName, setOwnerName] = useState('');
@@ -55,8 +47,6 @@ const LandingPage: React.FC = () => {
     setCookieConsent(consent);
   }, []);
 
-  const primaryButtonClass =
-    'inline-flex items-center justify-center rounded-[12px] bg-primary px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark';
 
   const extractTokens = (payload: any) => {
     const accessToken = payload?.accessToken ?? payload?.tokens?.accessToken;
@@ -130,10 +120,10 @@ const LandingPage: React.FC = () => {
 
   useEffect(() => {
     applySeo({
-      title: 'Yago POS — система кассы и админ-панели для кофейни',
+      title: 'Yago POS — облачная POS-система для кафе и малого бизнеса',
       description:
-        'Yago POS — касса и админ-панель в браузере: меню, склад, себестоимость, статистика и лояльность для кофейни.',
-      keywords: 'Yago POS, касса, POS, кофейня, учет, меню, склад',
+        'Продажи, склад, аналитика и лояльность в одном сервисе. Работает с кассами пользователя, включая устройства Эвотор.',
+      keywords: 'Yago POS, POS, кафе, малый бизнес, касса, эвотор, склад, аналитика, лояльность',
     });
   }, []);
 
@@ -150,119 +140,154 @@ const LandingPage: React.FC = () => {
   }, []);
 
   return (
-    <div className="landing-shell min-h-screen bg-white">
-      <LandingHeader onCtaClick={() => authSectionRef.current?.scrollIntoView({ behavior: 'smooth' })} />
+    <div className="landing-shell min-h-screen bg-slate-50">
+      <LandingHeader
+        onCtaClick={() => authSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+        ctaLabel="Попробовать бесплатно 14 дней"
+      />
 
-      <main className="mx-auto flex max-w-6xl flex-col gap-10 px-4 pb-16 pt-10 sm:px-6 lg:gap-14">
-        <section className="grid gap-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-10 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="order-1 space-y-6">
-            <div>
-              <h1 className="heading-font text-4xl font-semibold leading-tight text-slate-900 sm:text-5xl">
-                Yago POS — простая система для кофейни
-              </h1>
-            </div>
-            <p className="text-lg text-slate-600">
-              Касса и админ-панель в браузере: меню, склад, себестоимость, статистика и лояльность. Без лишней сложности —
-              только то, что реально нужно в работе.
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:gap-8 lg:py-10">
+        <section className="grid gap-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-primary p-6 text-white shadow-xl md:grid-cols-[1.05fr_0.95fr] md:p-8 lg:p-10">
+          <div className="space-y-5">
+            <p className="inline-flex rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide">
+              SaaS для кафе и малого бизнеса
             </p>
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700">
-              <p>Сервис в активной разработке.</p>
-              <p>Сечас Yago POS доступен бесплатно.</p>
-              <p>В будущем сервис станет платным — об этом мы предупредим заранее.</p>
+            <h1 className="heading-font text-3xl font-semibold leading-tight sm:text-4xl lg:text-5xl">
+              Облачная POS-система для кафе и малого бизнеса
+            </h1>
+            <p className="max-w-2xl text-base text-white/85 sm:text-lg">
+              Продажи, склад, аналитика и лояльность в одном сервисе. Работает с кассами пользователя.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={() => authSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                className="inline-flex h-12 items-center justify-center rounded-xl bg-white px-6 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+              >
+                Попробовать бесплатно 14 дней
+              </button>
+              <a
+                href="#pricing"
+                className="inline-flex h-12 items-center justify-center rounded-xl border border-white/40 px-6 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                Посмотреть тарифы
+              </a>
             </div>
-            <a href="/login" className={primaryButtonClass}>
-              Создать организацию
-            </a>
+            <p className="text-sm text-white/80">Без установки. Без долгосрочных обязательств.</p>
           </div>
-          <div className="order-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+
+          <div className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur sm:p-5">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div className="h-8 w-32 rounded-xl bg-[#F3F4F6]" />
-                <div className="h-8 w-20 rounded-xl bg-[#EDE9FE]" />
+                <div className="h-8 w-32 rounded-xl bg-white/25" />
+                <div className="h-8 w-24 rounded-xl bg-white/35" />
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-2xl bg-[#F3F4F6]" />
-                  <div className="h-10 flex-1 rounded-2xl bg-[#F3F4F6]" />
+              <div className="rounded-2xl border border-white/20 bg-white/10 p-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="h-16 rounded-xl bg-white/20" />
+                  <div className="h-16 rounded-xl bg-white/20" />
+                  <div className="h-16 rounded-xl bg-white/20" />
+                  <div className="h-16 rounded-xl bg-white/20" />
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="h-20 rounded-2xl bg-[#F5F5F5]" />
-                  <div className="h-20 rounded-2xl bg-[#F5F5F5]" />
-                  <div className="h-20 rounded-2xl bg-[#F5F5F5]" />
-                  <div className="h-20 rounded-2xl bg-[#F5F5F5]" />
-                </div>
-                <div className="mt-4 h-12 rounded-2xl bg-[#EDE9FE]" />
+                <div className="mt-3 h-10 rounded-xl bg-white/35" />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="h-8 rounded-lg bg-white/20" />
+                <div className="h-8 rounded-lg bg-white/20" />
+                <div className="h-8 rounded-lg bg-white/20" />
               </div>
             </div>
-          </div>
-        </section>
-
-        <section id="about" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
-          <h2 className="heading-font text-3xl font-semibold text-slate-900">Сделано на основе реальной кофейни</h2>
-          <div className="mt-4 space-y-4 text-base text-slate-600">
-            <p>Yago POS разрабатывается на основе реальной практики.</p>
-            <p>
-              Основатель сервиса сам является владельцем кофейни, поэтому весь функционал ежедневно используется и
-              проверяется в работе.
-            </p>
-            <p>Продукт развивается постепенно — от реальных задач, а не гипотез.</p>
           </div>
         </section>
 
         <section id="features" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
-          <h2 className="heading-font text-3xl font-semibold text-slate-900">Что уже есть в системе</h2>
-          <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            {featureGroups.map((group) => (
-              <div key={group.title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-900">{group.title}</h3>
-                <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                  {group.items.map((item) => (
-                    <li key={item} className="flex gap-2">
-                      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
+          <h2 className="heading-font text-3xl font-semibold text-slate-900">Возможности</h2>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {featureItems.map((item) => (
+              <div key={item} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />
+                <p className="text-sm font-medium text-slate-700">{item}</p>
               </div>
             ))}
           </div>
+          <p className="mt-5 text-sm text-slate-500">
+            Фискализация осуществляется через кассовое оборудование пользователя.
+          </p>
         </section>
 
-        <section id="blog" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <h2 className="heading-font text-3xl font-semibold text-slate-900">Блог кофейни</h2>
-            <Link to="/blog" className="text-sm font-semibold text-primary">
-              Все статьи
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            {blogPosts.slice(0, 3).map((post) => (
-              <article key={post.slug} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{post.date}</div>
-                <h3 className="mt-2 text-lg font-semibold text-slate-900">{post.title}</h3>
-                <p className="mt-2 text-sm text-slate-600">{post.excerpt}</p>
-                <Link to={`/blog/${post.slug}`} className="mt-3 inline-flex text-sm font-semibold text-primary">
-                  Читать статью
-                </Link>
-              </article>
-            ))}
+        <section id="integrations" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
+          <h2 className="heading-font text-3xl font-semibold text-slate-900">Интеграции</h2>
+          <p className="mt-4 text-base text-slate-600">
+            Сервис интегрируется с кассовыми решениями пользователя, включая устройства Эвотор.
+          </p>
+        </section>
+
+        <section id="pricing" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
+          <h2 className="heading-font text-3xl font-semibold text-slate-900">Тарифы</h2>
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+            <article className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-5">
+              <p className="text-sm font-semibold uppercase tracking-wide text-primary">Месячный тариф</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-900">{monthlyPrice.toLocaleString('ru-RU')} ₽ / месяц</p>
+              <p className="mt-2 text-sm text-slate-600">НДС включён · Автоматическое продление</p>
+              <button
+                type="button"
+                onClick={() => authSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                className="mt-5 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-white transition hover:bg-primary-dark"
+              >
+                Начать 14 дней бесплатно
+              </button>
+            </article>
+
+            <article className="rounded-2xl border-2 border-emerald-300 bg-gradient-to-b from-emerald-50 to-white p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold uppercase tracking-wide text-slate-700">Годовой тариф</p>
+                <span className="inline-flex rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                  Экономия {yearlySavingsPercent}%
+                </span>
+              </div>
+              <p className="mt-3 text-3xl font-semibold text-slate-900">{yearlyPrice.toLocaleString('ru-RU')} ₽ / год</p>
+              <p className="mt-2 text-sm text-slate-600">НДС включён</p>
+              <div className="mt-3 rounded-xl border border-emerald-300 bg-emerald-100/80 px-3 py-2 text-sm font-semibold text-emerald-900">
+                Вы экономите {yearlySavings.toLocaleString('ru-RU')} ₽ в год относительно помесячной оплаты.
+              </div>
+              <p className="mt-3 text-sm text-slate-600">
+                Оплата по счёту. Запросить у менеджера:{' '}
+                <a href="https://t.me/makarov_egor" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary">
+                  @makarov_egor
+                </a>
+              </p>
+              <a
+                href="https://t.me/makarov_egor"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-5 inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:border-primary hover:text-primary"
+              >
+                Запросить счёт
+              </a>
+            </article>
           </div>
         </section>
 
         <section id="news" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <h2 className="heading-font text-3xl font-semibold text-slate-900">Что нового</h2>
+            <div>
+              <h2 className="heading-font text-3xl font-semibold text-slate-900">Новости продукта</h2>
+              <p className="mt-2 text-sm text-slate-500">Обновляется через кабинет суперадмина.</p>
+            </div>
             <Link to="/news" className="text-sm font-semibold text-primary">
               Все новости
             </Link>
           </div>
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
             {newsItems.slice(0, 3).map((item) => (
-              <article key={item.slug} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <article
+                key={item.slug}
+                className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-5 shadow-sm"
+              >
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{item.date}</div>
                 <h3 className="mt-2 text-lg font-semibold text-slate-900">{item.title}</h3>
                 <p className="mt-2 text-sm text-slate-600">{item.description}</p>
-                <Link to={`/news/${item.slug}`} className="mt-3 inline-flex text-sm font-semibold text-primary">
+                <Link to={`/news/${item.slug}`} className="mt-4 inline-flex text-sm font-semibold text-primary">
                   Открыть новость
                 </Link>
               </article>
@@ -270,12 +295,17 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        <section id="progress" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
-          <h2 className="heading-font text-3xl font-semibold text-slate-900">Система постоянно развивается</h2>
-          <div className="mt-4 space-y-3 text-base text-slate-600">
-            <p>Мы регулярно улучшаем интерфейс и добавляем новые возможности.</p>
-            <p>Приоритеты развития формируются на основе реального использования системы в кофейне.</p>
-            <p>Без резких изменений и «ломающих» обновлений.</p>
+        <section id="how-to-start" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
+          <h2 className="heading-font text-3xl font-semibold text-slate-900">Как начать</h2>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {howToStartSteps.map((step, index) => (
+              <div key={step} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-white">
+                  {index + 1}
+                </div>
+                <p className="mt-3 text-base font-medium text-slate-800">{step}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -286,7 +316,7 @@ const LandingPage: React.FC = () => {
         >
           <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
             <div className="space-y-3">
-              <h2 className="heading-font text-3xl font-semibold text-slate-900">Создать организацию</h2>
+              <h2 className="heading-font text-3xl font-semibold text-slate-900">Запустить демо за 2 минуты</h2>
               <p className="text-base text-slate-600">
                 Заполните короткую форму — доступ владельца появится сразу после регистрации.
               </p>
@@ -375,70 +405,57 @@ const LandingPage: React.FC = () => {
                   disabled={signupLoading}
                   className="flex h-12 w-full items-center justify-center rounded-[12px] bg-primary text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark disabled:opacity-70"
                 >
-                  {signupLoading ? 'Создаем аккаунт...' : 'Создать организацию'}
+                  {signupLoading ? 'Создаем аккаунт...' : 'Попробовать бесплатно 14 дней'}
                 </button>
               </form>
             </div>
           </div>
         </section>
-
-        <section id="feedback" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
-          <h2 className="heading-font text-3xl font-semibold text-slate-900">Вопросы и предложения</h2>
-          <div className="mt-4 space-y-3 text-base text-slate-600">
-            <p>Если у вас есть вопросы или идеи по развитию сервиса — пишите напрямую в Telegram.</p>
-            <p className="text-lg font-semibold text-slate-900">@makarov_egor</p>
-            <p>Обратная связь напрямую влияет на развитие продукта.</p>
-          </div>
-        </section>
       </main>
 
-      <footer className="bg-white/80 py-8 text-sm text-slate-600">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="space-y-1">
+      <footer className="border-t border-slate-200 bg-white py-8 text-sm text-slate-600">
+        <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 sm:px-6 lg:grid-cols-[1fr_1.1fr]">
+          <div className="space-y-2">
             <div className="heading-font text-lg font-semibold text-slate-900">Yago POS</div>
-            <div className="text-xs text-slate-500">Текущая версия: v0.8.1</div>
+            <p>ООО «Джемьюн»</p>
+            <p>ИНН 5800012413</p>
+            <p>ОГРН 1255800000554</p>
+            <p>Тел.: +7 900 317-35-57</p>
+            <p>Email: makegoralex@yandex.ru</p>
           </div>
-          <div className="flex flex-wrap items-start gap-6 text-xs font-semibold text-slate-700">
-            <div className="flex flex-wrap items-center gap-3">
-              <Link to="/help" className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary">
-                Инструкции
-              </Link>
-              <Link to="/blog" className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary">
-                Блог
-              </Link>
-              <Link to="/news" className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary">
-                Новости
-              </Link>
-            </div>
-            <div className="space-y-1">
-              <div className="px-2 text-[11px] uppercase tracking-wide text-slate-500">Документы</div>
-              <div className="flex flex-wrap items-center gap-2">
-                <a
-                  href="/license-agreement.pdf"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
-                >
-                  Оферта
-                </a>
-                <a
-                  href="/privacy-policy.pdf"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
-                >
-                  Политика обработки персональных данных
-                </a>
-                <a
-                  href="/company-details.pdf"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
-                >
-                  Реквизиты
-                </a>
-              </div>
-            </div>
+          <div className="grid gap-3 text-sm font-semibold text-slate-700 sm:grid-cols-2">
+            <a
+              href="/license-agreement.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
+            >
+              Публичная оферта
+            </a>
+            <a
+              href="/privacy-policy.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
+            >
+              Политика обработки персональных данных
+            </a>
+            <a
+              href="/personal-data-consent.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
+            >
+              Согласие на обработку персональных данных
+            </a>
+            <a
+              href="/company-details.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg px-2 py-1 transition hover:bg-primary/10 hover:text-primary"
+            >
+              Реквизиты
+            </a>
           </div>
         </div>
       </footer>
