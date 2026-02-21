@@ -44,7 +44,7 @@ const HeaderBar: React.FC<HeaderBarProps> = ({ onShowHistory, onShowShift, shift
             </div>
           )}
           <div>
-            <p className="text-lg font-semibold text-slate-900 leading-tight">{restaurantName || 'Yago POS'}</p>
+            <p className="text-lg font-semibold text-slate-900 leading-tight">{restaurantName || 'Yago App'}</p>
             <p className="text-[11px] text-slate-500">Управление продажами</p>
           </div>
         </div>

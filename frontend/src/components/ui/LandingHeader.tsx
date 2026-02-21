@@ -51,12 +51,8 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-50 w-full bg-white/95 shadow-sm backdrop-blur">
-      <div
-        className={`mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 sm:px-6 ${
-          compact ? 'py-2' : 'py-4'
-        }`}
-      >
-        <Link to="/" className="flex items-center gap-3">
+      <div className={`mx-auto flex max-w-6xl items-center gap-3 px-4 sm:px-6 ${compact ? 'py-2' : 'py-4'}`}>
+        <Link to="/" className="flex min-w-0 items-center gap-3">
           <div
             className={`flex shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-lg font-bold text-primary ${
               compact ? 'h-9 w-9' : 'h-11 w-11'
@@ -64,9 +60,9 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
           >
             YG
           </div>
-          <div>
-            <div className="heading-font text-lg font-semibold text-slate-900">Yago App</div>
-            <div className="text-xs text-slate-500">Облачная POS-система</div>
+          <div className="min-w-0">
+            <div className="truncate heading-font text-lg font-semibold text-slate-900">Yago App</div>
+            <div className="truncate text-xs text-slate-500">Облачная POS-система</div>
           </div>
         </Link>
 

@@ -3,7 +3,7 @@ import type { OpenAPIV3 } from 'openapi-types';
 export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
   openapi: '3.0.0',
   info: {
-    title: 'Yago POS API',
+    title: 'Yago App API',
     version: '0.2.0',
     description: 'Authentication and RBAC module for Yago Coffee POS backend.',
   },

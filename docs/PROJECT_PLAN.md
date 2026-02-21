@@ -1,4 +1,4 @@
-# Yago POS Platform Technical Plan
+# Yago App Platform Technical Plan
 
 ## Executive Summary
 Yago is a point-of-sale (POS) platform built to support small and mid-sized retailers with unified in-store and online sales. The system must provide reliable checkout flows, accurate inventory synchronization, and insightful analytics while remaining extensible for future business needs. This document describes the target architecture, key workflows, and implementation roadmap. Notes labeled **Improvement** indicate optimizations added during this review to strengthen the original plan.

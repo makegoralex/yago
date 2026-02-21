@@ -1,11 +1,11 @@
 {
-  "name": "Yago POS",
-  "short_name": "Yago POS",
+  "name": "Yago App",
+  "short_name": "Yago App",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F9FAFB",
   "theme_color": "#ffffff",
-  "description": "Tablet-first cashier experience for the Yago POS platform.",
+  "description": "Tablet-first cashier experience for the Yago App platform.",
   "icons": [
     {
       "src": "/icons/icon-192.svg",

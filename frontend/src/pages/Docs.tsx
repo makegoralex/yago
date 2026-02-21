@@ -21,9 +21,9 @@ const DocsPage: React.FC = () => {
 
   useEffect(() => {
     applySeo({
-      title: 'Инструкции Yago POS',
-      description: 'Гайды и инструкции по запуску и использованию Yago POS.',
-      keywords: 'Yago POS, инструкции, help, гайды, POS',
+      title: 'Инструкции Yago App',
+      description: 'Гайды и инструкции по запуску и использованию Yago App.',
+      keywords: 'Yago App, инструкции, help, гайды, POS',
     });
   }, []);
 
@@ -35,7 +35,7 @@ const DocsPage: React.FC = () => {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wide text-secondary">Инструкции</p>
-              <h1 className="text-3xl font-semibold text-text sm:text-4xl">Гайды по запуску Yago POS</h1>
+              <h1 className="text-3xl font-semibold text-text sm:text-4xl">Гайды по запуску Yago App</h1>
               <p className="mt-2 text-base text-slate-600">
                 Раздел /docs оставили под Swagger API. Все инструкции переехали на /help: сохраняйте ссылки в планшете или отправляйте
                 сотрудникам. Страницы готовы для загрузки из CMS или markdown.
