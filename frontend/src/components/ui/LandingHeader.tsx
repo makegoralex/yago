@@ -58,7 +58,7 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
       >
         <Link to="/" className="flex items-center gap-3">
           <div
-            className={`flex items-center justify-center rounded-2xl bg-primary/10 text-lg font-bold text-primary ${
+            className={`flex shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-lg font-bold text-primary ${
               compact ? 'h-9 w-9' : 'h-11 w-11'
             }`}
           >
@@ -69,7 +69,8 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
             <div className="text-xs text-slate-500">Облачная POS-система</div>
           </div>
         </Link>
-        <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
+
+        <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
           <nav className="hidden items-center gap-2 text-sm font-medium lg:flex">
             {navItems.map((item) => (
               <a key={item.label} href={item.href} className="rounded-lg px-3 py-2 text-nav transition hover:text-navHover">
@@ -77,12 +78,14 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
               </a>
             ))}
           </nav>
+
           <Link
             to="/login"
             className="hidden rounded-[12px] border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900 sm:inline-flex"
           >
             Вход
           </Link>
+
           {onCtaClick ? (
             <button
               type="button"
@@ -101,6 +104,7 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
               <span className="sm:hidden">{ctaMobileLabel}</span>
             </a>
           )}
+
           <button
             type="button"
             onClick={() => setMenuOpen((prev) => !prev)}
@@ -116,6 +120,7 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
           </button>
         </div>
       </div>
+
       {menuOpen ? (
         <div className="border-t border-slate-200 bg-white px-4 py-4 shadow-sm lg:hidden">
           <div className="mx-auto flex max-w-6xl flex-col gap-3">
