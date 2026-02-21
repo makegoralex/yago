@@ -114,10 +114,10 @@ const LandingPage: React.FC = () => {
 
   useEffect(() => {
     applySeo({
-      title: 'Yago POS — облачная POS-система для кафе и малого бизнеса',
+      title: 'Yago App — облачная POS-система для кафе и малого бизнеса',
       description:
         'Продажи, склад, аналитика и лояльность в одном сервисе. Работает с кассами пользователя, включая устройства Эвотор.',
-      keywords: 'Yago POS, POS, кафе, малый бизнес, касса, эвотор, склад, аналитика, лояльность',
+      keywords: 'Yago App, POS, кафе, малый бизнес, касса, эвотор, склад, аналитика, лояльность',
     });
   }, []);
 
@@ -233,12 +233,7 @@ const LandingPage: React.FC = () => {
             </article>
 
             <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold uppercase tracking-wide text-slate-700">Годовой тариф</p>
-                <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  Экономия 33% · 5 880 ₽ в год
-                </span>
-              </div>
+              <p className="text-sm font-semibold uppercase tracking-wide text-slate-700">Годовой тариф</p>
               <p className="mt-3 text-3xl font-semibold text-slate-900">12 000 ₽ / год</p>
               <p className="mt-2 text-sm text-slate-600">НДС включён</p>
               <p className="mt-3 text-sm text-slate-600">
@@ -263,7 +258,7 @@ const LandingPage: React.FC = () => {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="heading-font text-3xl font-semibold text-slate-900">Новости продукта</h2>
-              <p className="mt-2 text-sm text-slate-500">Обновляется через кабинет суперадмина.</p>
+              <p className="mt-2 text-sm text-slate-500">Мы постоянно разрабатываем функционал</p>
             </div>
             <Link to="/news" className="text-sm font-semibold text-primary">
               Все новости
@@ -407,7 +402,7 @@ const LandingPage: React.FC = () => {
       <footer className="border-t border-slate-200 bg-white py-8 text-sm text-slate-600">
         <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 sm:px-6 lg:grid-cols-[1fr_1.1fr]">
           <div className="space-y-2">
-            <div className="heading-font text-lg font-semibold text-slate-900">Yago POS</div>
+            <div className="heading-font text-lg font-semibold text-slate-900">Yago App</div>
             <p>ООО «Джемьюн»</p>
             <p>ИНН 5800012413</p>
             <p>ОГРН 1255800000554</p>
