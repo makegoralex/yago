@@ -7,6 +7,7 @@ import { EvotorSaleCommandModel } from './evotorSaleCommand.model';
 import { appConfig } from '../../config/env';
 import { authenticateUser } from '../../services/authService';
 import { OrderModel } from '../orders/order.model';
+import { buildEvotorOrderItems } from './orderTotals';
 const asyncHandler =
   (fn: (req: any, res: any) => Promise<void>) =>
   (req: any, res: any, next: any) =>
@@ -304,13 +305,7 @@ evotorRouter.post(
       return;
     }
 
-    const items = (order.items ?? [])
-      .filter((item) => item.name && item.qty > 0)
-      .map((item) => ({
-        name: item.name,
-        qty: item.qty,
-        total: item.total,
-      }));
+    const items = buildEvotorOrderItems(order.items ?? [], order.total);
 
     if (!items.length) {
       res.status(400).json({ data: null, error: 'Order does not have valid items' });
