@@ -141,11 +141,13 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({
                   }}
                   className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm"
                 >
-                  {ctaLabel}
+                  <span className="hidden sm:inline">{ctaLabel}</span>
+              <span className="sm:hidden">{ctaMobileLabel}</span>
                 </button>
               ) : (
                 <a href={ctaHref} className="rounded-[12px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm">
-                  {ctaLabel}
+                  <span className="hidden sm:inline">{ctaLabel}</span>
+              <span className="sm:hidden">{ctaMobileLabel}</span>
                 </a>
               )}
             </div>
