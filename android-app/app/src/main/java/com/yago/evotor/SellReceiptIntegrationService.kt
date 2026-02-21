@@ -62,6 +62,7 @@ class SellReceiptIntegrationService : IntegrationService() {
                         PendingSellOrderStore.consumeFirst()
                     } catch (error: Throwable) {
                         Log.e(TAG, "Failed to return BeforePositionsEditedEventResult", error)
+                        PendingSellOrderStore.consumeFirst()
                         callback.skip()
                     }
                 }

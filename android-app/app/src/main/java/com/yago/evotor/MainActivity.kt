@@ -16,7 +16,6 @@ import com.yago.evotor.auth.LoginActivity
 import com.yago.evotor.auth.SessionStorage
 import ru.evotor.framework.core.IntegrationAppCompatActivity
 import ru.evotor.framework.navigation.NavigationApi
-import java.math.BigDecimal
 import java.text.DecimalFormat
 
 class MainActivity : IntegrationAppCompatActivity() {
@@ -386,47 +385,7 @@ class MainActivity : IntegrationAppCompatActivity() {
     }
 
     private fun openSellReceiptWithItems(order: ApiClient.ActiveOrder): Boolean {
-        return runCatching {
-            val positionAdds = buildPositionAdds(order)
-            if (positionAdds.isEmpty()) {
-                Log.w("YagoEvotor", "No valid position adds for order ${order.id}, fallback to integration service")
-                return openSellReceiptEditorWithPendingOrder(order)
-            }
-
-            val commandClass = Class.forName("ru.evotor.framework.core.action.command.open_receipt.OpenSellReceiptCommand")
-
-            val constructor = commandClass.constructors
-                .firstOrNull { ctor ->
-                    val params = ctor.parameterTypes
-                    params.isNotEmpty() && List::class.java.isAssignableFrom(params[0])
-                }
-                ?: return openSellReceiptEditorWithPendingOrder(order)
-
-            val command = when (constructor.parameterCount) {
-                1 -> constructor.newInstance(positionAdds)
-                else -> {
-                    val args = Array<Any?>(constructor.parameterCount) { null }
-                    args[0] = positionAdds
-                    constructor.newInstance(*args)
-                }
-            }
-
-            val processMethod = commandClass.methods.firstOrNull { method ->
-                method.name == "process" &&
-                    method.parameterTypes.size == 2 &&
-                    android.content.Context::class.java.isAssignableFrom(method.parameterTypes[0])
-            }
-
-            if (processMethod != null) {
-                processMethod.invoke(command, this, null)
-                true
-            } else {
-                openSellReceiptEditorWithPendingOrder(order)
-            }
-        }.getOrElse { error ->
-            Log.e("YagoEvotor", "openSellReceiptWithItems failed", error)
-            openSellReceiptEditorWithPendingOrder(order)
-        }
+        return openSellReceiptEditorWithPendingOrder(order)
     }
 
     private fun openSellReceiptEditorWithPendingOrder(order: ApiClient.ActiveOrder): Boolean {
@@ -434,99 +393,4 @@ class MainActivity : IntegrationAppCompatActivity() {
         return openSellReceiptEditor()
     }
 
-    private fun buildPositionAdds(order: ApiClient.ActiveOrder): List<Any> {
-        val builderClass = Class.forName("ru.evotor.framework.receipt.Position\$Builder")
-        val buildMethod = builderClass.getMethod("build")
-        val newInstanceMethods = builderClass.methods.filter { it.name == "newInstance" }
-
-        val positionAddClass = sequenceOf(
-            "ru.evotor.framework.core.action.event.receipt.changes.position.PositionAdd",
-            "ru.evotor.framework.receipt.changes.position.PositionAdd"
-        ).mapNotNull { runCatching { Class.forName(it) }.getOrNull() }
-            .firstOrNull() ?: return emptyList()
-
-        val positionAddCtor = positionAddClass.constructors.minByOrNull { it.parameterCount } ?: return emptyList()
-
-        return order.items.mapNotNull { item ->
-            if (item.name.isBlank() || item.qty <= 0.0 || item.total <= 0.0) return@mapNotNull null
-
-            val unitPrice = item.total / item.qty
-            val rounded = (Math.round(unitPrice * 100.0)).coerceAtLeast(1L) / 100.0
-
-            val position =
-                newInstanceMethods.firstOrNull { method ->
-                    val p = method.parameterTypes
-                    p.size == 7 && p[0] == String::class.java && p[3] == String::class.java
-                }?.let { method ->
-                    val builder = method.invoke(
-                        null,
-                        java.util.UUID.randomUUID().toString(),
-                        null,
-                        item.name,
-                        "шт",
-                        0,
-                        BigDecimal.valueOf(rounded.toDouble()),
-                        BigDecimal.valueOf(item.qty.toDouble())
-                    )
-                    buildMethod.invoke(builder)
-                } ?: run {
-                    val methodWithMeasure = newInstanceMethods.firstOrNull { m ->
-                        val p = m.parameterTypes
-                        p.size == 6 && p.any { t -> t.name.endsWith("Measure") }
-                    } ?: return@mapNotNull null
-
-                    val args = arrayOfNulls<Any>(methodWithMeasure.parameterCount)
-                    val params = methodWithMeasure.parameterTypes
-                    var bigDecimalCount = 0
-                    for (index in params.indices) {
-                        args[index] = when {
-                            params[index] == String::class.java && index == 0 -> java.util.UUID.randomUUID().toString()
-                            params[index] == String::class.java && index == 2 -> item.name
-                            params[index] == BigDecimal::class.java -> {
-                                bigDecimalCount += 1
-                                if (bigDecimalCount == 1)
-                                    BigDecimal.valueOf(rounded.toDouble())
-                                else
-                                    BigDecimal.valueOf(item.qty.toDouble())
-                            }
-                            params[index].name.endsWith("Measure") -> instantiateMeasure(params[index])
-                            params[index] == Int::class.javaPrimitiveType || params[index] == Int::class.java -> 0
-                            else -> null
-                        }
-                    }
-
-                    val builder = methodWithMeasure.invoke(null, *args)
-                    buildMethod.invoke(builder)
-                }
-
-            val positionAddArgs = positionAddCtor.parameterTypes.map { type ->
-                when {
-                    type.isAssignableFrom(position.javaClass) -> position
-                    type == Int::class.javaPrimitiveType || type == Int::class.java -> 0
-                    type == Boolean::class.javaPrimitiveType || type == Boolean::class.java -> false
-                    type == String::class.java -> ""
-                    else -> null
-                }
-            }.toTypedArray()
-
-            positionAddCtor.newInstance(*positionAddArgs)
-        }
-    }
-
-    private fun instantiateMeasure(measureClass: Class<*>): Any {
-        for (constructor in measureClass.constructors.sortedBy { it.parameterCount }) {
-            val args = constructor.parameterTypes.map { type ->
-                when (type) {
-                    String::class.java -> "шт"
-                    Int::class.javaPrimitiveType, Int::class.java -> 0
-                    Boolean::class.javaPrimitiveType, Boolean::class.java -> false
-                    else -> null
-                }
-            }.toTypedArray()
-
-            runCatching { constructor.newInstance(*args) }.getOrNull()?.let { return it }
-        }
-
-        error("Cannot instantiate measure class: ${measureClass.name}")
-    }
 }
