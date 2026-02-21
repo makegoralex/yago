@@ -20,12 +20,6 @@ const featureItems = [
 
 const howToStartSteps = ['Зарегистрируйтесь', 'Настройте товары и кассу', 'Начните продажи'];
 
-const monthlyPrice = 1490;
-const yearlyPrice = 12000;
-const yearlyRegular = monthlyPrice * 12;
-const yearlySavings = yearlyRegular - yearlyPrice;
-const yearlySavingsPercent = Math.round((yearlySavings / yearlyRegular) * 100);
-
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { setSession } = useAuthStore();
@@ -120,10 +114,10 @@ const LandingPage: React.FC = () => {
 
   useEffect(() => {
     applySeo({
-      title: 'Yago POS — облачная POS-система для кафе и малого бизнеса',
+      title: 'Yago App — облачная POS-система для кафе и малого бизнеса',
       description:
         'Продажи, склад, аналитика и лояльность в одном сервисе. Работает с кассами пользователя, включая устройства Эвотор.',
-      keywords: 'Yago POS, POS, кафе, малый бизнес, касса, эвотор, склад, аналитика, лояльность',
+      keywords: 'Yago App, POS, кафе, малый бизнес, касса, эвотор, склад, аналитика, лояльность',
     });
   }, []);
 
@@ -227,7 +221,7 @@ const LandingPage: React.FC = () => {
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
             <article className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-5">
               <p className="text-sm font-semibold uppercase tracking-wide text-primary">Месячный тариф</p>
-              <p className="mt-3 text-3xl font-semibold text-slate-900">{monthlyPrice.toLocaleString('ru-RU')} ₽ / месяц</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-900">1 490 ₽ / месяц</p>
               <p className="mt-2 text-sm text-slate-600">НДС включён · Автоматическое продление</p>
               <button
                 type="button"
@@ -238,18 +232,10 @@ const LandingPage: React.FC = () => {
               </button>
             </article>
 
-            <article className="rounded-2xl border-2 border-emerald-300 bg-gradient-to-b from-emerald-50 to-white p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold uppercase tracking-wide text-slate-700">Годовой тариф</p>
-                <span className="inline-flex rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
-                  Экономия {yearlySavingsPercent}%
-                </span>
-              </div>
-              <p className="mt-3 text-3xl font-semibold text-slate-900">{yearlyPrice.toLocaleString('ru-RU')} ₽ / год</p>
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-sm font-semibold uppercase tracking-wide text-slate-700">Годовой тариф</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-900">12 000 ₽ / год</p>
               <p className="mt-2 text-sm text-slate-600">НДС включён</p>
-              <div className="mt-3 rounded-xl border border-emerald-300 bg-emerald-100/80 px-3 py-2 text-sm font-semibold text-emerald-900">
-                Вы экономите {yearlySavings.toLocaleString('ru-RU')} ₽ в год относительно помесячной оплаты.
-              </div>
               <p className="mt-3 text-sm text-slate-600">
                 Оплата по счёту. Запросить у менеджера:{' '}
                 <a href="https://t.me/makarov_egor" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary">
@@ -272,7 +258,7 @@ const LandingPage: React.FC = () => {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="heading-font text-3xl font-semibold text-slate-900">Новости продукта</h2>
-              <p className="mt-2 text-sm text-slate-500">Обновляется через кабинет суперадмина.</p>
+              <p className="mt-2 text-sm text-slate-500">Мы постоянно разрабатываем функционал</p>
             </div>
             <Link to="/news" className="text-sm font-semibold text-primary">
               Все новости
@@ -416,7 +402,7 @@ const LandingPage: React.FC = () => {
       <footer className="border-t border-slate-200 bg-white py-8 text-sm text-slate-600">
         <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 sm:px-6 lg:grid-cols-[1fr_1.1fr]">
           <div className="space-y-2">
-            <div className="heading-font text-lg font-semibold text-slate-900">Yago POS</div>
+            <div className="heading-font text-lg font-semibold text-slate-900">Yago App</div>
             <p>ООО «Джемьюн»</p>
             <p>ИНН 5800012413</p>
             <p>ОГРН 1255800000554</p>
