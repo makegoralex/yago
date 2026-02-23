@@ -42,7 +42,7 @@ export const orderSchemas = {
     params: z.object({ id: objectIdSchema }),
     body: z.object({
       method: z.enum(['cash', 'card']),
-      amount: z.number().positive({ message: 'Payment amount must be greater than zero' }),
+      amount: z.number().nonnegative({ message: 'Payment amount must be zero or greater' }),
       change: z.number().nonnegative().optional(),
     }),
   },
