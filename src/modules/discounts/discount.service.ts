@@ -189,7 +189,7 @@ export const calculateOrderTotals = async (
     };
   }
 
-  const minimumPayable = subtotal >= 1 ? 1 : subtotal;
+  const minimumPayable = 0;
 
   const productTotals = new Map<string, { total: number; name: string }>();
   const categoryTotals = new Map<string, { total: number; name: string }>();

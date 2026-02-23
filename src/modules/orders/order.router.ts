@@ -878,12 +878,23 @@ router.post(
       return;
     }
 
-    if (order.total <= 0) {
+    const hasOrderItems = Array.isArray(order.items) && order.items.some((item) => item.qty > 0);
+    if (!hasOrderItems) {
       res.status(400).json({ data: null, error: 'Cannot pay for an empty order' });
       return;
     }
 
+    if (order.total < 0) {
+      res.status(400).json({ data: null, error: 'Order total cannot be negative' });
+      return;
+    }
+
     const normalizedAmount = roundCurrency(amount);
+    if (order.total === 0 && normalizedAmount !== 0) {
+      res.status(400).json({ data: null, error: 'Payment amount must be zero for a zero-total order' });
+      return;
+    }
+
     if (normalizedAmount < order.total) {
       res.status(400).json({ data: null, error: 'Payment amount cannot be less than order total' });
       return;
@@ -895,6 +906,11 @@ router.post(
 
     if (method === 'cash' && normalizedAmount < order.total) {
       res.status(400).json({ data: null, error: 'Cash payments must cover the order total' });
+      return;
+    }
+
+    if (order.total === 0 && normalizedChange !== 0) {
+      res.status(400).json({ data: null, error: 'Change must be zero for a zero-total order' });
       return;
     }
 

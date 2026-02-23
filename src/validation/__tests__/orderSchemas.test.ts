@@ -41,4 +41,9 @@ describe('orderSchemas.orderPayment', () => {
     const result = orderSchemas.orderPayment.body.safeParse({ method: 'cash', amount: -1 });
     expect(result.success).toBe(false);
   });
+
+  it('allows zero amount for zero-total orders', () => {
+    const result = orderSchemas.orderPayment.body.safeParse({ method: 'card', amount: 0 });
+    expect(result.success).toBe(true);
+  });
 });
