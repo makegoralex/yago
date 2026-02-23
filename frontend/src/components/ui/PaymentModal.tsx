@@ -84,7 +84,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ open, total, method, onClos
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={isProcessing || parsedAmount <= 0}
+            disabled={isProcessing || parsedAmount < 0 || (total > 0 && parsedAmount <= 0)}
             className="h-14 flex-1 rounded-2xl bg-primary text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:opacity-70"
           >
             {isProcessing ? 'Обработка...' : 'Подтвердить'}
