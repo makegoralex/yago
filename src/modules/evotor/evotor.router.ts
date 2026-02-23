@@ -305,6 +305,18 @@ evotorRouter.post(
       return;
     }
 
+    if (order.total <= 0) {
+      res.json({
+        data: {
+          skipped: true,
+          reason: 'zero_total',
+          orderId: order._id,
+        },
+        error: null,
+      });
+      return;
+    }
+
     const items = buildEvotorOrderItems(order.items ?? [], order.total);
 
     if (!items.length) {
