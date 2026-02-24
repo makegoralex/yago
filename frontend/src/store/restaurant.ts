@@ -162,12 +162,16 @@ export const useRestaurantStore = create<RestaurantState>((set, get) => ({
       let response;
 
       try {
-        response = await api.put('/api/restaurant/branding', payload);
-      } catch (error) {
-        if (axios.isAxiosError(error) && error.response?.status !== undefined && error.response.status >= 400 && error.response.status < 500) {
-          response = await api.patch('/api/restaurant/branding', payload);
-        } else {
-          throw error;
+        response = await api.patch('/api/restaurant/branding', payload);
+      } catch (patchError) {
+        try {
+          response = await api.put('/api/restaurant/branding', payload);
+        } catch (putError) {
+          if (axios.isAxiosError(putError) && putError.response?.status !== undefined && putError.response.status < 500) {
+            response = await api.post('/api/restaurant/branding', payload);
+          } else {
+            throw putError;
+          }
         }
       }
 
@@ -183,7 +187,22 @@ export const useRestaurantStore = create<RestaurantState>((set, get) => ({
   resetBranding: async () => {
     try {
       set((state) => ({ ...state, loading: true }));
-      const response = await api.post('/api/restaurant/branding/reset');
+      let response;
+
+      try {
+        response = await api.post('/api/restaurant/branding/reset');
+      } catch (resetError) {
+        try {
+          response = await api.patch('/api/restaurant/branding', { reset: true });
+        } catch (patchError) {
+          if (axios.isAxiosError(patchError) && patchError.response?.status !== undefined && patchError.response.status < 500) {
+            response = await api.post('/api/restaurant/branding', { reset: true });
+          } else {
+            throw patchError;
+          }
+        }
+      }
+
       const branding = normalizeBranding(response.data?.data ?? response.data);
       persistBranding(branding);
       set((state) => ({ ...state, ...branding, loading: false }));
