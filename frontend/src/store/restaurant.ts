@@ -162,15 +162,15 @@ export const useRestaurantStore = create<RestaurantState>((set, get) => ({
       let response;
 
       try {
-        response = await api.patch('/api/restaurant/branding', payload);
-      } catch (patchError) {
+        response = await api.post('/api/restaurant/branding', payload);
+      } catch (postError) {
         try {
-          response = await api.put('/api/restaurant/branding', payload);
-        } catch (putError) {
-          if (axios.isAxiosError(putError) && putError.response?.status !== undefined && putError.response.status < 500) {
-            response = await api.post('/api/restaurant/branding', payload);
+          response = await api.patch('/api/restaurant/branding', payload);
+        } catch (patchError) {
+          if (axios.isAxiosError(patchError) && patchError.response?.status !== undefined && patchError.response.status < 500) {
+            response = await api.put('/api/restaurant/branding', payload);
           } else {
-            throw putError;
+            throw patchError;
           }
         }
       }
@@ -190,15 +190,15 @@ export const useRestaurantStore = create<RestaurantState>((set, get) => ({
       let response;
 
       try {
-        response = await api.post('/api/restaurant/branding/reset');
-      } catch (resetError) {
+        response = await api.post('/api/restaurant/branding', { reset: true });
+      } catch (postError) {
         try {
-          response = await api.patch('/api/restaurant/branding', { reset: true });
-        } catch (patchError) {
-          if (axios.isAxiosError(patchError) && patchError.response?.status !== undefined && patchError.response.status < 500) {
-            response = await api.post('/api/restaurant/branding', { reset: true });
+          response = await api.post('/api/restaurant/branding/reset');
+        } catch (resetError) {
+          if (axios.isAxiosError(resetError) && resetError.response?.status !== undefined && resetError.response.status < 500) {
+            response = await api.patch('/api/restaurant/branding', { reset: true });
           } else {
-            throw patchError;
+            throw resetError;
           }
         }
       }

@@ -142,33 +142,8 @@ router.get(
   })
 );
 
-router.put(
-  '/branding',
-  requireRole(['owner', 'superAdmin']),
-  asyncHandler(async (req: Request, res: Response) => {
-    const organizationId = getOrganizationObjectId(req);
-
-    if (!organizationId) {
-      res.status(403).json({ data: null, error: 'Organization context is required' });
-      return;
-    }
-
-    const updatePayload = extractBrandingUpdatePayload(req.body);
-
-    if (!updatePayload) {
-      res.status(400).json({ data: null, error: 'Не переданы валидные данные брендинга' });
-      return;
-    }
-
-    try {
-      const branding = await updateRestaurantBranding(organizationId, updatePayload);
-      res.json({ data: { branding }, error: null });
-    } catch (error) {
-      console.error('Failed to update restaurant branding:', error);
-      res.status(400).json({ data: null, error: 'Некорректные данные брендинга' });
-    }
-  })
-);
+router.put('/branding', requireRole(['owner', 'superAdmin']), asyncHandler(updateRestaurantBrandingHandler));
+router.post('/branding', requireRole(['owner', 'superAdmin']), asyncHandler(updateRestaurantBrandingHandler));
 
 router.put(
   '/cash-register',
