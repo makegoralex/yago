@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { create } from 'zustand';
 
 import api from '../lib/api';
@@ -102,40 +103,6 @@ const normalizeBranding = (payload: unknown): RestaurantPreferences => {
   };
 };
 
-const mergeBranding = (
-  current: RestaurantPreferences,
-  payload: Partial<RestaurantPreferences> | null | undefined
-): RestaurantPreferences => ({
-  name:
-    typeof payload?.name === 'string' && payload.name.trim() ? payload.name.trim() : current.name,
-  logoUrl: typeof payload?.logoUrl === 'string' ? payload.logoUrl : current.logoUrl,
-  measurementUnits:
-    Array.isArray(payload?.measurementUnits)
-      ? (() => {
-          const normalized = Array.from(
-            new Set(payload?.measurementUnits?.map((unit) => unit.trim()).filter((unit) => unit.length > 0))
-          );
-          return normalized.length > 0 ? normalized : defaultBranding.measurementUnits;
-        })()
-      : current.measurementUnits,
-  enableOrderTags:
-    typeof payload?.enableOrderTags === 'boolean' ? payload.enableOrderTags : current.enableOrderTags,
-  loyaltyRate:
-    typeof payload?.loyaltyRate === 'number'
-      ? Math.min(Math.max(Number(payload.loyaltyRate.toFixed(2)), 0), 100)
-      : current.loyaltyRate,
-  loyaltyRedeemAllCategories:
-    typeof payload?.loyaltyRedeemAllCategories === 'boolean'
-      ? payload.loyaltyRedeemAllCategories
-      : current.loyaltyRedeemAllCategories,
-  loyaltyRedeemCategoryIds:
-    payload?.loyaltyRedeemAllCategories === true
-      ? []
-      : Array.isArray(payload?.loyaltyRedeemCategoryIds)
-        ? normalizeCategoryIds(payload.loyaltyRedeemCategoryIds)
-        : current.loyaltyRedeemCategoryIds,
-});
-
 const loadBranding = (): RestaurantPreferences => {
   if (!isBrowser) {
     return defaultBranding;
@@ -190,21 +157,20 @@ export const useRestaurantStore = create<RestaurantState>((set, get) => ({
     }
   },
   updateBranding: async (payload) => {
-    const current: RestaurantPreferences = {
-      name: get().name,
-      logoUrl: get().logoUrl,
-      measurementUnits: get().measurementUnits,
-      enableOrderTags: get().enableOrderTags,
-      loyaltyRate: get().loyaltyRate,
-      loyaltyRedeemAllCategories: get().loyaltyRedeemAllCategories,
-      loyaltyRedeemCategoryIds: get().loyaltyRedeemCategoryIds,
-    };
-
-    const merged = mergeBranding(current, payload);
-
     try {
       set((state) => ({ ...state, loading: true }));
-      const response = await api.put('/api/restaurant/branding', merged);
+      let response;
+
+      try {
+        response = await api.put('/api/restaurant/branding', payload);
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status !== undefined && error.response.status >= 400 && error.response.status < 500) {
+          response = await api.patch('/api/restaurant/branding', payload);
+        } else {
+          throw error;
+        }
+      }
+
       const branding = normalizeBranding(response.data?.data ?? response.data);
       persistBranding(branding);
       set((state) => ({ ...state, ...branding, loading: false }));
