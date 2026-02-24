@@ -3219,11 +3219,10 @@ const AdminPage: React.FC = () => {
       isActive: productEditForm.isActive,
     };
 
-    if (productEditForm.price) {
-      payload.price = Number(productEditForm.price);
-    }
     if (productEditForm.basePrice) {
       payload.basePrice = Number(productEditForm.basePrice);
+    } else if (productEditForm.price) {
+      payload.price = Number(productEditForm.price);
     }
 
     payload.discountType = productEditForm.discountType || undefined;
