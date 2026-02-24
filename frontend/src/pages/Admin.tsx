@@ -820,6 +820,7 @@ const AdminPage: React.FC = () => {
   const [savingLoyaltyCategories, setSavingLoyaltyCategories] = useState(false);
   const [brandingForm, setBrandingForm] = useState({ name: restaurantName, logoUrl: restaurantLogo });
   const [brandingSaving, setBrandingSaving] = useState(false);
+  const [orderTagsSaving, setOrderTagsSaving] = useState(false);
   const [cashRegisterForm, setCashRegisterForm] = useState<CashRegisterSettings>({
     provider: 'none',
   });
@@ -4579,7 +4580,7 @@ const AdminPage: React.FC = () => {
 
   const handleToggleOrderTags = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const checked = event.target.checked;
-    setBrandingSaving(true);
+    setOrderTagsSaving(true);
     try {
       await updateRestaurantBranding({ enableOrderTags: checked });
       notify({
@@ -4593,7 +4594,7 @@ const AdminPage: React.FC = () => {
       console.error('Не удалось обновить метки заказов', error);
       notify({ title: 'Не удалось сохранить настройки меток', type: 'error' });
     } finally {
-      setBrandingSaving(false);
+      setOrderTagsSaving(false);
     }
   };
 
@@ -9116,7 +9117,8 @@ const AdminPage: React.FC = () => {
                   type="checkbox"
                   checked={enableOrderTags}
                   onChange={handleToggleOrderTags}
-                  className="h-5 w-5 rounded border-slate-300 text-secondary focus:ring-secondary"
+                  disabled={orderTagsSaving}
+                  className="h-5 w-5 rounded border-slate-300 text-secondary focus:ring-secondary disabled:opacity-60"
                 />
               </label>
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">

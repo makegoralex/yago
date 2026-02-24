@@ -164,7 +164,7 @@ export const useRestaurantStore = create<RestaurantState>((set, get) => ({
       try {
         response = await api.put('/api/restaurant/branding', payload);
       } catch (error) {
-        if (axios.isAxiosError(error) && (error.response?.status === 400 || error.response?.status === 404)) {
+        if (axios.isAxiosError(error) && error.response?.status !== undefined && error.response.status >= 400 && error.response.status < 500) {
           response = await api.patch('/api/restaurant/branding', payload);
         } else {
           throw error;
