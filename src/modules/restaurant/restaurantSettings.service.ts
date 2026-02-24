@@ -135,9 +135,7 @@ export const updateRestaurantBranding = async (
   organizationId: Types.ObjectId,
   payload: Partial<RestaurantBranding>
 ): Promise<RestaurantBranding> => {
-  const setPayload: Partial<RestaurantBranding> & { organizationId?: Types.ObjectId } = {
-    organizationId,
-  };
+  const setPayload: Partial<RestaurantBranding> = {};
 
   if (typeof payload.name === 'string') {
     const name = payload.name.trim();
@@ -197,7 +195,7 @@ export const resetRestaurantBranding = async (
 ): Promise<RestaurantBranding> => {
   const resetDocument = await RestaurantSettingsModel.findOneAndUpdate(
     { organizationId },
-    { $set: { ...DEFAULT_BRANDING, organizationId }, $setOnInsert: { ...DEFAULT_BRANDING, organizationId } },
+    { $set: { ...DEFAULT_BRANDING }, $setOnInsert: { ...DEFAULT_BRANDING, organizationId } },
     { new: true, upsert: true, setDefaultsOnInsert: true }
   );
 
