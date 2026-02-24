@@ -178,7 +178,7 @@ export const updateRestaurantBranding = async (
     { organizationId },
     {
       $set: setPayload,
-      $setOnInsert: { ...DEFAULT_BRANDING, organizationId },
+      $setOnInsert: { organizationId },
     },
     {
       new: true,
@@ -195,7 +195,7 @@ export const resetRestaurantBranding = async (
 ): Promise<RestaurantBranding> => {
   const resetDocument = await RestaurantSettingsModel.findOneAndUpdate(
     { organizationId },
-    { $set: { ...DEFAULT_BRANDING }, $setOnInsert: { ...DEFAULT_BRANDING, organizationId } },
+    { $set: { ...DEFAULT_BRANDING }, $setOnInsert: { organizationId } },
     { new: true, upsert: true, setDefaultsOnInsert: true }
   );
 

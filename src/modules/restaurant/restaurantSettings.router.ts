@@ -217,8 +217,13 @@ async function updateRestaurantBrandingHandler(req: Request, res: Response): Pro
   }
 
   if (reset === true || parseBoolean(reset) === true) {
-    const branding = await resetRestaurantBranding(organizationId);
-    res.json({ data: { branding }, error: null });
+    try {
+      const branding = await resetRestaurantBranding(organizationId);
+      res.json({ data: { branding }, error: null });
+    } catch (error) {
+      console.error('Failed to reset restaurant branding:', error);
+      res.status(400).json({ data: null, error: 'Не удалось сбросить брендинг' });
+    }
     return;
   }
 
@@ -257,8 +262,13 @@ router.post(
       return;
     }
 
-    const branding = await resetRestaurantBranding(organizationId);
-    res.json({ data: { branding }, error: null });
+    try {
+      const branding = await resetRestaurantBranding(organizationId);
+      res.json({ data: { branding }, error: null });
+    } catch (error) {
+      console.error('Failed to reset restaurant branding:', error);
+      res.status(400).json({ data: null, error: 'Не удалось сбросить брендинг' });
+    }
   })
 );
 
