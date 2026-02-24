@@ -812,6 +812,8 @@ const POSPage: React.FC = () => {
       <FloatingPanelOverlay open={isShiftPanelOpen} onClose={() => setShiftPanelOpen(false)}>
         <ShiftStatusPanel
           shift={currentShift}
+          history={shiftHistory}
+          historyLoading={shiftHistoryLoading}
           loading={isShiftLoading}
           isOpening={isOpeningShift}
           isClosing={isClosingShift}
@@ -976,6 +978,8 @@ const getOrderTagLabel = (tag?: OrderTag | null): string | null => {
 
 type ShiftStatusPanelProps = {
   shift: ShiftSummary | null;
+  history: OrderHistoryEntry[];
+  historyLoading: boolean;
   loading: boolean;
   isOpening: boolean;
   isClosing: boolean;
@@ -985,6 +989,8 @@ type ShiftStatusPanelProps = {
 
 const ShiftStatusPanel: React.FC<ShiftStatusPanelProps> = ({
   shift,
+  history,
+  historyLoading,
   loading,
   isOpening,
   isClosing,
@@ -993,6 +999,15 @@ const ShiftStatusPanel: React.FC<ShiftStatusPanelProps> = ({
 }) => {
   const actionDisabled = loading || isOpening || isClosing;
   const shiftOpenedAt = shift ? formatTimeLabel(shift.openedAt) : null;
+  const shiftRevenue = history.reduce((sum, order) => sum + (Number.isFinite(order.total) ? order.total : 0), 0);
+  const shiftCash = history.reduce(
+    (sum, order) => (order.paymentMethod === 'cash' ? sum + (Number.isFinite(order.total) ? order.total : 0) : sum),
+    0
+  );
+  const shiftCard = history.reduce(
+    (sum, order) => (order.paymentMethod === 'card' ? sum + (Number.isFinite(order.total) ? order.total : 0) : sum),
+    0
+  );
 
   return (
     <div className="rounded-2xl bg-white p-6 shadow-soft">
@@ -1036,6 +1051,30 @@ const ShiftStatusPanel: React.FC<ShiftStatusPanelProps> = ({
         Управляйте сменой из любого места интерфейса: откройте смену, чтобы начать продавать, или закройте, когда закончили
         работу.
       </p>
+      {shift ? (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-700">Краткий отчёт по смене</p>
+          {historyLoading ? (
+            <div className="mt-3 space-y-2">
+              <div className="h-4 w-40 animate-pulse rounded bg-slate-200" />
+              <div className="h-4 w-32 animate-pulse rounded bg-slate-200" />
+              <div className="h-4 w-32 animate-pulse rounded bg-slate-200" />
+            </div>
+          ) : (
+            <div className="mt-3 grid gap-2 text-sm text-slate-600">
+              <p>
+                Выручка за смену: <span className="font-semibold text-slate-900">{shiftRevenue.toFixed(2)} ₽</span>
+              </p>
+              <p>
+                Наличные: <span className="font-semibold text-slate-900">{shiftCash.toFixed(2)} ₽</span>
+              </p>
+              <p>
+                Безнал: <span className="font-semibold text-slate-900">{shiftCard.toFixed(2)} ₽</span>
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 };
