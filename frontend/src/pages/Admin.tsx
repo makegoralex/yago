@@ -361,6 +361,17 @@ type AdminDiscount = {
   isActive: boolean;
 };
 
+type DiscountAnalyticsStats = {
+  totalDiscountAmount: number;
+  discountPercent: number;
+  discountedOrdersCount: number;
+  period?: {
+    from?: string;
+    to?: string;
+  };
+  selectedDiscountIds: string[];
+};
+
 type ReceiptHistoryOrder = {
   _id: string;
   total: number;
@@ -637,6 +648,11 @@ const AdminPage: React.FC = () => {
   const [salesStatsError, setSalesStatsError] = useState<string | null>(null);
   const [salesStatsFilters, setSalesStatsFilters] = useState({ from: '', to: '' });
   const [salesStatsLoaded, setSalesStatsLoaded] = useState(false);
+  const [discountAnalyticsFilters, setDiscountAnalyticsFilters] = useState({ from: '', to: '', discountIds: [] as string[] });
+  const [discountAnalytics, setDiscountAnalytics] = useState<DiscountAnalyticsStats | null>(null);
+  const [discountAnalyticsLoading, setDiscountAnalyticsLoading] = useState(false);
+  const [discountAnalyticsError, setDiscountAnalyticsError] = useState<string | null>(null);
+  const [discountAnalyticsLoaded, setDiscountAnalyticsLoaded] = useState(false);
   const [receiptHistoryDate, setReceiptHistoryDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [receiptHistory, setReceiptHistory] = useState<ReceiptHistoryOrder[]>([]);
   const [receiptHistoryLoading, setReceiptHistoryLoading] = useState(false);
@@ -941,6 +957,62 @@ const AdminPage: React.FC = () => {
     },
     [notify]
   );
+
+
+  const loadDiscountAnalytics = useCallback(
+    async (filters?: { from?: string; to?: string; discountIds?: string[] }) => {
+      setDiscountAnalyticsLoading(true);
+      setDiscountAnalyticsError(null);
+      try {
+        const params = {
+          ...(filters?.from ? { from: filters.from } : {}),
+          ...(filters?.to ? { to: filters.to } : {}),
+          ...(filters?.discountIds && filters.discountIds.length > 0
+            ? { discountIds: filters.discountIds.join(',') }
+            : {}),
+        };
+
+        const response = await api.get('/api/admin/stats/discount-analytics', { params });
+        const payload = getResponseData<DiscountAnalyticsStats>(response);
+        setDiscountAnalytics(payload ?? null);
+      } catch (error) {
+        console.error('Не удалось загрузить аналитику по акциям', error);
+        const message = extractErrorMessage(error, 'Не удалось загрузить аналитику по акциям');
+        setDiscountAnalyticsError(message);
+        notify({ title: message, type: 'error' });
+      } finally {
+        setDiscountAnalyticsLoading(false);
+        setDiscountAnalyticsLoaded(true);
+      }
+    },
+    [notify]
+  );
+
+  const handleApplyDiscountAnalytics = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (discountAnalyticsFilters.from && discountAnalyticsFilters.to) {
+      const from = new Date(`${discountAnalyticsFilters.from}T00:00:00`);
+      const to = new Date(`${discountAnalyticsFilters.to}T00:00:00`);
+      if (from > to) {
+        const message = 'Дата начала должна быть раньше даты окончания';
+        setDiscountAnalyticsError(message);
+        notify({ title: message, type: 'error' });
+        return;
+      }
+    }
+
+    void loadDiscountAnalytics({
+      from: discountAnalyticsFilters.from || undefined,
+      to: discountAnalyticsFilters.to || undefined,
+      discountIds: discountAnalyticsFilters.discountIds,
+    });
+  };
+
+  const handleResetDiscountAnalytics = () => {
+    setDiscountAnalyticsFilters({ from: '', to: '', discountIds: [] });
+    void loadDiscountAnalytics();
+  };
 
   const loadReceiptHistory = useCallback(
     async (date: string) => {
@@ -2192,6 +2264,12 @@ const AdminPage: React.FC = () => {
       if (!salesStatsLoading && !salesStatsLoaded) {
         void loadSalesAndShiftStats();
       }
+      if (!discountAnalyticsLoading && !discountAnalyticsLoaded) {
+        void loadDiscountAnalytics();
+      }
+      if (!discountsLoading && !discountsReady) {
+        void loadDiscounts();
+      }
     }
 
     if (activeTab === 'menu') {
@@ -2279,6 +2357,9 @@ const AdminPage: React.FC = () => {
     salesStatsLoading,
     salesStatsLoaded,
     loadSalesAndShiftStats,
+    discountAnalyticsLoading,
+    discountAnalyticsLoaded,
+    loadDiscountAnalytics,
     cashiersLoading,
     cashiersLoaded,
     loadCashiersData,
@@ -4933,6 +5014,100 @@ const AdminPage: React.FC = () => {
                   </>
                 ) : (
                   <p className="text-sm text-slate-400">Нет данных за выбранный период</p>
+                )}
+              </Card>
+            </div>
+            <div className="mt-6"> 
+              <Card title="Аналитика по акциям"> 
+                <form onSubmit={handleApplyDiscountAnalytics} className="mb-4 flex flex-wrap items-end gap-3 text-sm"> 
+                  <label className="flex flex-col text-slate-600"> 
+                    <span className="mb-1 text-xs uppercase text-slate-400">С даты</span>
+                    <input
+                      type="date"
+                      value={discountAnalyticsFilters.from}
+                      onChange={(event) =>
+                        setDiscountAnalyticsFilters((prev) => ({ ...prev, from: event.target.value }))
+                      }
+                      className="rounded-2xl border border-slate-200 px-3 py-2"
+                    />
+                  </label>
+                  <label className="flex flex-col text-slate-600"> 
+                    <span className="mb-1 text-xs uppercase text-slate-400">По дату</span>
+                    <input
+                      type="date"
+                      value={discountAnalyticsFilters.to}
+                      onChange={(event) =>
+                        setDiscountAnalyticsFilters((prev) => ({ ...prev, to: event.target.value }))
+                      }
+                      className="rounded-2xl border border-slate-200 px-3 py-2"
+                    />
+                  </label>
+                  <label className="flex min-w-[280px] flex-1 flex-col text-slate-600"> 
+                    <span className="mb-1 text-xs uppercase text-slate-400">Акции</span>
+                    <select
+                      multiple
+                      value={discountAnalyticsFilters.discountIds}
+                      onChange={(event) => {
+                        const selectedIds = Array.from(event.target.selectedOptions, (option) => option.value);
+                        setDiscountAnalyticsFilters((prev) => ({ ...prev, discountIds: selectedIds }));
+                      }}
+                      className="min-h-[88px] rounded-2xl border border-slate-200 px-3 py-2"
+                    >
+                      {discounts.map((discount) => (
+                        <option key={discount._id} value={discount._id}>
+                          {discount.name}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-1 text-xs text-slate-400">Можно выбрать несколько акций (Ctrl/Cmd + клик).</span>
+                  </label>
+                  <div className="flex gap-2"> 
+                    <button
+                      type="submit"
+                      className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      disabled={discountAnalyticsLoading}
+                    >
+                      Применить
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetDiscountAnalytics}
+                      className="rounded-2xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-60"
+                      disabled={discountAnalyticsLoading}
+                    >
+                      Сбросить
+                    </button>
+                  </div>
+                </form>
+                {discountAnalyticsError ? <p className="mb-3 text-sm text-red-500">{discountAnalyticsError}</p> : null}
+                {discountAnalyticsLoading ? (
+                  <div className="grid gap-3 md:grid-cols-3"> 
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <div key={index} className="h-20 animate-pulse rounded-2xl bg-slate-200/70" />
+                    ))}
+                  </div>
+                ) : discountAnalytics ? (
+                  <>
+                    {formatPeriodLabel(discountAnalytics.period) ? (
+                      <p className="mb-3 text-xs uppercase text-slate-400">Период: {formatPeriodLabel(discountAnalytics.period)}</p>
+                    ) : null}
+                    <div className="grid gap-3 md:grid-cols-3"> 
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-xs font-semibold uppercase text-slate-400">Сумма дисконта</p>
+                        <p className="mt-1 text-lg font-semibold text-slate-800">{formatCurrency(discountAnalytics.totalDiscountAmount)} ₽</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-xs font-semibold uppercase text-slate-400">Процент дисконта</p>
+                        <p className="mt-1 text-lg font-semibold text-slate-800">{discountAnalytics.discountPercent.toFixed(2)}%</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-xs font-semibold uppercase text-slate-400">Заказов со скидкой</p>
+                        <p className="mt-1 text-lg font-semibold text-slate-800">{formatInteger(discountAnalytics.discountedOrdersCount)}</p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400">Нет данных за выбранный период.</p>
                 )}
               </Card>
             </div>

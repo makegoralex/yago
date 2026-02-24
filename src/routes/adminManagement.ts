@@ -25,7 +25,7 @@ import {
   handleUpdateDiscount,
   withErrorHandling as withDiscountErrorHandling,
 } from '../modules/discounts/discount.router';
-import { fetchSalesAndShiftStats } from '../modules/adminStats/adminStats.service';
+import { fetchDiscountAnalyticsStats, fetchSalesAndShiftStats } from '../modules/adminStats/adminStats.service';
 import {
   CashierServiceError,
   createCashierAccount,
@@ -100,6 +100,24 @@ const parseDateOnly = (value: unknown): Date | undefined => {
 
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
+
+const parseDiscountIds = (value: unknown): string[] => {
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => (typeof item === 'string' ? item.split(',') : []))
+      .map((id) => id.trim())
+      .filter(Boolean);
+  }
+
+  return [];
 };
 
 router.get(
@@ -526,6 +544,46 @@ router.get(
     }
 
     const stats = await fetchSalesAndShiftStats({ organizationId: organizationId.toString(), from, to });
+
+    res.json({ data: stats, error: null });
+  })
+);
+
+router.get(
+  '/stats/discount-analytics',
+  asyncHandler(async (req: Request, res: Response) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const from = parseDateOnly(req.query.from);
+    const to = parseDateOnly(req.query.to);
+
+    if (req.query.from && !from) {
+      res.status(400).json({ data: null, error: 'from должен быть в формате YYYY-MM-DD' });
+      return;
+    }
+
+    if (req.query.to && !to) {
+      res.status(400).json({ data: null, error: 'to должен быть в формате YYYY-MM-DD' });
+      return;
+    }
+
+    if (from && to && from > to) {
+      res.status(400).json({ data: null, error: 'from должен быть меньше или равен to' });
+      return;
+    }
+
+    const discountIds = parseDiscountIds(req.query.discountIds);
+    const stats = await fetchDiscountAnalyticsStats({
+      organizationId: organizationId.toString(),
+      from,
+      to,
+      discountIds,
+    });
 
     res.json({ data: stats, error: null });
   })

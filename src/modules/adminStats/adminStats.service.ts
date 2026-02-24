@@ -25,6 +25,21 @@ export interface SalesAndShiftStats {
   };
 }
 
+export interface DiscountAnalyticsFilter extends SalesAndShiftFilter {
+  discountIds?: string[];
+}
+
+export interface DiscountAnalyticsStats {
+  totalDiscountAmount: number;
+  discountPercent: number;
+  discountedOrdersCount: number;
+  period?: {
+    from?: string;
+    to?: string;
+  };
+  selectedDiscountIds: string[];
+}
+
 const sanitizeTotals = (totals?: ShiftTotals | null): ShiftTotals => ({
   cash: totals?.cash ?? 0,
   card: totals?.card ?? 0,
@@ -151,5 +166,102 @@ export const fetchSalesAndShiftStats = async (
     takeawayOrders,
     deliveryOrders,
     period,
+  };
+};
+
+export const fetchDiscountAnalyticsStats = async (
+  filters: DiscountAnalyticsFilter
+): Promise<DiscountAnalyticsStats> => {
+  if (!filters.organizationId || !isValidObjectId(filters.organizationId)) {
+    throw new Error('Organization context is required');
+  }
+
+  const organizationObjectId = new Types.ObjectId(filters.organizationId);
+  const orderMatch: Record<string, unknown> = {
+    status: { $in: ['paid', 'completed'] },
+    organizationId: organizationObjectId,
+  };
+
+  if (filters.from || filters.to) {
+    const createdAt: Record<string, Date> = {};
+
+    if (filters.from) {
+      createdAt.$gte = filters.from;
+    }
+
+    if (filters.to) {
+      createdAt.$lte = filters.to;
+    }
+
+    orderMatch.createdAt = createdAt;
+  }
+
+  const selectedDiscountIds = (filters.discountIds ?? []).filter((id) => isValidObjectId(id));
+
+  const discountAmountExpression =
+    selectedDiscountIds.length > 0
+      ? {
+          $sum: {
+            $map: {
+              input: {
+                $filter: {
+                  input: '$appliedDiscounts',
+                  as: 'discount',
+                  cond: {
+                    $in: [{ $toString: '$$discount.discountId' }, selectedDiscountIds],
+                  },
+                },
+              },
+              as: 'discount',
+              in: { $ifNull: ['$$discount.amount', 0] },
+            },
+          },
+        }
+      : '$discount';
+
+  const [stats] = await OrderModel.aggregate<{
+    totalDiscountAmount: number;
+    totalSubtotal: number;
+    discountedOrdersCount: number;
+  }>([
+    { $match: orderMatch },
+    {
+      $project: {
+        subtotal: { $ifNull: ['$subtotal', 0] },
+        discountAmount: discountAmountExpression,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalDiscountAmount: { $sum: '$discountAmount' },
+        totalSubtotal: { $sum: '$subtotal' },
+        discountedOrdersCount: {
+          $sum: {
+            $cond: [{ $gt: ['$discountAmount', 0] }, 1, 0],
+          },
+        },
+      },
+    },
+  ]);
+
+  const totalDiscountAmount = Number(stats?.totalDiscountAmount ?? 0);
+  const totalSubtotal = Number(stats?.totalSubtotal ?? 0);
+  const discountPercent = totalSubtotal > 0 ? (totalDiscountAmount / totalSubtotal) * 100 : 0;
+
+  const period =
+    filters.from || filters.to
+      ? {
+          ...(filters.from ? { from: filters.from.toISOString() } : {}),
+          ...(filters.to ? { to: filters.to.toISOString() } : {}),
+        }
+      : undefined;
+
+  return {
+    totalDiscountAmount,
+    discountPercent,
+    discountedOrdersCount: stats?.discountedOrdersCount ?? 0,
+    period,
+    selectedDiscountIds,
   };
 };
