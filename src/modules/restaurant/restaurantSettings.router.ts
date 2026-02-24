@@ -175,9 +175,40 @@ router.put(
 
 router.patch('/branding', requireRole(['owner', 'superAdmin']), asyncHandler(updateRestaurantBrandingHandler));
 
+const resolveBrandingBody = (body: unknown): Record<string, unknown> => {
+  if (!body || typeof body !== 'object') {
+    return {};
+  }
+
+  const source = body as Record<string, unknown>;
+  const candidates = [source, source.data, source.branding];
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') {
+      continue;
+    }
+
+    const normalized = candidate as Record<string, unknown>;
+    if ('name' in normalized || 'logoUrl' in normalized || 'enableOrderTags' in normalized || 'reset' in normalized) {
+      return normalized;
+    }
+  }
+
+  return source;
+};
+
 async function updateRestaurantBrandingHandler(req: Request, res: Response): Promise<void> {
-  const { name, logoUrl, enableOrderTags, measurementUnits, loyaltyRate, loyaltyRedeemAllCategories, loyaltyRedeemCategoryIds, reset } =
-    req.body ?? {};
+  const brandingBody = resolveBrandingBody(req.body);
+  const {
+    name,
+    logoUrl,
+    enableOrderTags,
+    measurementUnits,
+    loyaltyRate,
+    loyaltyRedeemAllCategories,
+    loyaltyRedeemCategoryIds,
+    reset,
+  } = brandingBody;
   const organizationId = getOrganizationObjectId(req);
 
   if (!organizationId) {
@@ -185,9 +216,14 @@ async function updateRestaurantBrandingHandler(req: Request, res: Response): Pro
     return;
   }
 
-  if (reset === true) {
-    const branding = await resetRestaurantBranding(organizationId);
-    res.json({ data: { branding }, error: null });
+  if (reset === true || parseBoolean(reset) === true) {
+    try {
+      const branding = await resetRestaurantBranding(organizationId);
+      res.json({ data: { branding }, error: null });
+    } catch (error) {
+      console.error('Failed to reset restaurant branding:', error);
+      res.status(400).json({ data: null, error: 'Не удалось сбросить брендинг' });
+    }
     return;
   }
 
@@ -226,8 +262,13 @@ router.post(
       return;
     }
 
-    const branding = await resetRestaurantBranding(organizationId);
-    res.json({ data: { branding }, error: null });
+    try {
+      const branding = await resetRestaurantBranding(organizationId);
+      res.json({ data: { branding }, error: null });
+    } catch (error) {
+      console.error('Failed to reset restaurant branding:', error);
+      res.status(400).json({ data: null, error: 'Не удалось сбросить брендинг' });
+    }
   })
 );
 
