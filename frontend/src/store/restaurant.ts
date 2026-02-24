@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { create } from 'zustand';
 
 import api from '../lib/api';
@@ -158,7 +159,18 @@ export const useRestaurantStore = create<RestaurantState>((set, get) => ({
   updateBranding: async (payload) => {
     try {
       set((state) => ({ ...state, loading: true }));
-      const response = await api.put('/api/restaurant/branding', payload);
+      let response;
+
+      try {
+        response = await api.put('/api/restaurant/branding', payload);
+      } catch (error) {
+        if (axios.isAxiosError(error) && (error.response?.status === 400 || error.response?.status === 404)) {
+          response = await api.patch('/api/restaurant/branding', payload);
+        } else {
+          throw error;
+        }
+      }
+
       const branding = normalizeBranding(response.data?.data ?? response.data);
       persistBranding(branding);
       set((state) => ({ ...state, ...branding, loading: false }));
