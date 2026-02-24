@@ -135,24 +135,21 @@ export const updateRestaurantBranding = async (
   organizationId: Types.ObjectId,
   payload: Partial<RestaurantBranding>
 ): Promise<RestaurantBranding> => {
-  const existing = await RestaurantSettingsModel.findOne({ organizationId });
-  const brandingDoc = existing ?? new RestaurantSettingsModel({ ...DEFAULT_BRANDING, organizationId });
-
-  if (!brandingDoc.organizationId) {
-    brandingDoc.organizationId = organizationId;
-  }
+  const setPayload: Partial<RestaurantBranding> & { organizationId?: Types.ObjectId } = {
+    organizationId,
+  };
 
   if (typeof payload.name === 'string') {
     const name = payload.name.trim();
-    brandingDoc.name = name || DEFAULT_BRANDING.name;
+    setPayload.name = name || DEFAULT_BRANDING.name;
   }
 
   if (typeof payload.logoUrl === 'string') {
-    brandingDoc.logoUrl = payload.logoUrl.trim();
+    setPayload.logoUrl = payload.logoUrl.trim();
   }
 
   if (typeof payload.enableOrderTags === 'boolean') {
-    brandingDoc.enableOrderTags = Boolean(payload.enableOrderTags);
+    setPayload.enableOrderTags = Boolean(payload.enableOrderTags);
   }
 
   if (Array.isArray(payload.measurementUnits)) {
@@ -160,23 +157,39 @@ export const updateRestaurantBranding = async (
       new Set(payload.measurementUnits.map((unit) => (typeof unit === 'string' ? unit.trim() : '')).filter((unit) => unit.length > 0))
     );
 
-    brandingDoc.measurementUnits = normalizedUnits.length > 0 ? normalizedUnits : DEFAULT_BRANDING.measurementUnits;
+    setPayload.measurementUnits = normalizedUnits.length > 0 ? normalizedUnits : DEFAULT_BRANDING.measurementUnits;
   }
 
   if (typeof payload.loyaltyRate === 'number') {
-    brandingDoc.loyaltyRate = clampLoyaltyRate(payload.loyaltyRate);
+    setPayload.loyaltyRate = clampLoyaltyRate(payload.loyaltyRate);
   }
 
   if (typeof payload.loyaltyRedeemAllCategories === 'boolean') {
-    brandingDoc.loyaltyRedeemAllCategories = payload.loyaltyRedeemAllCategories;
+    setPayload.loyaltyRedeemAllCategories = payload.loyaltyRedeemAllCategories;
+
+    if (payload.loyaltyRedeemAllCategories) {
+      setPayload.loyaltyRedeemCategoryIds = [];
+    }
   }
 
   if (Array.isArray(payload.loyaltyRedeemCategoryIds)) {
-    brandingDoc.loyaltyRedeemCategoryIds = normalizeCategoryIds(payload.loyaltyRedeemCategoryIds);
+    setPayload.loyaltyRedeemCategoryIds = normalizeCategoryIds(payload.loyaltyRedeemCategoryIds);
   }
 
-  const saved = await brandingDoc.save();
-  return normalizeBranding(saved);
+  const updated = await RestaurantSettingsModel.findOneAndUpdate(
+    { organizationId },
+    {
+      $set: setPayload,
+      $setOnInsert: { ...DEFAULT_BRANDING, organizationId },
+    },
+    {
+      new: true,
+      upsert: true,
+      setDefaultsOnInsert: true,
+    }
+  );
+
+  return normalizeBranding(updated);
 };
 
 export const resetRestaurantBranding = async (
