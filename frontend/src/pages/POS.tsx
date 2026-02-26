@@ -999,12 +999,13 @@ const ShiftStatusPanel: React.FC<ShiftStatusPanelProps> = ({
 }) => {
   const actionDisabled = loading || isOpening || isClosing;
   const shiftOpenedAt = shift ? formatTimeLabel(shift.openedAt) : null;
-  const shiftRevenue = history.reduce((sum, order) => sum + (Number.isFinite(order.total) ? order.total : 0), 0);
-  const shiftCash = history.reduce(
+  const revenueHistory = history.filter((order) => order.status !== 'cancelled');
+  const shiftRevenue = revenueHistory.reduce((sum, order) => sum + (Number.isFinite(order.total) ? order.total : 0), 0);
+  const shiftCash = revenueHistory.reduce(
     (sum, order) => (order.paymentMethod === 'cash' ? sum + (Number.isFinite(order.total) ? order.total : 0) : sum),
     0
   );
-  const shiftCard = history.reduce(
+  const shiftCard = revenueHistory.reduce(
     (sum, order) => (order.paymentMethod === 'card' ? sum + (Number.isFinite(order.total) ? order.total : 0) : sum),
     0
   );
