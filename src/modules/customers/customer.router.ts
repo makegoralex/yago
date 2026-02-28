@@ -1,8 +1,10 @@
 import { Router, type RequestHandler } from 'express';
+import { isValidObjectId, Types } from 'mongoose';
 
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { enforceActiveSubscription } from '../../middleware/subscription';
 import { CustomerModel } from './customer.model';
+import { OrderModel } from '../orders/order.model';
 
 const router = Router();
 const MANAGER_ROLES = ['cashier', 'owner', 'superAdmin'];
@@ -64,6 +66,69 @@ router.get(
     }
 
     res.json({ data: customer, error: null });
+  })
+);
+
+router.get(
+  '/:id/operations',
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    if (!id || typeof id !== 'string' || !isValidObjectId(id)) {
+      res.status(400).json({ data: null, error: 'Customer id is required' });
+      return;
+    }
+
+    const organizationId = req.organization!.id;
+    const customer = await CustomerModel.findOne({ _id: id.trim(), organizationId }).select('_id');
+
+    if (!customer) {
+      res.status(404).json({ data: null, error: 'Customer not found' });
+      return;
+    }
+
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 100) : 30;
+
+    const orders = await OrderModel.find({
+      organizationId,
+      customerId: new Types.ObjectId(id.trim()),
+      status: { $in: ['paid', 'completed', 'cancelled'] },
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .select('createdAt status total payment items appliedDiscounts')
+      .lean();
+
+    const operations = orders.map((order) => ({
+      orderId: order._id,
+      date: order.createdAt,
+      status: order.status,
+      total: order.total,
+      paymentMethod: order.payment?.method,
+      items: Array.isArray(order.items)
+        ? order.items.map((item) => ({
+            lineId: item.lineId,
+            name: item.name,
+            qty: item.qty,
+            price: item.price,
+            total: item.total,
+          }))
+        : [],
+      promotions: Array.isArray(order.appliedDiscounts)
+        ? order.appliedDiscounts.map((discount) => ({
+            name: discount.name,
+            type: discount.type,
+            scope: discount.scope,
+            value: discount.value,
+            amount: discount.amount,
+            targetName: discount.targetName,
+            application: discount.application,
+          }))
+        : [],
+    }));
+
+    res.json({ data: operations, error: null });
   })
 );
 
