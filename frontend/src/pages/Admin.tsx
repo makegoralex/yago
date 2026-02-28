@@ -330,6 +330,24 @@ type LoyaltyOperation = {
   after: number;
 };
 
+type LoyaltyPurchaseOperation = {
+  orderId: string;
+  date: string;
+  status: 'paid' | 'completed' | 'cancelled';
+  total: number;
+  paymentMethod?: 'cash' | 'card';
+  items: Array<{ lineId?: string; name: string; qty: number; price: number; total: number }>;
+  promotions: Array<{
+    name: string;
+    type: 'fixed' | 'percentage';
+    scope: 'order' | 'category' | 'product';
+    value: number;
+    amount: number;
+    targetName?: string;
+    application: 'manual' | 'auto' | 'selected';
+  }>;
+};
+
 type ModifierIngredientDelta = {
   ingredientId: string;
   delta: string;
@@ -610,6 +628,11 @@ const AdminPage: React.FC = () => {
   const [loyaltyView, setLoyaltyView] = useState<'list' | 'grid'>('list');
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
   const [customerOperations, setCustomerOperations] = useState<Record<string, LoyaltyOperation[]>>({});
+  const [customerPurchaseOperations, setCustomerPurchaseOperations] = useState<
+    Record<string, LoyaltyPurchaseOperation[]>
+  >({});
+  const [customerPurchaseOperationsLoadingId, setCustomerPurchaseOperationsLoadingId] = useState<string | null>(null);
+  const [customerPurchaseOperationsError, setCustomerPurchaseOperationsError] = useState<Record<string, string>>({});
   const [loyaltyActionAmount, setLoyaltyActionAmount] = useState('');
   const [loyaltyActionResult, setLoyaltyActionResult] = useState<string | null>(null);
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
@@ -2014,6 +2037,41 @@ const AdminPage: React.FC = () => {
     }
   }, [notify]);
 
+  const loadCustomerPurchaseOperations = useCallback(
+    async (customerId: string) => {
+      if (!customerId) {
+        return;
+      }
+
+      setCustomerPurchaseOperationsLoadingId(customerId);
+      setCustomerPurchaseOperationsError((prev) => {
+        if (!prev[customerId]) {
+          return prev;
+        }
+
+        const next = { ...prev };
+        delete next[customerId];
+        return next;
+      });
+
+      try {
+        const response = await api.get(`/api/customers/${customerId}/operations`);
+        setCustomerPurchaseOperations((prev) => ({
+          ...prev,
+          [customerId]: getResponseData<LoyaltyPurchaseOperation[]>(response) ?? [],
+        }));
+      } catch (error) {
+        console.error('Не удалось загрузить историю покупок гостя', error);
+        const message = extractErrorMessage(error, 'Не удалось загрузить историю покупок');
+        setCustomerPurchaseOperationsError((prev) => ({ ...prev, [customerId]: message }));
+        notify({ title: message, type: 'error' });
+      } finally {
+        setCustomerPurchaseOperationsLoadingId((prev) => (prev === customerId ? null : prev));
+      }
+    },
+    [notify]
+  );
+
   const handleSaveLoyaltyRate = async (event: React.FormEvent) => {
     event.preventDefault();
     const numericValue = Number(loyaltyRateDraft);
@@ -2484,6 +2542,14 @@ const AdminPage: React.FC = () => {
       averageActiveCheck,
     };
   }, [customers]);
+
+  const selectedCustomerPurchaseOperations = selectedCustomer
+    ? customerPurchaseOperations[selectedCustomer._id] ?? []
+    : [];
+  const selectedCustomerPurchaseHistoryLoading =
+    !!selectedCustomer && customerPurchaseOperationsLoadingId === selectedCustomer._id;
+  const selectedCustomerPurchaseHistoryError =
+    selectedCustomer ? customerPurchaseOperationsError[selectedCustomer._id] : undefined;
 
   const isLoyaltyPanelOpen = Boolean(selectedCustomer || isCreatingCustomer);
 
@@ -4353,6 +4419,10 @@ const AdminPage: React.FC = () => {
       points: customer.points.toString(),
       totalSpent: customer.totalSpent.toFixed(2),
     });
+
+    if (!customerPurchaseOperations[customer._id]) {
+      void loadCustomerPurchaseOperations(customer._id);
+    }
   };
 
   const handleUpdateCustomer = async (event: React.FormEvent) => {
@@ -8152,6 +8222,77 @@ const AdminPage: React.FC = () => {
                           </div>
                         </div>
 
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs uppercase text-slate-400">История покупок</p>
+                            <button
+                              type="button"
+                              onClick={() => selectedCustomer && void loadCustomerPurchaseOperations(selectedCustomer._id)}
+                              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:border-emerald-300"
+                              disabled={selectedCustomerPurchaseHistoryLoading}
+                            >
+                              {selectedCustomerPurchaseHistoryLoading ? 'Загрузка…' : 'Обновить'}
+                            </button>
+                          </div>
+
+                          {selectedCustomerPurchaseHistoryError ? (
+                            <p className="text-xs text-red-500">{selectedCustomerPurchaseHistoryError}</p>
+                          ) : null}
+
+                          <div className="space-y-2">
+                            {selectedCustomerPurchaseOperations.length ? (
+                              selectedCustomerPurchaseOperations.map((operation) => (
+                                <div
+                                  key={operation.orderId}
+                                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs"
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="font-semibold text-slate-700">
+                                      Чек {formatDateTime(operation.date)} · {operation.total.toFixed(2)} ₽
+                                    </p>
+                                    <p className="text-slate-400">
+                                      {operation.status === 'cancelled' ? 'Отменён' : 'Оплачен'}
+                                      {operation.paymentMethod ? ` · ${operation.paymentMethod === 'cash' ? 'Наличные' : 'Карта'}` : ''}
+                                    </p>
+                                  </div>
+                                  <div className="mt-2 space-y-1">
+                                    {operation.items.length ? (
+                                      operation.items.map((item, index) => (
+                                        <div
+                                          key={`${operation.orderId}-${item.lineId ?? index}`}
+                                          className="flex items-center justify-between text-slate-600"
+                                        >
+                                          <p>
+                                            {item.name} × {item.qty}
+                                          </p>
+                                          <p>
+                                            {item.price.toFixed(2)} ₽ · {item.total.toFixed(2)} ₽
+                                          </p>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p className="text-slate-400">Нет позиций в чеке</p>
+                                    )}
+                                  </div>
+                                  {operation.promotions.length ? (
+                                    <div className="mt-2 rounded-xl bg-emerald-50 px-2 py-1 text-emerald-700">
+                                      <p className="font-medium">Применённые акции:</p>
+                                      {operation.promotions.map((promotion, index) => (
+                                        <p key={`${operation.orderId}-promo-${index}`}>
+                                          {promotion.name}: -{promotion.amount.toFixed(2)} ₽
+                                          {promotion.targetName ? ` (${promotion.targetName})` : ''}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-slate-400">Пока нет покупок по этому гостю.</p>
+                            )}
+                          </div>
+                        </div>
+
                         {isEditingCustomer ? (
                           <form onSubmit={handleUpdateCustomer} className="space-y-3 text-sm">
                             <p className="text-xs uppercase text-slate-400">Контакты гостя</p>
@@ -8380,6 +8521,77 @@ const AdminPage: React.FC = () => {
                             )}
                           </div>
                         </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs uppercase text-slate-400">История покупок</p>
+                            <button
+                              type="button"
+                              onClick={() => selectedCustomer && void loadCustomerPurchaseOperations(selectedCustomer._id)}
+                              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:border-emerald-300"
+                              disabled={selectedCustomerPurchaseHistoryLoading}
+                            >
+                              {selectedCustomerPurchaseHistoryLoading ? 'Загрузка…' : 'Обновить'}
+                            </button>
+                          </div>
+
+                          {selectedCustomerPurchaseHistoryError ? (
+                            <p className="text-xs text-red-500">{selectedCustomerPurchaseHistoryError}</p>
+                          ) : null}
+
+                          <div className="space-y-2">
+                            {selectedCustomerPurchaseOperations.length ? (
+                              selectedCustomerPurchaseOperations.map((operation) => (
+                                <div
+                                  key={operation.orderId}
+                                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs"
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="font-semibold text-slate-700">
+                                      Чек {formatDateTime(operation.date)} · {operation.total.toFixed(2)} ₽
+                                    </p>
+                                    <p className="text-slate-400">
+                                      {operation.status === 'cancelled' ? 'Отменён' : 'Оплачен'}
+                                      {operation.paymentMethod ? ` · ${operation.paymentMethod === 'cash' ? 'Наличные' : 'Карта'}` : ''}
+                                    </p>
+                                  </div>
+                                  <div className="mt-2 space-y-1">
+                                    {operation.items.length ? (
+                                      operation.items.map((item, index) => (
+                                        <div
+                                          key={`${operation.orderId}-${item.lineId ?? index}`}
+                                          className="flex items-center justify-between text-slate-600"
+                                        >
+                                          <p>
+                                            {item.name} × {item.qty}
+                                          </p>
+                                          <p>
+                                            {item.price.toFixed(2)} ₽ · {item.total.toFixed(2)} ₽
+                                          </p>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p className="text-slate-400">Нет позиций в чеке</p>
+                                    )}
+                                  </div>
+                                  {operation.promotions.length ? (
+                                    <div className="mt-2 rounded-xl bg-emerald-50 px-2 py-1 text-emerald-700">
+                                      <p className="font-medium">Применённые акции:</p>
+                                      {operation.promotions.map((promotion, index) => (
+                                        <p key={`${operation.orderId}-promo-${index}`}>
+                                          {promotion.name}: -{promotion.amount.toFixed(2)} ₽
+                                          {promotion.targetName ? ` (${promotion.targetName})` : ''}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-slate-400">Пока нет покупок по этому гостю.</p>
+                            )}
+                          </div>
+                        </div>
+
                         {isEditingCustomer ? (
                           <form onSubmit={handleUpdateCustomer} className="space-y-3 text-sm">
                             <p className="text-xs uppercase text-slate-400">Контакты гостя</p>
