@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Yago Cashier</string>
+    <string name="action_pos">POS</string>
+    <string name="action_reload">Обновить</string>
+    <string name="action_logout">Выйти</string>
+    <string name="logout_confirm_title">Выход из кассы</string>
+    <string name="logout_confirm_message">Завершить сессию кассира на этом планшете?</string>
+</resources>
