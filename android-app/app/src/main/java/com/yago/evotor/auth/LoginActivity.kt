@@ -48,13 +48,13 @@ class LoginActivity : AppCompatActivity() {
             errorText.text = ""
             errorText.visibility = View.GONE
 
-            val baseUrl = DEFAULT_BASE_URL
+            val baseUrl = baseUrlInput.text.toString().trim().ifBlank { DEFAULT_BASE_URL }
             val email = emailInput.text.toString().trim()
             val password = passwordInput.text.toString().trim()
             val organizationId = organizationInput.text.toString().trim().ifBlank { null }
 
-            if (email.isBlank() || password.isBlank()) {
-                errorText.text = getString(R.string.login_error_required_credentials)
+            if (baseUrl.isBlank() || email.isBlank() || password.isBlank()) {
+                errorText.text = getString(R.string.login_error_required)
                 errorText.visibility = View.VISIBLE
                 return@setOnClickListener
             }
