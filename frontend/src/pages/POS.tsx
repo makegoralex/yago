@@ -24,6 +24,13 @@ import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
 import { useToast } from '../providers/ToastProvider';
 
+
+const getKitchenStatusLabel = (status?: 'pending' | 'in_progress' | 'ready' | null): string | null => {
+  if (status === 'pending') return 'Кухня: ожидает';
+  if (status === 'in_progress') return 'Кухня: готовят';
+  if (status === 'ready') return 'Кухня: готово';
+  return null;
+};
 const POSPage: React.FC = () => {
   const navigate = useNavigate();
   const isDesktop = useMediaQuery('(min-width: 1280px)');
@@ -598,6 +605,7 @@ const POSPage: React.FC = () => {
                     {activeOrders.map((order) => {
                       const isActive = orderId === order._id;
                       const tagLabel = getOrderTagLabel(order.orderTag);
+                      const kitchenStatusLabel = getKitchenStatusLabel(order.kitchenStatus);
                       return (
                         <button
                           type="button"
@@ -620,6 +628,7 @@ const POSPage: React.FC = () => {
                           {order.status === 'paid' ? (
                             <p className="text-xs uppercase text-slate-400">оплачен</p>
                           ) : null}
+                          {kitchenStatusLabel ? <p className="text-xs text-slate-500">{kitchenStatusLabel}</p> : null}
                           <p className="mt-2 text-base font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>
                         </button>
                       );
@@ -682,6 +691,7 @@ const POSPage: React.FC = () => {
                         <ul className="mt-3 space-y-3">
                           {activeOrders.map((order) => {
                             const tagLabel = getOrderTagLabel(order.orderTag);
+                            const kitchenStatusLabel = getKitchenStatusLabel(order.kitchenStatus);
                             return (
                               <li
                                 key={order._id}
@@ -699,6 +709,7 @@ const POSPage: React.FC = () => {
                                   <p className="text-sm text-slate-500">
                                     {new Date(order.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                                   </p>
+                                  {kitchenStatusLabel ? <p className="text-xs text-slate-500">{kitchenStatusLabel}</p> : null}
                                 </div>
                                 <div className="text-right">
                                   <p className="text-sm font-semibold text-slate-900">{order.total.toFixed(2)} ₽</p>

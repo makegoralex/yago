@@ -60,6 +60,7 @@ const userRoles = [
   { value: 'superAdmin', label: 'Суперадмин' },
   { value: 'owner', label: 'Владелец' },
   { value: 'cashier', label: 'Кассир' },
+  { value: 'kitchen', label: 'Кухня' },
 ];
 
 const quickActions = [

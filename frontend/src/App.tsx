@@ -6,6 +6,8 @@ import AdminPage from './pages/Admin';
 import SettingsPage from './pages/Settings';
 import LandingPage from './pages/Landing';
 import SuperAdminPage from './pages/SuperAdmin';
+import KDSPage from './pages/KDS';
+import OSSPage from './pages/OSS';
 import BlogPage from './pages/Blog';
 import BlogPostPage from './pages/BlogPost';
 import DocsPage from './pages/Docs';
@@ -29,7 +31,9 @@ const getLandingRoute = (user: AuthUser | null): string => {
     return '/super-admin';
   }
 
-  return OWNER_ROLES.includes(user.role) ? '/admin' : '/pos';
+  if (OWNER_ROLES.includes(user.role)) return '/admin';
+  if (user.role === 'kitchen') return '/kds';
+  return '/pos';
 };
 
 const ThemeScopeSync: React.FC = () => {
@@ -38,7 +42,7 @@ const ThemeScopeSync: React.FC = () => {
 
   useEffect(() => {
     const path = location.pathname;
-    if (path.startsWith('/pos') || path.startsWith('/settings')) {
+    if (path.startsWith('/pos') || path.startsWith('/settings') || path.startsWith('/kds') || path.startsWith('/oss')) {
       setScope('pos');
       return;
     }
@@ -72,8 +76,10 @@ const App: React.FC = () => {
         <Route path="/help" element={<DocsPage />} />
         <Route path="/news" element={<NewsPage />} />
         <Route path="/news/:slug" element={<NewsPostPage />} />
-        <Route element={<ProtectedRoute allowed={['cashier', 'owner']} />}>
+        <Route element={<ProtectedRoute allowed={['cashier', 'owner', 'kitchen']} />}>
           <Route path="/pos" element={<POSPage />} />
+          <Route path="/kds" element={<KDSPage />} />
+          <Route path="/oss" element={<OSSPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route element={<ProtectedRoute allowed={['owner', 'superAdmin']} />}>
