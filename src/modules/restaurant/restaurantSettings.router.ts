@@ -195,7 +195,19 @@ const resolveBrandingBody = (body: unknown): Record<string, unknown> => {
     }
 
     const normalized = candidate as Record<string, unknown>;
-    if ('name' in normalized || 'logoUrl' in normalized || 'enableOrderTags' in normalized || 'reset' in normalized) {
+    if (
+      'name' in normalized ||
+      'logoUrl' in normalized ||
+      'enableOrderTags' in normalized ||
+      'measurementUnits' in normalized ||
+      'loyaltyRate' in normalized ||
+      'loyaltyRedeemAllCategories' in normalized ||
+      'loyaltyRedeemCategoryIds' in normalized ||
+      'kitchenEnabled' in normalized ||
+      'orderStatusScreenEnabled' in normalized ||
+      'kitchenDisplayMode' in normalized ||
+      'reset' in normalized
+    ) {
       return normalized;
     }
   }
@@ -213,6 +225,9 @@ async function updateRestaurantBrandingHandler(req: Request, res: Response): Pro
     loyaltyRate,
     loyaltyRedeemAllCategories,
     loyaltyRedeemCategoryIds,
+    kitchenEnabled,
+    orderStatusScreenEnabled,
+    kitchenDisplayMode,
     reset,
   } = brandingBody;
   const organizationId = getOrganizationObjectId(req);
@@ -241,6 +256,9 @@ async function updateRestaurantBrandingHandler(req: Request, res: Response): Pro
     loyaltyRate,
     loyaltyRedeemAllCategories,
     loyaltyRedeemCategoryIds,
+    kitchenEnabled,
+    orderStatusScreenEnabled,
+    kitchenDisplayMode,
   });
 
   if (!updatePayload) {
