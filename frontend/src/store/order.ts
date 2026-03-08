@@ -50,6 +50,7 @@ export type ActiveOrder = {
   status: 'draft' | 'paid';
   updatedAt: string;
   orderTag?: OrderTag | null;
+  kitchenStatus?: 'pending' | 'in_progress' | 'ready' | null;
 };
 
 export type OrderHistoryEntry = {
@@ -816,6 +817,10 @@ export const useOrderStore = create<OrderState>((set, get) => ({
           status: order.status,
           updatedAt: order.updatedAt,
           orderTag: order.orderTag === 'takeaway' || order.orderTag === 'delivery' ? order.orderTag : null,
+          kitchenStatus:
+            order.kitchenStatus === 'pending' || order.kitchenStatus === 'in_progress' || order.kitchenStatus === 'ready'
+              ? order.kitchenStatus
+              : null,
         }))
       : [];
     set({ activeOrders: orders });

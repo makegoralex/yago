@@ -10,6 +10,9 @@ export type RestaurantBranding = {
   loyaltyRate: number;
   loyaltyRedeemAllCategories: boolean;
   loyaltyRedeemCategoryIds: string[];
+  kitchenEnabled: boolean;
+  orderStatusScreenEnabled: boolean;
+  kitchenDisplayMode: 'per-order' | 'queue';
 };
 
 export type CashRegisterProvider = 'none' | 'atol';
@@ -26,6 +29,9 @@ const DEFAULT_BRANDING: RestaurantBranding = {
   loyaltyRate: 5,
   loyaltyRedeemAllCategories: true,
   loyaltyRedeemCategoryIds: [],
+  kitchenEnabled: false,
+  orderStatusScreenEnabled: false,
+  kitchenDisplayMode: 'per-order',
 };
 
 const DEFAULT_CASH_REGISTER: CashRegisterSettings = {
@@ -103,6 +109,18 @@ const normalizeBranding = (branding: Partial<RestaurantBranding> | IRestaurantSe
     loyaltyRate: clampLoyaltyRate(branding && typeof branding === 'object' ? (branding as any).loyaltyRate : undefined),
     loyaltyRedeemAllCategories,
     loyaltyRedeemCategoryIds: loyaltyRedeemAllCategories ? [] : loyaltyRedeemCategoryIds,
+    kitchenEnabled:
+      branding && typeof branding === 'object' && typeof (branding as any).kitchenEnabled === 'boolean'
+        ? Boolean((branding as any).kitchenEnabled)
+        : DEFAULT_BRANDING.kitchenEnabled,
+    orderStatusScreenEnabled:
+      branding && typeof branding === 'object' && typeof (branding as any).orderStatusScreenEnabled === 'boolean'
+        ? Boolean((branding as any).orderStatusScreenEnabled)
+        : DEFAULT_BRANDING.orderStatusScreenEnabled,
+    kitchenDisplayMode:
+      branding && typeof branding === 'object' && (branding as any).kitchenDisplayMode === 'queue'
+        ? 'queue'
+        : 'per-order',
   };
 };
 
@@ -172,6 +190,18 @@ export const updateRestaurantBranding = async (
 
   if (Array.isArray(payload.loyaltyRedeemCategoryIds)) {
     setPayload.loyaltyRedeemCategoryIds = normalizeCategoryIds(payload.loyaltyRedeemCategoryIds);
+  }
+
+  if (typeof payload.kitchenEnabled === 'boolean') {
+    setPayload.kitchenEnabled = payload.kitchenEnabled;
+  }
+
+  if (typeof payload.orderStatusScreenEnabled === 'boolean') {
+    setPayload.orderStatusScreenEnabled = payload.orderStatusScreenEnabled;
+  }
+
+  if (payload.kitchenDisplayMode === 'queue' || payload.kitchenDisplayMode === 'per-order') {
+    setPayload.kitchenDisplayMode = payload.kitchenDisplayMode;
   }
 
   const updated = await RestaurantSettingsModel.findOneAndUpdate(
