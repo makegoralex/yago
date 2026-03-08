@@ -8,6 +8,9 @@ export interface IRestaurantSettings extends Document {
   loyaltyRate: number;
   loyaltyRedeemAllCategories: boolean;
   loyaltyRedeemCategoryIds: string[];
+  kitchenEnabled: boolean;
+  orderStatusScreenEnabled: boolean;
+  kitchenDisplayMode: 'per-order' | 'queue';
   cashRegisterProvider: 'none' | 'atol';
   singletonKey: string;
   organizationId: Types.ObjectId;
@@ -62,6 +65,20 @@ const restaurantSettingsSchema = new Schema<IRestaurantSettings>(
     loyaltyRedeemCategoryIds: {
       type: [String],
       default: [],
+    },
+    kitchenEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    orderStatusScreenEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    kitchenDisplayMode: {
+      type: String,
+      enum: ['per-order', 'queue'],
+      default: 'per-order',
+      trim: true,
     },
     cashRegisterProvider: {
       type: String,

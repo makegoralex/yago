@@ -148,7 +148,7 @@ router.get(
 router.post(
   '/cashiers',
   asyncHandler(async (req: Request, res: Response) => {
-    const { name, email, password } = req.body ?? {};
+    const { name, email, password, role } = req.body ?? {};
     const organizationId =
       getOrganizationObjectId(req) ??
       (typeof req.body?.organizationId === 'string' && Types.ObjectId.isValid(req.body.organizationId)
@@ -168,6 +168,7 @@ router.post(
         name: typeof name === 'string' ? name : '',
         email: typeof email === 'string' ? email : '',
         password: typeof password === 'string' ? password : '',
+        role: role === 'kitchen' ? 'kitchen' : 'cashier',
         organizationId,
       });
 
@@ -188,7 +189,7 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, email, password, role } = req.body ?? {};
-    const normalizedRole = role === 'cashier' ? role : undefined;
+    const normalizedRole = role === 'cashier' || role === 'kitchen' ? role : undefined;
     const organizationId =
       getOrganizationObjectId(req) ??
       (typeof req.body?.organizationId === 'string' && Types.ObjectId.isValid(req.body.organizationId)

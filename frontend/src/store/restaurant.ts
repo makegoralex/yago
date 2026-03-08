@@ -14,6 +14,9 @@ type RestaurantPreferences = RestaurantBranding & {
   loyaltyRate: number;
   loyaltyRedeemAllCategories: boolean;
   loyaltyRedeemCategoryIds: string[];
+  kitchenEnabled: boolean;
+  orderStatusScreenEnabled: boolean;
+  kitchenDisplayMode: 'per-order' | 'queue';
 };
 
 type RestaurantState = RestaurantPreferences & {
@@ -33,6 +36,9 @@ const defaultBranding: RestaurantPreferences = {
   loyaltyRate: 5,
   loyaltyRedeemAllCategories: true,
   loyaltyRedeemCategoryIds: [],
+  kitchenEnabled: false,
+  orderStatusScreenEnabled: false,
+  kitchenDisplayMode: 'per-order',
 };
 
 const isBrowser = typeof window !== 'undefined';
@@ -100,6 +106,18 @@ const normalizeBranding = (payload: unknown): RestaurantPreferences => {
         : defaultBranding.loyaltyRate,
     loyaltyRedeemAllCategories,
     loyaltyRedeemCategoryIds: loyaltyRedeemAllCategories ? [] : loyaltyRedeemCategoryIds,
+    kitchenEnabled:
+      source && typeof source === 'object' && typeof (source as any).kitchenEnabled === 'boolean'
+        ? (source as any).kitchenEnabled
+        : defaultBranding.kitchenEnabled,
+    orderStatusScreenEnabled:
+      source && typeof source === 'object' && typeof (source as any).orderStatusScreenEnabled === 'boolean'
+        ? (source as any).orderStatusScreenEnabled
+        : defaultBranding.orderStatusScreenEnabled,
+    kitchenDisplayMode:
+      source && typeof source === 'object' && (source as any).kitchenDisplayMode === 'queue'
+        ? 'queue'
+        : 'per-order',
   };
 };
 

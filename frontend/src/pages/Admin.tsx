@@ -152,6 +152,7 @@ type CashierSummary = {
   id: string;
   name: string;
   email: string;
+  role?: 'cashier' | 'kitchen';
   createdAt?: string;
   updatedAt?: string;
 };
@@ -826,7 +827,7 @@ const AdminPage: React.FC = () => {
   const [cashiersLoading, setCashiersLoading] = useState(false);
   const [cashiersLoaded, setCashiersLoaded] = useState(false);
   const [cashiersError, setCashiersError] = useState<string | null>(null);
-  const [cashierForm, setCashierForm] = useState({ name: '', email: '', password: '' });
+  const [cashierForm, setCashierForm] = useState({ name: '', email: '', password: '', role: 'cashier' as 'cashier' | 'kitchen' });
   const [creatingCashier, setCreatingCashier] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerEditForm, setCustomerEditForm] = useState({
@@ -850,6 +851,9 @@ const AdminPage: React.FC = () => {
   const loyaltyRate = useRestaurantStore((state) => state.loyaltyRate);
   const loyaltyRedeemAllCategories = useRestaurantStore((state) => state.loyaltyRedeemAllCategories);
   const loyaltyRedeemCategoryIds = useRestaurantStore((state) => state.loyaltyRedeemCategoryIds);
+  const kitchenEnabled = useRestaurantStore((state) => state.kitchenEnabled);
+  const orderStatusScreenEnabled = useRestaurantStore((state) => state.orderStatusScreenEnabled);
+  const kitchenDisplayMode = useRestaurantStore((state) => state.kitchenDisplayMode);
   const updateRestaurantBranding = useRestaurantStore((state) => state.updateBranding);
   const resetRestaurantBranding = useRestaurantStore((state) => state.resetBranding);
   const [loyaltyRateDraft, setLoyaltyRateDraft] = useState(loyaltyRate.toString());
@@ -860,6 +864,10 @@ const AdminPage: React.FC = () => {
   const [brandingForm, setBrandingForm] = useState({ name: restaurantName, logoUrl: restaurantLogo });
   const [brandingSaving, setBrandingSaving] = useState(false);
   const [orderTagsSaving, setOrderTagsSaving] = useState(false);
+  const [kitchenSettingsSaving, setKitchenSettingsSaving] = useState(false);
+  const [kitchenEnabledDraft, setKitchenEnabledDraft] = useState(kitchenEnabled);
+  const [orderStatusScreenEnabledDraft, setOrderStatusScreenEnabledDraft] = useState(orderStatusScreenEnabled);
+  const [kitchenDisplayModeDraft, setKitchenDisplayModeDraft] = useState<'per-order' | 'queue'>(kitchenDisplayMode);
   const [cashRegisterForm, setCashRegisterForm] = useState<CashRegisterSettings>({
     provider: 'none',
   });
@@ -871,6 +879,18 @@ const AdminPage: React.FC = () => {
   useEffect(() => {
     setBrandingForm({ name: restaurantName, logoUrl: restaurantLogo });
   }, [restaurantName, restaurantLogo]);
+
+  useEffect(() => {
+    setKitchenEnabledDraft(kitchenEnabled);
+  }, [kitchenEnabled]);
+
+  useEffect(() => {
+    setOrderStatusScreenEnabledDraft(orderStatusScreenEnabled);
+  }, [orderStatusScreenEnabled]);
+
+  useEffect(() => {
+    setKitchenDisplayModeDraft(kitchenDisplayMode);
+  }, [kitchenDisplayMode]);
 
   useEffect(() => {
     setLoyaltyRedeemAllDraft(loyaltyRedeemAllCategories);
@@ -1986,12 +2006,12 @@ const AdminPage: React.FC = () => {
 
     try {
       setCreatingCashier(true);
-      const response = await api.post('/api/admin/cashiers', { name, email, password });
+      const response = await api.post('/api/admin/cashiers', { name, email, password, role: cashierForm.role });
       const payload = getResponseData<{ cashier?: CashierSummary }>(response);
       const created = payload?.cashier;
       if (created) {
         setCashiers((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
-        setCashierForm({ name: '', email: '', password: '' });
+        setCashierForm({ name: '', email: '', password: '', role: 'cashier' });
         setCashiersError(null);
         notify({ title: 'Кассир создан', type: 'success' });
       } else {
@@ -4746,6 +4766,76 @@ const AdminPage: React.FC = () => {
       notify({ title: 'Не удалось сохранить настройки меток', type: 'error' });
     } finally {
       setOrderTagsSaving(false);
+    }
+  };
+
+  const handleToggleKitchenEnabled = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = event.target.checked;
+    const previous = kitchenEnabledDraft;
+    setKitchenEnabledDraft(checked);
+    setKitchenSettingsSaving(true);
+    try {
+      await updateRestaurantBranding({ kitchenEnabled: checked });
+      notify({
+        title: checked ? 'Кухня включена' : 'Кухня отключена',
+        description: checked
+          ? 'Заказы после оплаты будут попадать в KDS'
+          : 'KDS и кухонные статусы заказов отключены',
+        type: 'info',
+      });
+    } catch (error) {
+      console.error('Не удалось обновить настройку кухни', error);
+      setKitchenEnabledDraft(previous);
+      notify({ title: 'Не удалось сохранить настройки кухни', type: 'error' });
+    } finally {
+      setKitchenSettingsSaving(false);
+    }
+  };
+
+  const handleToggleOrderStatusScreenEnabled = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = event.target.checked;
+    const previous = orderStatusScreenEnabledDraft;
+    setOrderStatusScreenEnabledDraft(checked);
+    setKitchenSettingsSaving(true);
+    try {
+      await updateRestaurantBranding({ orderStatusScreenEnabled: checked });
+      notify({
+        title: checked ? 'Экран статусов включён' : 'Экран статусов отключён',
+        description: checked
+          ? 'Гости увидят колонку «Готовятся/Готовы» на /oss'
+          : 'OSS скрыт до повторного включения',
+        type: 'info',
+      });
+    } catch (error) {
+      console.error('Не удалось обновить настройку OSS', error);
+      setOrderStatusScreenEnabledDraft(previous);
+      notify({ title: 'Не удалось сохранить настройки OSS', type: 'error' });
+    } finally {
+      setKitchenSettingsSaving(false);
+    }
+  };
+
+  const handleKitchenDisplayModeChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextMode = event.target.value === 'queue' ? 'queue' : 'per-order';
+    const previous = kitchenDisplayModeDraft;
+    setKitchenDisplayModeDraft(nextMode);
+    setKitchenSettingsSaving(true);
+    try {
+      await updateRestaurantBranding({ kitchenDisplayMode: nextMode });
+      notify({
+        title: 'Режим KDS обновлён',
+        description:
+          nextMode === 'queue'
+            ? 'Показывается общая очередь позиций'
+            : 'Показываются отдельные карточки заказов',
+        type: 'info',
+      });
+    } catch (error) {
+      console.error('Не удалось обновить режим KDS', error);
+      setKitchenDisplayModeDraft(previous);
+      notify({ title: 'Не удалось сохранить режим KDS', type: 'error' });
+    } finally {
+      setKitchenSettingsSaving(false);
     }
   };
 
@@ -8744,6 +8834,17 @@ const AdminPage: React.FC = () => {
                     autoComplete="new-password"
                   />
                 </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs uppercase text-slate-400">Роль</span>
+                  <select
+                    value={cashierForm.role}
+                    onChange={(event) => setCashierForm((prev) => ({ ...prev, role: event.target.value as 'cashier' | 'kitchen' }))}
+                    className="rounded-2xl border border-slate-200 px-4 py-2"
+                  >
+                    <option value="cashier">Кассир</option>
+                    <option value="kitchen">Кухня</option>
+                  </select>
+                </label>
                 <button
                   type="submit"
                   className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white disabled:opacity-60"
@@ -8811,6 +8912,7 @@ const AdminPage: React.FC = () => {
                         <tr>
                           <th className="px-3 py-2 text-left">Имя</th>
                           <th className="px-3 py-2 text-left">Email</th>
+                          <th className="px-3 py-2 text-left">Роль</th>
                           <th className="px-3 py-2 text-left">Создан</th>
                           <th className="px-3 py-2 text-left">Обновлён</th>
                           <th className="px-3 py-2 text-right">Действия</th>
@@ -8821,6 +8923,7 @@ const AdminPage: React.FC = () => {
                           <tr key={cashier.id}>
                             <td className="px-3 py-2 font-semibold text-slate-800">{cashier.name || '—'}</td>
                             <td className="px-3 py-2 text-slate-500">{cashier.email || '—'}</td>
+                            <td className="px-3 py-2 text-slate-500">{cashier.role === 'kitchen' ? 'Кухня' : 'Кассир'}</td>
                             <td className="px-3 py-2 text-slate-500">{formatDateTime(cashier.createdAt)}</td>
                             <td className="px-3 py-2 text-slate-500">{formatDateTime(cashier.updatedAt)}</td>
                             <td className="px-3 py-2 text-right">
@@ -9396,7 +9499,7 @@ const AdminPage: React.FC = () => {
                     <option value="atol">Атол</option>
                   </select>
                 </label>
-                <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3">
                   <button
                     type="submit"
                     className="rounded-2xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60"
@@ -9450,6 +9553,40 @@ const AdminPage: React.FC = () => {
                   Поддерживаются только публичные ссылки. Изображение автоматически подставится в шапку кассы.
                 </span>
               </label>
+
+                <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs uppercase text-slate-400">Кухня и экран готовности</p>
+                <label className="flex items-center justify-between gap-3">
+                  <span>Включить KDS (/kds)</span>
+                  <input
+                    type="checkbox"
+                    checked={kitchenEnabledDraft}
+                    onChange={handleToggleKitchenEnabled}
+                    disabled={kitchenSettingsSaving}
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3">
+                  <span>Включить OSS (/oss)</span>
+                  <input
+                    type="checkbox"
+                    checked={orderStatusScreenEnabledDraft}
+                    onChange={handleToggleOrderStatusScreenEnabled}
+                    disabled={kitchenSettingsSaving}
+                  />
+                </label>
+                <label className="flex flex-col gap-2">
+                  <span className="text-xs uppercase text-slate-400">Режим отображения кухни</span>
+                  <select
+                    value={kitchenDisplayModeDraft}
+                    onChange={handleKitchenDisplayModeChange}
+                    disabled={kitchenSettingsSaving}
+                    className="rounded-2xl border border-slate-200 px-4 py-3"
+                  >
+                    <option value="per-order">Каждый заказ отдельной карточкой</option>
+                    <option value="queue">Общая очередь позиций</option>
+                  </select>
+                </label>
+              </div>
               <div className="flex flex-wrap gap-3">
                 <button
                   type="submit"

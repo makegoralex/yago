@@ -7,7 +7,7 @@ const roleSchema = z
   .string()
   .trim()
   .toLowerCase()
-  .pipe(z.enum(['cashier', 'owner'] as const));
+  .pipe(z.enum(['cashier', 'kitchen', 'owner'] as const));
 
 export const authSchemas = {
   register: z.object({
