@@ -44,6 +44,11 @@ const KDSPage: React.FC = () => {
     return Array.from(map.entries()).map(([name, qty]) => ({ name, qty }));
   }, [orders]);
 
+  const queueOrders = useMemo(
+    () => orders.filter((order) => order.kitchenStatus === 'pending' || order.kitchenStatus === 'in_progress'),
+    [orders]
+  );
+
   const update = async (orderId: string, action: 'start' | 'ready') => {
     await api.post(`/api/orders/${orderId}/kitchen/${action}`);
     await load();
@@ -55,13 +60,48 @@ const KDSPage: React.FC = () => {
     <div className="min-h-screen bg-slate-950 p-6 text-white">
       <h1 className="text-2xl font-bold">Kitchen Display System</h1>
       {mode === 'queue' ? (
-        <div className="mt-6 grid gap-3 md:grid-cols-3">
-          {queueItems.map((item) => (
-            <div key={item.name} className="rounded-xl bg-slate-900 p-4">
-              <p className="text-lg font-semibold">{item.name}</p>
-              <p className="text-3xl font-bold">×{item.qty}</p>
+        <div className="mt-6 grid gap-6 xl:grid-cols-[2fr,1fr]">
+          <section>
+            <p className="mb-3 text-sm text-slate-300">Общая очередь позиций</p>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {queueItems.map((item) => (
+                <div key={item.name} className="rounded-xl bg-slate-900 p-4">
+                  <p className="text-lg font-semibold">{item.name}</p>
+                  <p className="text-3xl font-bold">×{item.qty}</p>
+                </div>
+              ))}
+              {queueItems.length === 0 ? (
+                <div className="rounded-xl bg-slate-900 p-4 text-sm text-slate-300">Нет позиций в работе.</div>
+              ) : null}
             </div>
-          ))}
+          </section>
+
+          <section>
+            <p className="mb-3 text-sm text-slate-300">Управление заказами</p>
+            <div className="space-y-3">
+              {queueOrders.map((order) => (
+                <div key={order._id} className="rounded-xl bg-slate-900 p-4">
+                  <p className="text-sm font-semibold">Заказ #{order._id.slice(-5)}</p>
+                  <p className="text-xs text-slate-300">{statusLabel[order.kitchenStatus ?? 'pending']}</p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      className="rounded bg-amber-500 px-3 py-1 text-sm disabled:opacity-50"
+                      onClick={() => void update(order._id, 'start')}
+                      disabled={order.kitchenStatus === 'in_progress'}
+                    >
+                      Старт
+                    </button>
+                    <button className="rounded bg-emerald-600 px-3 py-1 text-sm" onClick={() => void update(order._id, 'ready')}>
+                      Готово
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {queueOrders.length === 0 ? (
+                <div className="rounded-xl bg-slate-900 p-4 text-sm text-slate-300">Нет заказов для действий.</div>
+              ) : null}
+            </div>
+          </section>
         </div>
       ) : (
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
