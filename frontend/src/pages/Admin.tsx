@@ -864,6 +864,10 @@ const AdminPage: React.FC = () => {
   const [brandingForm, setBrandingForm] = useState({ name: restaurantName, logoUrl: restaurantLogo });
   const [brandingSaving, setBrandingSaving] = useState(false);
   const [orderTagsSaving, setOrderTagsSaving] = useState(false);
+  const [kitchenSettingsSaving, setKitchenSettingsSaving] = useState(false);
+  const [kitchenEnabledDraft, setKitchenEnabledDraft] = useState(kitchenEnabled);
+  const [orderStatusScreenEnabledDraft, setOrderStatusScreenEnabledDraft] = useState(orderStatusScreenEnabled);
+  const [kitchenDisplayModeDraft, setKitchenDisplayModeDraft] = useState<'per-order' | 'queue'>(kitchenDisplayMode);
   const [cashRegisterForm, setCashRegisterForm] = useState<CashRegisterSettings>({
     provider: 'none',
   });
@@ -875,6 +879,18 @@ const AdminPage: React.FC = () => {
   useEffect(() => {
     setBrandingForm({ name: restaurantName, logoUrl: restaurantLogo });
   }, [restaurantName, restaurantLogo]);
+
+  useEffect(() => {
+    setKitchenEnabledDraft(kitchenEnabled);
+  }, [kitchenEnabled]);
+
+  useEffect(() => {
+    setOrderStatusScreenEnabledDraft(orderStatusScreenEnabled);
+  }, [orderStatusScreenEnabled]);
+
+  useEffect(() => {
+    setKitchenDisplayModeDraft(kitchenDisplayMode);
+  }, [kitchenDisplayMode]);
 
   useEffect(() => {
     setLoyaltyRedeemAllDraft(loyaltyRedeemAllCategories);
@@ -4750,6 +4766,76 @@ const AdminPage: React.FC = () => {
       notify({ title: 'Не удалось сохранить настройки меток', type: 'error' });
     } finally {
       setOrderTagsSaving(false);
+    }
+  };
+
+  const handleToggleKitchenEnabled = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = event.target.checked;
+    const previous = kitchenEnabledDraft;
+    setKitchenEnabledDraft(checked);
+    setKitchenSettingsSaving(true);
+    try {
+      await updateRestaurantBranding({ kitchenEnabled: checked });
+      notify({
+        title: checked ? 'Кухня включена' : 'Кухня отключена',
+        description: checked
+          ? 'Заказы после оплаты будут попадать в KDS'
+          : 'KDS и кухонные статусы заказов отключены',
+        type: 'info',
+      });
+    } catch (error) {
+      console.error('Не удалось обновить настройку кухни', error);
+      setKitchenEnabledDraft(previous);
+      notify({ title: 'Не удалось сохранить настройки кухни', type: 'error' });
+    } finally {
+      setKitchenSettingsSaving(false);
+    }
+  };
+
+  const handleToggleOrderStatusScreenEnabled = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = event.target.checked;
+    const previous = orderStatusScreenEnabledDraft;
+    setOrderStatusScreenEnabledDraft(checked);
+    setKitchenSettingsSaving(true);
+    try {
+      await updateRestaurantBranding({ orderStatusScreenEnabled: checked });
+      notify({
+        title: checked ? 'Экран статусов включён' : 'Экран статусов отключён',
+        description: checked
+          ? 'Гости увидят колонку «Готовятся/Готовы» на /oss'
+          : 'OSS скрыт до повторного включения',
+        type: 'info',
+      });
+    } catch (error) {
+      console.error('Не удалось обновить настройку OSS', error);
+      setOrderStatusScreenEnabledDraft(previous);
+      notify({ title: 'Не удалось сохранить настройки OSS', type: 'error' });
+    } finally {
+      setKitchenSettingsSaving(false);
+    }
+  };
+
+  const handleKitchenDisplayModeChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextMode = event.target.value === 'queue' ? 'queue' : 'per-order';
+    const previous = kitchenDisplayModeDraft;
+    setKitchenDisplayModeDraft(nextMode);
+    setKitchenSettingsSaving(true);
+    try {
+      await updateRestaurantBranding({ kitchenDisplayMode: nextMode });
+      notify({
+        title: 'Режим KDS обновлён',
+        description:
+          nextMode === 'queue'
+            ? 'Показывается общая очередь позиций'
+            : 'Показываются отдельные карточки заказов',
+        type: 'info',
+      });
+    } catch (error) {
+      console.error('Не удалось обновить режим KDS', error);
+      setKitchenDisplayModeDraft(previous);
+      notify({ title: 'Не удалось сохранить режим KDS', type: 'error' });
+    } finally {
+      setKitchenSettingsSaving(false);
     }
   };
 
@@ -9474,25 +9560,26 @@ const AdminPage: React.FC = () => {
                   <span>Включить KDS (/kds)</span>
                   <input
                     type="checkbox"
-                    checked={kitchenEnabled}
-                    onChange={(event) => void updateRestaurantBranding({ kitchenEnabled: event.target.checked })}
+                    checked={kitchenEnabledDraft}
+                    onChange={handleToggleKitchenEnabled}
+                    disabled={kitchenSettingsSaving}
                   />
                 </label>
                 <label className="flex items-center justify-between gap-3">
                   <span>Включить OSS (/oss)</span>
                   <input
                     type="checkbox"
-                    checked={orderStatusScreenEnabled}
-                    onChange={(event) => void updateRestaurantBranding({ orderStatusScreenEnabled: event.target.checked })}
+                    checked={orderStatusScreenEnabledDraft}
+                    onChange={handleToggleOrderStatusScreenEnabled}
+                    disabled={kitchenSettingsSaving}
                   />
                 </label>
                 <label className="flex flex-col gap-2">
                   <span className="text-xs uppercase text-slate-400">Режим отображения кухни</span>
                   <select
-                    value={kitchenDisplayMode}
-                    onChange={(event) =>
-                      void updateRestaurantBranding({ kitchenDisplayMode: event.target.value as 'per-order' | 'queue' })
-                    }
+                    value={kitchenDisplayModeDraft}
+                    onChange={handleKitchenDisplayModeChange}
+                    disabled={kitchenSettingsSaving}
                     className="rounded-2xl border border-slate-200 px-4 py-3"
                   >
                     <option value="per-order">Каждый заказ отдельной карточкой</option>
