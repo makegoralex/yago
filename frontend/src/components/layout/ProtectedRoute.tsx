@@ -16,7 +16,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowed }) => {
       return <Navigate to="/super-admin" replace />;
     }
 
-    return <Navigate to="/pos" replace />;
+    return <Navigate to={user.role === 'kitchen' ? '/kds' : '/pos'} replace />;
   }
   return <Outlet />;
 };
