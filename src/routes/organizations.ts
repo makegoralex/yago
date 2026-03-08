@@ -36,7 +36,7 @@ import {
 export const organizationsRouter = Router();
 
 const DEFAULT_CATEGORIES = ['Горячие напитки', 'Холодные напитки', 'Десерты'];
-const ALLOWED_ROLES: UserRole[] = ['cashier', 'owner', 'superAdmin'];
+const ALLOWED_ROLES: UserRole[] = ['cashier', 'kitchen', 'owner', 'superAdmin'];
 const ONE_DAY_MS = 1000 * 60 * 60 * 24;
 
 const addDays = (date: Date, days: number) => new Date(date.getTime() + days * ONE_DAY_MS);

@@ -32,6 +32,7 @@ import { pushOrderToEvotor } from '../evotor/evotor.service';
 const router = Router();
 
 const CASHIER_ROLES = ['cashier', 'owner', 'superAdmin'];
+const KITCHEN_ROLES = ['kitchen', 'cashier', 'owner', 'superAdmin'];
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'card'];
 const ORDER_STATUSES: OrderStatus[] = ['draft', 'paid', 'completed', 'cancelled'];
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['draft', 'paid'];
@@ -950,6 +951,23 @@ router.post(
     order.status = 'paid';
     order.receiptId = undefined;
 
+    const restaurantBranding = await getRestaurantBranding(organizationId);
+    if (restaurantBranding.kitchenEnabled) {
+      order.kitchenStatus = 'pending';
+      order.kitchenQueuedAt = new Date();
+      order.kitchenStartedAt = undefined;
+      order.kitchenReadyAt = undefined;
+      order.kitchenStartedBy = undefined;
+      order.kitchenReadyBy = undefined;
+    } else {
+      order.kitchenStatus = undefined;
+      order.kitchenQueuedAt = undefined;
+      order.kitchenStartedAt = undefined;
+      order.kitchenReadyAt = undefined;
+      order.kitchenStartedBy = undefined;
+      order.kitchenReadyBy = undefined;
+    }
+
     await order.save();
 
     try {
@@ -999,6 +1017,12 @@ router.post(
 
     if (order.status !== 'paid') {
       res.status(400).json({ data: null, error: 'Only paid orders can be completed' });
+      return;
+    }
+
+    const restaurantBranding = await getRestaurantBranding(organizationId);
+    if (restaurantBranding.kitchenEnabled && order.kitchenStatus && order.kitchenStatus !== 'ready') {
+      res.status(409).json({ data: null, error: 'Заказ еще не отмечен кухней как готовый' });
       return;
     }
 
@@ -1136,6 +1160,219 @@ router.delete(
   })
 );
 
+
+router.get(
+  '/kitchen/board',
+  requireRole(KITCHEN_ROLES),
+  asyncHandler(async (req, res) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const branding = await getRestaurantBranding(organizationId);
+    if (!branding.kitchenEnabled) {
+      res.json({ data: { enabled: false, mode: branding.kitchenDisplayMode, orders: [] }, error: null });
+      return;
+    }
+
+    const orders = await OrderModel.find({
+      organizationId,
+      status: 'paid',
+      kitchenStatus: { $in: ['pending', 'in_progress', 'ready'] },
+    })
+      .sort({ kitchenQueuedAt: 1, createdAt: 1 })
+      .populate('customerId', CUSTOMER_PROJECTION)
+      .populate('kitchenStartedBy', 'name')
+      .populate('kitchenReadyBy', 'name');
+
+    res.json({ data: { enabled: true, mode: branding.kitchenDisplayMode, orders }, error: null });
+  })
+);
+
+router.post(
+  '/:id/kitchen/start',
+  requireRole(KITCHEN_ROLES),
+  asyncHandler(async (req, res) => {
+    const organizationId = getOrganizationObjectId(req);
+    const { id } = req.params;
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const order = await findOrderForOrganization(id, organizationId);
+    if (!order) {
+      res.status(404).json({ data: null, error: 'Order not found' });
+      return;
+    }
+
+    if (order.status !== 'paid') {
+      res.status(409).json({ data: null, error: 'Only paid orders can be started in kitchen' });
+      return;
+    }
+
+    if (!order.kitchenQueuedAt) {
+      order.kitchenQueuedAt = new Date();
+    }
+
+    order.kitchenStatus = 'in_progress';
+    if (!order.kitchenStartedAt) {
+      order.kitchenStartedAt = new Date();
+    }
+    if (req.user?.id && Types.ObjectId.isValid(req.user.id)) {
+      order.kitchenStartedBy = new Types.ObjectId(req.user.id);
+    }
+
+    await order.save();
+
+    res.json({ data: order, error: null });
+  })
+);
+
+router.post(
+  '/:id/kitchen/ready',
+  requireRole(KITCHEN_ROLES),
+  asyncHandler(async (req, res) => {
+    const organizationId = getOrganizationObjectId(req);
+    const { id } = req.params;
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const order = await findOrderForOrganization(id, organizationId);
+    if (!order) {
+      res.status(404).json({ data: null, error: 'Order not found' });
+      return;
+    }
+
+    if (order.status !== 'paid') {
+      res.status(409).json({ data: null, error: 'Only paid orders can be marked ready' });
+      return;
+    }
+
+    if (!order.kitchenStartedAt) {
+      order.kitchenStartedAt = new Date();
+    }
+
+    order.kitchenStatus = 'ready';
+    order.kitchenReadyAt = new Date();
+    if (req.user?.id && Types.ObjectId.isValid(req.user.id)) {
+      order.kitchenReadyBy = new Types.ObjectId(req.user.id);
+    }
+
+    await order.save();
+
+    res.json({ data: order, error: null });
+  })
+);
+
+router.get(
+  '/kitchen/stats',
+  requireRole(['owner', 'superAdmin']),
+  asyncHandler(async (req, res) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const rows = await OrderModel.find({
+      organizationId,
+      kitchenStatus: 'ready',
+      kitchenQueuedAt: { $ne: null },
+      kitchenReadyAt: { $ne: null },
+    })
+      .select('kitchenQueuedAt kitchenStartedAt kitchenReadyAt kitchenStartedBy')
+      .populate('kitchenStartedBy', 'name');
+
+    const totals = {
+      queuedToReadyMs: 0,
+      startToReadyMs: 0,
+      count: 0,
+    };
+
+    const byEmployee = new Map();
+
+    for (const row of rows) {
+      const queued = row.kitchenQueuedAt ? new Date(row.kitchenQueuedAt).getTime() : null;
+      const started = row.kitchenStartedAt ? new Date(row.kitchenStartedAt).getTime() : null;
+      const ready = row.kitchenReadyAt ? new Date(row.kitchenReadyAt).getTime() : null;
+      if (!queued || !ready || ready < queued) continue;
+      const queuedToReady = ready - queued;
+      const startToReady = started && ready >= started ? ready - started : queuedToReady;
+      totals.queuedToReadyMs += queuedToReady;
+      totals.startToReadyMs += startToReady;
+      totals.count += 1;
+
+      const employee = row.kitchenStartedBy as any;
+      const key = employee?._id ? String(employee._id) : 'unknown';
+      const current = byEmployee.get(key) ?? {
+        employeeId: employee?._id ? String(employee._id) : null,
+        name: employee?.name ?? 'Не назначено',
+        count: 0,
+        queuedToReadyMs: 0,
+        startToReadyMs: 0,
+      };
+      current.count += 1;
+      current.queuedToReadyMs += queuedToReady;
+      current.startToReadyMs += startToReady;
+      byEmployee.set(key, current);
+    }
+
+    const summary = {
+      count: totals.count,
+      avgQueuedToReadyMs: totals.count ? Math.round(totals.queuedToReadyMs / totals.count) : 0,
+      avgStartToReadyMs: totals.count ? Math.round(totals.startToReadyMs / totals.count) : 0,
+    };
+
+    const employees = Array.from(byEmployee.values()).map((entry: any) => ({
+      ...entry,
+      avgQueuedToReadyMs: entry.count ? Math.round(entry.queuedToReadyMs / entry.count) : 0,
+      avgStartToReadyMs: entry.count ? Math.round(entry.startToReadyMs / entry.count) : 0,
+    }));
+
+    res.json({ data: { summary, employees }, error: null });
+  })
+);
+
+router.get(
+  '/oss',
+  requireRole(KITCHEN_ROLES),
+  asyncHandler(async (req, res) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const branding = await getRestaurantBranding(organizationId);
+    if (!branding.orderStatusScreenEnabled) {
+      res.json({ data: { enabled: false, preparing: [], ready: [] }, error: null });
+      return;
+    }
+
+    const orders = await OrderModel.find({
+      organizationId,
+      status: 'paid',
+      kitchenStatus: { $in: ['pending', 'in_progress', 'ready'] },
+    })
+      .sort({ kitchenQueuedAt: 1, createdAt: 1 })
+      .populate('customerId', CUSTOMER_PROJECTION);
+
+    const preparing = orders.filter((order) => order.kitchenStatus !== 'ready');
+    const ready = orders.filter((order) => order.kitchenStatus === 'ready');
+
+    res.json({ data: { enabled: true, preparing, ready }, error: null });
+  })
+);
 router.get(
   '/active',
   requireRole(CASHIER_ROLES),

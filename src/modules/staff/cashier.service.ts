@@ -19,6 +19,7 @@ export interface CreateCashierParams {
   name: string;
   email: string;
   password: string;
+  role?: IUser['role'];
   organizationId?: string | Types.ObjectId;
 }
 
@@ -39,7 +40,7 @@ export class CashierServiceError extends Error {
 }
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
-const STAFF_ROLES: IUser['role'][] = ['cashier'];
+const STAFF_ROLES: IUser['role'][] = ['cashier', 'kitchen'];
 
 const ensureValidId = (id: string): Types.ObjectId => {
   if (!Types.ObjectId.isValid(id)) {
@@ -161,7 +162,7 @@ export const createCashierAccount = async (
     name: trimmedName,
     email: normalizedEmail,
     passwordHash,
-    role: 'cashier',
+    role: params.role === 'kitchen' ? 'kitchen' : 'cashier',
     organizationId: normalizedOrgId,
   });
 

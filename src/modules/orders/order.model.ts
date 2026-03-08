@@ -2,6 +2,8 @@ import { Schema, model, Types, Document } from 'mongoose';
 
 export type OrderStatus = 'draft' | 'paid' | 'completed' | 'cancelled';
 
+export type KitchenStatus = 'pending' | 'in_progress' | 'ready';
+
 export type PaymentMethod = 'cash' | 'card';
 
 export type OrderTag = 'takeaway' | 'delivery';
@@ -74,6 +76,12 @@ export interface Order {
   orderTag?: OrderTag;
   status: OrderStatus;
   receiptId?: string;
+  kitchenStatus?: KitchenStatus;
+  kitchenQueuedAt?: Date;
+  kitchenStartedAt?: Date;
+  kitchenReadyAt?: Date;
+  kitchenStartedBy?: Types.ObjectId;
+  kitchenReadyBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -165,6 +173,12 @@ const orderSchema = new Schema<OrderDocument>(
       default: 'draft',
     },
     receiptId: { type: String, required: false, trim: true },
+    kitchenStatus: { type: String, enum: ['pending', 'in_progress', 'ready'], required: false },
+    kitchenQueuedAt: { type: Date, required: false },
+    kitchenStartedAt: { type: Date, required: false },
+    kitchenReadyAt: { type: Date, required: false },
+    kitchenStartedBy: { type: Schema.Types.ObjectId, ref: 'User', required: false },
+    kitchenReadyBy: { type: Schema.Types.ObjectId, ref: 'User', required: false },
   },
   { timestamps: true }
 );
