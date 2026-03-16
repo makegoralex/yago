@@ -20,8 +20,8 @@ const featureItems = [
 
 const howToStartSteps = ['Зарегистрируйтесь', 'Настройте товары и кассу', 'Начните продажи'];
 
-const monthlyPrice = 1490;
-const yearlyPrice = 12000;
+const monthlyPrice = 2050;
+const yearlyPrice = 15000;
 const yearlyRegular = monthlyPrice * 12;
 const yearlySavings = yearlyRegular - yearlyPrice;
 const yearlySavingsPercent = Math.round((yearlySavings / yearlyRegular) * 100);
