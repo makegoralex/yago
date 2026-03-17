@@ -16,12 +16,13 @@ const featureItems = [
   'Программы лояльности',
   'Отчёты и аналитика',
   'Облачный доступ с любого устройства',
+  'Экран кухни и экран готовности заказа для клиентов',
 ];
 
 const howToStartSteps = ['Зарегистрируйтесь', 'Настройте товары и кассу', 'Начните продажи'];
 
-const monthlyPrice = 1490;
-const yearlyPrice = 12000;
+const monthlyPrice = 2050;
+const yearlyPrice = 15000;
 const yearlyRegular = monthlyPrice * 12;
 const yearlySavings = yearlyRegular - yearlyPrice;
 const yearlySavingsPercent = Math.round((yearlySavings / yearlyRegular) * 100);
@@ -213,13 +214,36 @@ const LandingPage: React.FC = () => {
           <p className="mt-5 text-sm text-slate-500">
             Фискализация осуществляется через кассовое оборудование пользователя.
           </p>
+          <p className="mt-2 text-sm text-slate-500">
+            Экран кухни и экран готовности заказа для клиентов доступны опционально и включаются в настройках.
+          </p>
         </section>
 
         <section id="integrations" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
-          <h2 className="heading-font text-3xl font-semibold text-slate-900">Интеграции</h2>
-          <p className="mt-4 text-base text-slate-600">
-            Сервис интегрируется с кассовыми решениями пользователя, включая устройства Эвотор.
-          </p>
+          <h2 className="heading-font text-3xl font-semibold text-slate-900">Интеграция с кассами</h2>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h3 className="text-lg font-semibold text-slate-900">Эвотор</h3>
+              <p className="mt-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Требования</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                <li>Планшет с подключённым Wi‑Fi (Android или iOS).</li>
+                <li>Касса Эвотор с прошивкой версии 5+.</li>
+                <li>Если у вас касса Эвотор, аккаунт нужно создавать на Эвотор Маркете.</li>
+              </ul>
+              <a href="#" className="mt-4 inline-flex text-sm font-semibold text-primary">
+                Эвотор Маркет (ссылка будет добавлена)
+              </a>
+            </article>
+
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h3 className="text-lg font-semibold text-slate-900">АТОЛ</h3>
+              <p className="mt-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Требования</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                <li>Планшет на Android.</li>
+                <li>Стабильное подключение к Wi‑Fi.</li>
+              </ul>
+            </article>
+          </div>
         </section>
 
         <section id="pricing" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
