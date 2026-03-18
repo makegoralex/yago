@@ -22,7 +22,7 @@ const featureItems = [
 const howToStartSteps = ['Зарегистрируйтесь', 'Настройте товары и кассу', 'Начните продажи'];
 
 const monthlyPrice = 2050;
-const yearlyPrice = 15000;
+const yearlyPrice = 20500;
 const yearlyRegular = monthlyPrice * 12;
 const yearlySavings = yearlyRegular - yearlyPrice;
 const yearlySavingsPercent = Math.round((yearlySavings / yearlyRegular) * 100);
@@ -270,7 +270,7 @@ const LandingPage: React.FC = () => {
                 </span>
               </div>
               <p className="mt-3 text-3xl font-semibold text-slate-900">{yearlyPrice.toLocaleString('ru-RU')} ₽ / год</p>
-              <p className="mt-2 text-sm text-slate-600">НДС включён</p>
+              <p className="mt-2 text-sm text-slate-600">НДС включен</p>
               <div className="mt-3 rounded-xl border border-emerald-300 bg-emerald-100/80 px-3 py-2 text-sm font-semibold text-emerald-900">
                 Вы экономите {yearlySavings.toLocaleString('ru-RU')} ₽ в год относительно помесячной оплаты.
               </div>
