@@ -22,7 +22,7 @@ const featureItems = [
 const howToStartSteps = ['Зарегистрируйтесь', 'Настройте товары и кассу', 'Начните продажи'];
 
 const monthlyPrice = 2050;
-const yearlyPrice = 15000;
+const yearlyPrice = 20500;
 const yearlyRegular = monthlyPrice * 12;
 const yearlySavings = yearlyRegular - yearlyPrice;
 const yearlySavingsPercent = Math.round((yearlySavings / yearlyRegular) * 100);
@@ -228,10 +228,16 @@ const LandingPage: React.FC = () => {
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
                 <li>Планшет с подключённым Wi‑Fi (Android или iOS).</li>
                 <li>Касса Эвотор с прошивкой версии 5+.</li>
-                <li>Если у вас касса Эвотор, аккаунт нужно создавать на Эвотор Маркете.</li>
+                <li>Для интеграции с Эвотор зарегистрируйте тестовый аккаунт на нашем сайте.</li>
+                <li>Оплата тарифа при работе с Эвотор проводится через Эвотор Маркет.</li>
               </ul>
-              <a href="#" className="mt-4 inline-flex text-sm font-semibold text-primary">
-                Эвотор Маркет (ссылка будет добавлена)
+              <a
+                href="https://market.evotor.ru/store/apps/c2c3cb64-70d6-4d54-9450-0a4efd302ea3"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex text-sm font-semibold text-primary"
+              >
+                Открыть приложение в Эвотор Маркете
               </a>
             </article>
 
@@ -241,6 +247,7 @@ const LandingPage: React.FC = () => {
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
                 <li>Планшет на Android.</li>
                 <li>Стабильное подключение к Wi‑Fi.</li>
+                <li>Для клиентов АТОЛ оплата тарифа выполняется напрямую через Yago.</li>
               </ul>
             </article>
           </div>
@@ -248,6 +255,9 @@ const LandingPage: React.FC = () => {
 
         <section id="pricing" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">
           <h2 className="heading-font text-3xl font-semibold text-slate-900">Тарифы</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Важно: для интеграции с Эвотор тариф оплачивается в Эвотор Маркете, а для АТОЛ — напрямую через Yago.
+          </p>
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
             <article className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-5">
               <p className="text-sm font-semibold uppercase tracking-wide text-primary">Месячный тариф</p>
@@ -270,7 +280,7 @@ const LandingPage: React.FC = () => {
                 </span>
               </div>
               <p className="mt-3 text-3xl font-semibold text-slate-900">{yearlyPrice.toLocaleString('ru-RU')} ₽ / год</p>
-              <p className="mt-2 text-sm text-slate-600">НДС включён</p>
+              <p className="mt-2 text-sm text-slate-600">НДС включен</p>
               <div className="mt-3 rounded-xl border border-emerald-300 bg-emerald-100/80 px-3 py-2 text-sm font-semibold text-emerald-900">
                 Вы экономите {yearlySavings.toLocaleString('ru-RU')} ₽ в год относительно помесячной оплаты.
               </div>
