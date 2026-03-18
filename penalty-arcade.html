@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Penalty Rush 3D (Three.js)</title>
+  <style>
+    :root{--panel:#0b1220d8;--line:#334155;--text:#e5e7eb;--muted:#94a3b8;--ok:#22c55e;--bad:#ef4444;--warn:#f59e0b}
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%;overflow:hidden}
+    body{margin:0;background:radial-gradient(circle at 50% 0%,#66b3ff 0,#2b5fa3 45%,#13325e 100%);font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;color:var(--text)}
+    .app{height:100dvh;width:100vw;max-width:100vw;display:grid;grid-template-rows:auto 1fr auto;gap:8px;padding:8px}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+    .top{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center}
+    .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    .chip{padding:4px 9px;border-radius:999px;background:#111827;border:1px solid #334155;font-size:12px}
+    #danger{display:none;color:#fde68a;border-color:#ca8a04}
+    #game{position:relative;min-height:0;border-radius:12px;border:1px solid var(--line);overflow:hidden;background:#020617}
+    #scene{width:100%;height:100%;display:block}
+    #toast{position:absolute;inset:0;pointer-events:none;display:grid;place-items:start center;padding-top:34px;font-weight:900;font-size:clamp(28px,5vw,60px);text-shadow:0 6px 20px #000;opacity:0;transform:translateY(0);transition:opacity .16s,transform .16s}
+    .overlay{position:fixed;inset:0;background:#030712d9;display:none;place-items:center;padding:12px;z-index:10}
+    .overlay.show{display:grid}
+    .card{width:min(780px,100%);background:#0b1220f2;border:1px solid #334155;border-radius:16px;padding:16px}
+    .menu{display:grid;grid-template-columns:1fr 1fr;gap:10px}.menu button:first-child{grid-column:1/-1;font-size:18px}
+    button{background:linear-gradient(#1f2937,#111827);color:#f3f4f6;border:1px solid #4b5563;padding:9px 12px;border-radius:10px;font-weight:700;cursor:pointer}
+    .small{font-size:13px;color:var(--muted)}
+    .mobile{display:none;grid-template-columns:repeat(4,1fr);gap:8px}
+    .mobile button{padding:11px 8px;font-size:13px}
+    .hist{display:flex;gap:4px}.dot{width:9px;height:9px;border-radius:50%;background:#475569}.g{background:var(--ok)}.s{background:#38bdf8}.m{background:var(--bad)}
+    @media (max-width:920px){.mobile{display:grid}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="panel top">
+    <div class="row">
+      <span class="chip">Счёт: <b id="score">0:0</b></span>
+      <span class="chip">Раунд: <b id="round">1</b></span>
+      <span class="chip">Фаза: <b id="phase">Меню</b></span>
+      <span class="chip">Монеты: <b id="coins">0</b></span>
+      <span class="chip">Соперник: <b id="opp">—</b></span>
+      <span class="chip" id="danger">РЕШАЮЩИЙ УДАР</span>
+      <span class="chip" id="hint">1/2/3 тип удара • Space/Enter подтверждение</span>
+    </div>
+    <div class="row">
+      <div class="hist" id="myHist"></div>
+      <div class="hist" id="aiHist"></div>
+      <button id="menuBtn">Меню</button>
+    </div>
+  </div>
+
+  <div id="game"><canvas id="scene"></canvas><div id="toast"></div></div>
+
+  <div class="mobile" id="mobile">
+    <button data-k="ArrowLeft">←</button><button data-k="ArrowDown">↓</button><button data-k="ArrowRight">→</button><button data-k="Space">УДАР</button>
+    <button data-shot="normal">Обычн.</button><button data-shot="power">Сильный</button><button data-shot="panenka">Паненка</button><button data-k="Enter">OK</button>
+  </div>
+</div>
+
+<div class="overlay show" id="menu">
+  <div class="card">
+    <h1>⚽ Penalty Rush 3D</h1>
+    <p class="small">Оптимизировано под ПК/узкие экраны: без скроллов, responsive-масштабирование, улучшенный этап защиты и прыжки вратаря.</p>
+    <div class="menu">
+      <button id="play">Играть</button>
+      <button id="how">Как играть</button>
+      <button id="shop">Магазин</button>
+      <button id="records">Рекорды</button>
+    </div>
+  </div>
+</div>
+<div class="overlay" id="modal"><div class="card" id="modalBody"></div></div>
+
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const ui={score:$('score'),round:$('round'),phase:$('phase'),coins:$('coins'),opp:$('opp'),danger:$('danger'),myHist:$('myHist'),aiHist:$('aiHist'),menu:$('menu'),modal:$('modal'),modalBody:$('modalBody'),toast:$('toast'),hint:$('hint')};
+const LS='penalty_rush_3d_v2';
+const OPP=[
+ {name:'Новичок',acc:.46,power:.3,bluff:.08,keeper:.42,color:0xef4444},
+ {name:'Осторожный',acc:.62,power:.32,bluff:.1,keeper:.54,color:0xf59e0b},
+ {name:'Рисковый',acc:.58,power:.74,bluff:.18,keeper:.63,color:0x22c55e},
+ {name:'Хитрый',acc:.66,power:.48,bluff:.38,keeper:.7,color:0x8b5cf6},
+ {name:'Мастер',acc:.78,power:.62,bluff:.24,keeper:.8,color:0x0ea5e9}
+];
+let data=load();
+const S={phase:'menu',round:1,maxRounds:5,sudden:false,turn:'player',score:{p:0,a:0},history:{p:[],a:[]},shotType:'normal',targetLane:0,power:0,powerDir:1,aim:-1.35,aimDir:1,currentOpp:OPP[0],coinsGain:0,streakG:0,streakS:0,ball:null,keeperDive:0,keeperT:0,aiT:0,saveInput:null,cameraKick:0,resolving:false,zone:{center:.1,width:.55,color:0x22c55e,label:'ЗЕЛЕНАЯ = идеальная точность'},kickerAnim:null,aiKeeperAnim:null,goalZ:-11.0,ballStartZ:-2.8,playerShotsTaken:0,aiShotsTaken:0,freezeTimer:0,lastKickGrade:'',lastDiveGrade:'',uiDirty:true,gkMoveDir:0,gkJumping:false,gkJumpT:0,aiStrikerAnim:null,charging:false,chargePasses:0,spaceDown:false};
+
+function load(){try{return JSON.parse(localStorage.getItem(LS))||{coins:0,wins:0,best:0,streak:0,unlocked:1,ach:{},skin:'classic',tutorial:false};}catch{return {coins:0,wins:0,best:0,streak:0,unlocked:1,ach:{},skin:'classic',tutorial:false};}}
+function save(){localStorage.setItem(LS,JSON.stringify(data));}
+
+// ===== 3D сцена =====
+const canvas=$('scene');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0xbde5ff);
+const camera=new THREE.PerspectiveCamera(46,16/9,0.1,200);
+camera.position.set(0,2.7,4.9); // меньше фона, сильнее фокус на воротах/игроках
+camera.lookAt(0,1.2,-10.2);
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x8bcf5f,1.45));
+const sun=new THREE.DirectionalLight(0xffffff,1.05); sun.position.set(2,8,5); scene.add(sun);
+
+const field=new THREE.Mesh(new THREE.PlaneGeometry(28,42),new THREE.MeshBasicMaterial({color:0x78c03a}));
+field.rotation.x=-Math.PI/2; field.position.z=-7.2; scene.add(field);
+
+// Разметка штрафной площади + точка пенальти (приближенно к европейскому футболу)
+const lineMat = new THREE.MeshBasicMaterial({color:0xffffff});
+function fieldLine(w,h,x,z){
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w,h), lineMat);
+  m.rotation.x = -Math.PI/2;
+  m.position.set(x,0.015,z);
+  scene.add(m);
+}
+
+// трибуны + болельщики (простая анимация)
+const standMat=new THREE.MeshBasicMaterial({color:0x9ad25c});
+const standLeft=new THREE.Mesh(new THREE.BoxGeometry(9,3.5,4.2),standMat); standLeft.position.set(-15.2,1.75,S.goalZ-4.2); scene.add(standLeft);
+const standRight=new THREE.Mesh(new THREE.BoxGeometry(9,3.5,4.2),standMat); standRight.position.set(15.2,1.75,S.goalZ-4.2); scene.add(standRight);
+// яркие рекламные панели как в референсе
+const adRed=new THREE.Mesh(new THREE.PlaneGeometry(4.8,2.2),new THREE.MeshBasicMaterial({color:0xd63636}));
+adRed.position.set(-8.7,1.35,S.goalZ+0.8); scene.add(adRed);
+const adYellow=new THREE.Mesh(new THREE.PlaneGeometry(4.8,2.2),new THREE.MeshBasicMaterial({color:0xf0c300}));
+adYellow.position.set(8.7,1.35,S.goalZ+0.8); scene.add(adYellow);
+const crowd = new THREE.Group(); scene.add(crowd);
+for(let i=0;i<120;i++){
+  const fan = new THREE.Mesh(new THREE.BoxGeometry(.08,.14,.08), new THREE.MeshBasicMaterial({color:[0xf43f5e,0x22c55e,0x38bdf8,0xf59e0b,0xffffff][i%5]}));
+  const side = i%2===0 ? -1 : 1;
+  fan.userData.baseY = 2.8 + Math.random()*0.75;
+  fan.userData.phase = Math.random()*Math.PI*2;
+  fan.position.set(side*(11.0+Math.random()*4.6), fan.userData.baseY, S.goalZ-4.4 + Math.random()*2.4);
+  crowd.add(fan);
+}
+
+function post(x,y,z,w,h,d){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color:0xffffff}));m.position.set(x,y,z);scene.add(m);return m;}
+const goalZ=S.goalZ; // ~11м от точки пенальти (ballStartZ=0)
+const GOAL_W=14.9, GOAL_H=5.2; // +~80%
+post(0,GOAL_H,goalZ,GOAL_W,.14,.14); post(-GOAL_W/2,GOAL_H/2,goalZ,.14,GOAL_H,.14); post(GOAL_W/2,GOAL_H/2,goalZ,.14,GOAL_H,.14);
+const net=new THREE.Mesh(new THREE.PlaneGeometry(GOAL_W-.1,GOAL_H-.1),new THREE.MeshBasicMaterial({color:0xdbeafe,transparent:true,opacity:.3,side:THREE.DoubleSide})); net.position.set(0,GOAL_H/2,goalZ-.35); scene.add(net);
+// сетка в клетку
+const netLines=new THREE.Group();
+for(let i=1;i<12;i++){
+  const vx=-GOAL_W/2 + i*(GOAL_W/12);
+  const v=new THREE.Mesh(new THREE.PlaneGeometry(0.02,GOAL_H-.1),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.6}));
+  v.position.set(vx,GOAL_H/2,goalZ-.33); netLines.add(v);
+}
+for(let j=1;j<7;j++){
+  const hz=0.02;
+  const h=new THREE.Mesh(new THREE.PlaneGeometry(GOAL_W-.1,hz),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.6}));
+  h.position.set(0,j*(GOAL_H/7),goalZ-.33); netLines.add(h);
+}
+scene.add(netLines);
+// Линия ворот
+fieldLine(10.2,0.08,0,goalZ+0.16);
+// Штрафная (16.5м) и вратарская (5.5м) в масштабе сцены
+const boxDepth=6.6, boxHalf=7.2;
+fieldLine(boxHalf*2,0.08,0,goalZ+boxDepth);
+fieldLine(0.08,boxDepth, boxHalf,goalZ+boxDepth/2);
+fieldLine(0.08,boxDepth,-boxHalf,goalZ+boxDepth/2);
+const sixDepth=2.2, sixHalf=3.6;
+fieldLine(sixHalf*2,0.08,0,goalZ+sixDepth);
+fieldLine(0.08,sixDepth, sixHalf,goalZ+sixDepth/2);
+fieldLine(0.08,sixDepth,-sixHalf,goalZ+sixDepth/2);
+// Точка пенальти (11м)
+const penSpot=new THREE.Mesh(new THREE.CircleGeometry(0.1,18),new THREE.MeshBasicMaterial({color:0xffffff}));
+penSpot.rotation.x=-Math.PI/2;
+penSpot.position.set(0,0.02,S.ballStartZ);
+scene.add(penSpot);
+
+const ball=new THREE.Mesh(new THREE.SphereGeometry(.36,20,20),new THREE.MeshStandardMaterial({color:0xffffff,roughness:.55})); ball.position.set(0,.36,S.ballStartZ); scene.add(ball);
+
+function makeKeeper(color){
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1.0,1.55,.45),new THREE.MeshBasicMaterial({color})); body.position.y=.78; g.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.32,16,16),new THREE.MeshBasicMaterial({color:0xf1c27d})); head.position.y=1.78; g.add(head);
+  g.position.set(0,0,goalZ+.5); scene.add(g); return g;
+}
+const aiKeeper=makeKeeper(0x3bb3e6);
+const playerKeeper=makeKeeper(0x3b82f6); playerKeeper.visible=false;
+
+// бьющий игрок (очень простой код-модель)
+const kicker = new THREE.Group();
+const kBody = new THREE.Mesh(new THREE.BoxGeometry(.65,1.22,.34), new THREE.MeshBasicMaterial({color:0xd63131})); kBody.position.y=1.54;
+const kHead = new THREE.Mesh(new THREE.SphereGeometry(.22,14,14), new THREE.MeshBasicMaterial({color:0xf1c27d})); kHead.position.y=2.35;
+const kLegL = new THREE.Mesh(new THREE.BoxGeometry(.2,.82,.2), new THREE.MeshBasicMaterial({color:0x1e3a8a})); kLegL.position.set(-.14,.55,0);
+const kLegR = new THREE.Mesh(new THREE.BoxGeometry(.2,.82,.2), new THREE.MeshBasicMaterial({color:0x1e3a8a})); kLegR.position.set(.14,.55,0);
+kicker.add(kBody,kHead,kLegL,kLegR);
+kicker.rotation.y=Math.PI; // бежит к воротам как в референсе
+const numTexCanvas=document.createElement('canvas'); numTexCanvas.width=64; numTexCanvas.height=64;
+const nctx=numTexCanvas.getContext('2d'); nctx.fillStyle='#d63131'; nctx.fillRect(0,0,64,64); nctx.fillStyle='#ffd447'; nctx.font='bold 40px Arial'; nctx.textAlign='center'; nctx.textBaseline='middle'; nctx.fillText('10',32,34);
+const numTex=new THREE.CanvasTexture(numTexCanvas);
+const numPlane=new THREE.Mesh(new THREE.PlaneGeometry(.22,.22),new THREE.MeshBasicMaterial({map:numTex,transparent:true}));
+numPlane.position.set(0,1.72,-.18); numPlane.scale.set(1.8,1.8,1.8); kicker.add(numPlane);
+kicker.position.set(.65,0,S.ballStartZ+3.1);
+scene.add(kicker);
+
+// соперник-бьющий (виден, когда бьет по твоим воротам)
+const aiStriker = new THREE.Group();
+const aBody = new THREE.Mesh(new THREE.BoxGeometry(.65,1.22,.34), new THREE.MeshBasicMaterial({color:0x22c55e})); aBody.position.y=1.54;
+const aHead = new THREE.Mesh(new THREE.SphereGeometry(.22,14,14), new THREE.MeshBasicMaterial({color:0xf1c27d})); aHead.position.y=2.35;
+const aLegL = new THREE.Mesh(new THREE.BoxGeometry(.2,.82,.2), new THREE.MeshBasicMaterial({color:0x1e293b})); aLegL.position.set(-.14,.55,0);
+const aLegR = new THREE.Mesh(new THREE.BoxGeometry(.2,.82,.2), new THREE.MeshBasicMaterial({color:0x1e293b})); aLegR.position.set(.14,.55,0);
+aiStriker.add(aBody,aHead,aLegL,aLegR);
+aiStriker.rotation.y=Math.PI;
+aiStriker.position.set(-.65,0,S.ballStartZ+1.5);
+aiStriker.visible=false;
+scene.add(aiStriker);
+
+const aimArrow=new THREE.Mesh(new THREE.ConeGeometry(.14,.3,10),new THREE.MeshBasicMaterial({color:0xf59e0b}));
+aimArrow.rotation.x=Math.PI; aimArrow.position.set(0,2.2,goalZ+.08); scene.add(aimArrow);
+
+const powerBar=new THREE.Group();
+const barBg=new THREE.Mesh(new THREE.BoxGeometry(3.4,.08,.08),new THREE.MeshBasicMaterial({color:0x111827}));
+const zoneBar=new THREE.Mesh(new THREE.BoxGeometry(.7,.1,.09),new THREE.MeshBasicMaterial({color:0x22c55e}));
+const slider=new THREE.Mesh(new THREE.BoxGeometry(.08,.22,.1),new THREE.MeshBasicMaterial({color:0xffffff}));
+powerBar.add(barBg,zoneBar,slider); powerBar.position.set(0,2.6,-8.4); powerBar.visible=false; scene.add(powerBar);
+
+function resize(){const r=canvas.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();}
+addEventListener('resize',resize); resize();
+
+// ===== UI =====
+function toast(t,c='#fff',size=56){ui.toast.textContent=t;ui.toast.style.color=c;ui.toast.style.fontSize=size+'px';ui.toast.style.opacity=1;ui.toast.style.transform='translateY(0px)';clearTimeout(toast.t);toast.t=setTimeout(()=>{ui.toast.style.opacity=0;ui.toast.style.transform='translateY(-12px)';},460);} 
+function hud(){
+ const displayRound=Math.max(S.playerShotsTaken,S.aiShotsTaken)+1;
+ ui.score.textContent=`${S.score.p}:${S.score.a}`; ui.round.textContent=(S.sudden?'SD':displayRound); ui.phase.textContent=phaseText(); ui.coins.textContent=data.coins; ui.opp.textContent=S.currentOpp.name;
+ ui.danger.style.display=isDecisive()?'inline-block':'none';
+ ui.myHist.innerHTML=S.history.p.map(v=>`<span class="dot ${v==='g'?'g':v==='s'?'s':'m'}"></span>`).join('');
+ ui.aiHist.innerHTML=S.history.a.map(v=>`<span class="dot ${v==='g'?'g':v==='s'?'s':'m'}"></span>`).join('');
+ S.uiDirty=false;
+}
+function phaseText(){return({menu:'Меню',player_aim:'Удар: направление',player_power:'Удар: сила/точность',ai_run:'Разбег соперника',ai_shot:'Ты вратарь (← ↓ →)',resolve:'Розыгрыш',result:'Результат'})[S.phase]||S.phase;}
+function isDecisive(){
+ if(S.sudden) return true;
+ const leftP=S.maxRounds-S.playerShotsTaken;
+ const leftA=S.maxRounds-S.aiShotsTaken;
+ return S.turn==='player'
+  ? (S.score.p+leftP<=S.score.a || S.score.p+1>S.score.a+leftA)
+  : (S.score.a+leftA<=S.score.p || S.score.a+1>S.score.p+leftP);
+}
+
+function setPowerZone(){
+ if(S.shotType==='power'){S.zone={center:.68,width:.36,color:0x60a5fa,label:'СИНЯЯ = мощный удар (риск выше)'};}
+ else if(S.shotType==='panenka'){S.zone={center:.48,width:.28,color:0xf59e0b,label:'ОРАНЖЕВАЯ = паненка (точный тайминг)'};}
+ else {S.zone={center:.52,width:.55,color:0x22c55e,label:'ЗЕЛЕНАЯ = идеальная точность'};}
+ zoneBar.scale.x=S.zone.width/0.7; zoneBar.position.x=(S.zone.center-.5)*3.35; zoneBar.material.color.setHex(S.zone.color);
+ ui.hint.textContent=S.zone.label;
+}
+
+function resetMatch(){
+ S.round=1;S.sudden=false;S.turn='player';S.phase='player_aim';S.score={p:0,a:0};S.history={p:[],a:[]};S.coinsGain=0;S.shotType='normal';S.aim=-1.35;S.aimDir=1;S.power=.5;S.powerDir=1;S.ball=null;S.keeperDive=0;S.keeperT=0;S.saveInput=null;S.resolving=false;S.kickerAnim=null;S.playerShotsTaken=0;S.aiShotsTaken=0;S.freezeTimer=0;S.lastKickGrade='';S.lastDiveGrade='';S.uiDirty=true;S.gkMoveDir=0;S.gkJumping=false;S.gkJumpT=0;S.aiStrikerAnim=null;S.charging=false;S.chargePasses=0;S.spaceDown=false;
+ S.currentOpp=OPP[Math.min(data.unlocked-1,OPP.length-1)];
+ // фиксируем визуальный стиль вратаря (как в референсе), не перекрашиваем по сопернику
+ aiKeeper.children[0].material.color.setHex(0x3bb3e6);
+ ui.menu.classList.remove('show'); playerKeeper.visible=false; aiKeeper.visible=true; aimArrow.visible=true; powerBar.visible=false; ui.hint.textContent='Стрелка ходит шире ворот: можно промахнуться';
+ ball.position.set(0,.36,S.ballStartZ); hud();
+ kicker.visible=true; kicker.position.set(.65,0,S.ballStartZ+3.1); kLegR.rotation.x=0; kLegL.rotation.x=0;
+ aiStriker.visible=false; aiStriker.position.set(-.65,0,S.ballStartZ+1.5); aLegL.rotation.x=0; aLegR.rotation.x=0;
+ aiKeeper.position.x=0; aiKeeper.position.y=0; aiKeeper.rotation.z=0; S.aiKeeperAnim=null;
+}
+
+function showModal(html){ui.modalBody.innerHTML=html;ui.modal.classList.add('show');}
+function closeModal(){ui.modal.classList.remove('show');}
+$('menuBtn').onclick=()=>ui.menu.classList.add('show');
+$('play').onclick=()=>{if(!data.tutorial) startTutorial(); else resetMatch();};
+$('how').onclick=()=>showModal(`<h2>Как играть</h2><p>1) Space/Enter фиксирует направление стрелки (она ходит <b>за пределы ворот</b>).<br>2) Ещё раз Space/Enter — фиксация по цветной зоне.<br>3) В защите жми ← ↓ → во время разбега соперника.</p><button id='cm'>Понятно</button>`);
+$('records').onclick=()=>showModal(`<h2>Рекорды</h2><p>Побед: <b>${data.wins||0}</b><br>Лучшая серия: <b>${data.best||0}</b></p><button id='cm'>Закрыть</button>`);
+$('shop').onclick=()=>showModal(`<h2>Магазин</h2><p>Монеты: <b>${data.coins}</b></p><p><button id='n'>Neon мяч (80)</button> ${data.skin==='neon'?'✅':''}</p><p><button id='g'>Gold мяч (120)</button> ${data.skin==='gold'?'✅':''}</p><button id='cm'>Назад</button>`);
+ui.modal.addEventListener('click',e=>{
+ if(e.target===ui.modal||e.target.id==='cm') closeModal();
+ if(e.target.id==='n'&&data.coins>=80){data.coins-=80;data.skin='neon';save();$('shop').click();}
+ if(e.target.id==='g'&&data.coins>=120){data.coins-=120;data.skin='gold';save();$('shop').click();}
+ if(e.target.id==='startT'){data.tutorial=true;save();closeModal();resetMatch();}
+ if(e.target.id==='again'){closeModal();resetMatch();}
+});
+
+function startTutorial(){ui.menu.classList.remove('show');showModal(`<h2>Быстрый туториал</h2><p>Поймай направление, затем силу. На защите — направление + тайминг прыжка.</p><button id='startT'>Поехали</button>`);} 
+
+function chooseType(t){S.shotType=t;setPowerZone();toast(t==='power'?'СИЛЬНЫЙ':'panenka'===t?'ПАНЕНКА':'ОБЫЧНЫЙ','#d8b4fe',30);} 
+function startChargeShot(){
+ if(S.phase!=='player_aim') return;
+ S.targetLane=S.aim;
+ S.phase='player_power'; S.uiDirty=true;
+ S.charging=true; S.chargePasses=0; S.power=0.05; S.powerDir=1;
+ aimArrow.visible=false; powerBar.visible=true; setPowerZone();
+ toast('УДЕРЖИВАЙ ПРОБЕЛ: выбери силу (3 прохода)','#fff',28);
+}
+function releaseChargeShot(){
+ if(S.phase!=='player_power') return;
+ S.charging=false;
+ resolvePlayerShot();
+}
+
+function resolvePlayerShot(){
+ S.phase='resolve'; powerBar.visible=false;
+ S.kickerAnim={t:0}; // запуск анимации удара
+ const l=S.targetLane, p=S.power;
+ const q=1-Math.abs(p-S.zone.center)*(2.1/S.zone.width); // качество от попадания в цветную зону
+ const kickGrade=getKickGrade(q);
+ S.lastKickGrade=kickGrade;
+ const lane=l + (Math.random()-.5)*(1-q)*0.3;
+ const skyMiss = p>0.92 && Math.random()<0.72;
+ const miss=Math.abs(lane)>1.02 || (S.shotType==='power'&&p<.18) || skyMiss;
+ const kg=aiKeeperGuess();
+ S.aiKeeperAnim={target:kg,t:0}; // анимация прыжка вратаря соперника
+ let goal=false;
+ if(miss){S.history.p.push('m');toast('МИМО!','#ef4444',62);} else {
+   const diff=Math.abs(lane-kg);
+   let saveChance=Math.min(.9,Math.max(.05,S.currentOpp.keeper*.62 + (0.42-diff) + (q>.9?-0.14:0) + (S.shotType==='panenka'&&Math.abs(kg)>.25?-0.2:0)));
+   if(Math.random()<saveChance){S.history.p.push('s');toast(q>.9?'СУПЕРСЕЙВ!':'СЭЙВ!','#38bdf8',58);} else {goal=true;S.score.p++;S.history.p.push('g');toast(q>.9?'ИДЕАЛЬНО!':'ГОООЛ!','#22c55e',66);S.cameraKick=.18;}
+ }
+ const arcBase=0.55 + p*1.35 + (S.shotType==='panenka'?0.65:0);
+ startBallAnim({lane,toZ:miss?goalZ-1.4:goalZ-0.05,arc:arcBase,power:S.shotType==='power',type:S.shotType,miss,from:'player'});
+ S.playerShotsTaken++;
+ S.freezeTimer=0.08; // freeze-frame в момент удара
+ if(goal){data.coins+=2;S.coinsGain+=2;S.streakG++;S.streakS=0;if(S.streakG>=3){toast('СЕРИЯ x3','#fbbf24',42);data.coins+=3;S.coinsGain+=3;}}
+ else S.streakG=0;
+ if(S.shotType==='panenka'&&goal) ach('panenka','Паненка!'); if(q>.9&&goal){data.coins+=3;S.coinsGain+=3;ach('perfect','Идеальный удар');}
+ save();S.uiDirty=true;hud();
+ toast(kickGrade, kickGrade==='ИДЕАЛЬНО'?'#fde047':kickGrade==='ОТЛИЧНО'?'#86efac':kickGrade==='НОРМ'?'#bfdbfe':'#fca5a5', 34);
+ setTimeout(()=>{S.turn='ai';toast('Готовься к защите','#bfdbfe',34);startAiTurn();},2000);
+}
+
+function aiKeeperGuess(){if(Math.random()<0.22)return 0; return Math.max(-1,Math.min(1,Math.random()<.5?S.targetLane:Math.random()*2-1));}
+
+function getKickGrade(q){
+  if(q>=0.92) return 'ИДЕАЛЬНО';
+  if(q>=0.75) return 'ОТЛИЧНО';
+  if(q>=0.52) return 'НОРМ';
+  return 'ПЛОХО';
+}
+
+function getSaveQuality(saveInput,lane,idealDiveTime){
+  const keeperLane = saveInput ? (saveInput.x/6.5) : 9;
+  const guessed = saveInput ? Math.abs(keeperLane-lane)<0.58 : false;
+  const reactionDelta = saveInput ? (saveInput.t-idealDiveTime) : 99;
+  const absDelta = Math.abs(reactionDelta);
+  let diveQuality='Не угадал сторону';
+  if(guessed){
+    if(absDelta<0.08) diveQuality='Идеально';
+    else if(reactionDelta<0) diveQuality='Рано';
+    else diveQuality='Поздно';
+  }
+  return {guessed,reactionDelta,absDelta,diveQuality};
+}
+
+function checkShootoutState(){
+  const pLeft=S.maxRounds-S.playerShotsTaken;
+  const aLeft=S.maxRounds-S.aiShotsTaken;
+  if(!S.sudden){
+    if(S.score.p > S.score.a + aLeft) return 'player_win';
+    if(S.score.a > S.score.p + pLeft) return 'ai_win';
+    if(S.playerShotsTaken>=S.maxRounds && S.aiShotsTaken>=S.maxRounds){
+      if(S.score.p===S.score.a) return 'sudden';
+      return S.score.p>S.score.a?'player_win':'ai_win';
+    }
+  } else if(S.playerShotsTaken===S.aiShotsTaken && S.playerShotsTaken>S.maxRounds && S.score.p!==S.score.a){
+    return S.score.p>S.score.a?'player_win':'ai_win';
+  }
+  return 'continue';
+}
+
+function startAiTurn(){
+ S.phase='ai_run'; S.uiDirty=true; S.aiT=0; S.saveInput=null; S.keeperDive=0; S.keeperT=0; S.resolving=false; S.gkMoveDir=0; S.gkJumping=false; S.gkJumpT=0;
+ aiKeeper.visible=false; playerKeeper.visible=true; playerKeeper.position.x=0; playerKeeper.position.y=0; playerKeeper.rotation.z=0; aimArrow.visible=false;
+ aiStriker.visible=true; aiStriker.position.set(-.65,0,S.ballStartZ+1.5); aLegL.rotation.x=0; aLegR.rotation.x=0; S.aiStrikerAnim={t:0};
+ toast('ТВОЯ ЗАЩИТА! ← → двигайся, SPACE прыгай','#93c5fd',30);
+}
+
+function resolveAi(){
+ if(S.resolving) return;
+ S.resolving=true;
+ S.phase='resolve'; S.uiDirty=true;
+ const type=Math.random()<S.currentOpp.bluff?'panenka':Math.random()<S.currentOpp.power?'power':'normal';
+ let lane=(Math.random()*1.7-0.85); if(Math.random()<S.currentOpp.acc) lane+=(Math.random()<.5?-1:1)*0.22; lane=Math.max(-0.96,Math.min(0.96,lane));
+ const miss=Math.abs(lane)>1.02 || (type==='power'&&Math.random()<.1);
+ let saved=false,goal=false;
+ if(miss){S.history.a.push('m');toast('СОПЕРНИК МИМО','#f59e0b',46);} else {
+   const idealDiveTime=0.72;
+   const sq=getSaveQuality(S.saveInput,lane,idealDiveTime);
+   S.lastDiveGrade=sq.diveQuality;
+   const timing=1-Math.min(1,sq.absDelta*1.65);
+   let ch=(sq.guessed?0.46:0.08)+timing*0.58-(type==='power'?0.06:0); if(type==='panenka'&&S.saveInput&&Math.abs(S.saveInput.x)>0.6) ch-=.1; ch=Math.max(.08,Math.min(.97,ch));
+   saved=Math.random()<ch;
+   if(saved){S.history.a.push('s');toast(timing>.82?'СУПЕРСЕЙВ!':'СЭЙВ!','#38bdf8',60);toast(sq.diveQuality,'#bfdbfe',30);S.streakS++;data.coins+=2;S.coinsGain+=2;} else {goal=true;S.history.a.push('g');S.score.a++;toast(sq.guessed?sq.diveQuality:'Не угадал сторону','#fda4af',30);toast('ПРОПУЩЕН','#ef4444',56);S.streakS=0;}
+ }
+ startBallAnim({lane,toZ:miss?goalZ-1.4:goalZ-0.05,arc:type==='panenka'?.75:.95,power:type==='power',type,miss,from:'ai'});
+ S.aiShotsTaken++;
+ save();S.uiDirty=true;hud();
+ setTimeout(nextTurn,1050);
+}
+
+function nextTurn(){
+ playerKeeper.visible=false; aiKeeper.visible=true; aiKeeper.position.x=0; aiKeeper.position.y=0; aiKeeper.rotation.z=0;
+ aiStriker.visible=false; S.aiStrikerAnim=null;
+ const state=checkShootoutState();
+ if(state==='player_win' || state==='ai_win'){endMatch();return;}
+ if(state==='sudden'){S.sudden=true;toast('SUDDEN DEATH','#fde047',44);}
+ S.round=Math.max(S.playerShotsTaken,S.aiShotsTaken)+1;
+ S.turn='player';S.phase='player_aim';S.aim=-1.35;S.aimDir=1;S.power=.5;S.powerDir=1;S.resolving=false;aimArrow.visible=true;powerBar.visible=false;ui.hint.textContent='Стрелка ходит шире ворот: можно промахнуться';
+ ball.position.set(0,.36,S.ballStartZ); S.uiDirty=true; hud();
+ kicker.visible=true; kicker.position.set(.65,0,S.ballStartZ+3.1); kLegR.rotation.x=0; kLegL.rotation.x=0; playerKeeper.position.y=0; playerKeeper.rotation.z=0;
+}
+
+function endMatch(){
+ S.phase='result'; const win=S.score.p>S.score.a;
+ if(win){data.wins=(data.wins||0)+1;data.streak=(data.streak||0)+1;data.best=Math.max(data.best||0,data.streak);data.coins+=12;S.coinsGain+=12;toast('ПОБЕДА!','#22c55e',70);} else {data.streak=0;data.coins+=4;S.coinsGain+=4;toast('ПОРАЖЕНИЕ','#ef4444',66);} 
+ if(S.sudden&&win) ach('sudden','Внезапная смерть'); if(S.history.p.filter(x=>x==='g').length>=5) ach('five','5 из 5'); if((data.wins||0)>=10) ach('ten','10 побед'); if(win&&(data.unlocked||1)<OPP.length)data.unlocked=(data.unlocked||1)+1;
+ save();
+ showModal(`<h2>${win?'Победа!':'Матч окончен'}</h2><p>Счёт: <b>${S.score.p}:${S.score.a}</b> ${S.sudden?'(SD)':''}</p><p>Награда: <b>+${S.coinsGain}</b> монет</p><button id='again'>Еще раз</button> <button id='cm'>В меню</button>`);
+}
+
+function ach(k,name){if(data.ach[k])return;data.ach[k]=Date.now();toast('ДОСТИЖЕНИЕ: '+name,'#fde047',34);} 
+function startBallAnim(o){S.ball={t:0,bounced:false,trail:[],startZ:S.ballStartZ,...o};}
+function updateBall(dt){
+ if(!S.ball) return;
+ const base = S.ball.from==='ai' ? 1.45 : 1.95;
+ const speed = S.ball.type==='power' ? base+0.75 : S.ball.type==='panenka' ? base-0.35 : base;
+ S.ball.t=Math.min(1,S.ball.t+dt*speed);
+ const t=S.ball.t;
+ const ease=S.ball.type==='power' ? Math.pow(t,0.62) : S.ball.type==='panenka' ? Math.pow(t,1.22) : t;
+ const x=S.ball.lane*3.0*ease;
+ const z=S.ball.startZ+(S.ball.toZ-S.ball.startZ)*ease;
+ const arcBoost=S.ball.type==='panenka'?1.35:(S.ball.type==='power'?0.85:1.0);
+ let y=.36+Math.sin(Math.PI*t)*(S.ball.arc*arcBoost);
+ if(S.ball.miss) y+=t*0.35;
+ if(t>0.92 && !S.ball.miss && !S.ball.bounced){S.ball.bounced=true; y+=0.08; } // лёгкий отскок от сетки/рук
+ ball.position.set(x,y,z);
+ // trail (для мощных ударов)
+ if(S.ball.type==='power'){
+   S.ball.trail.push(ball.position.clone());
+   if(S.ball.trail.length>6) S.ball.trail.shift();
+   for(let i=0;i<S.ball.trail.length;i++){
+     const p=S.ball.trail[i];
+     const ghostScale=0.05+(i/S.ball.trail.length)*0.09;
+     const g=new THREE.Mesh(new THREE.SphereGeometry(ghostScale,6,6),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.16}));
+     g.position.copy(p); scene.add(g); setTimeout(()=>scene.remove(g),90);
+   }
+ }
+ if(data.skin==='neon')ball.material.color.setHex(0x22d3ee); else if(data.skin==='gold')ball.material.color.setHex(0xfbbf24); else ball.material.color.setHex(0xffffff);
+ if(t>=1)S.ball=null;
+}
+
+function step(dt){
+ if(S.freezeTimer>0){S.freezeTimer-=dt; return;}
+ // толпа болеет
+ for(const fan of crowd.children){
+   fan.position.y = fan.userData.baseY + Math.sin(performance.now()*0.008 + fan.userData.phase)*0.06;
+ }
+ if(S.phase==='player_aim'){S.aim+=S.aimDir*dt*1.8; if(S.aim>1.35){S.aim=1.35;S.aimDir=-1;} if(S.aim<-1.35){S.aim=-1.35;S.aimDir=1;} aimArrow.position.x=S.aim*7.0;}
+ if(S.phase==='player_power' && S.charging){
+   S.power+=S.powerDir*dt*4.6;
+   if(S.power>1){S.power=1;S.powerDir=-1;S.chargePasses++;}
+   if(S.power<0){S.power=0;S.powerDir=1;S.chargePasses++;}
+   if(S.chargePasses>=3){toast('Время вышло!','#fda4af',28);releaseChargeShot();}
+   slider.position.x=(S.power-.5)*3.3;
+ }
+ if(S.phase==='ai_run'||S.phase==='ai_shot'){
+   S.aiT+=dt*(S.phase==='ai_run'?0.62:0.86);
+   if(S.phase==='ai_run'&&S.aiT>1.0){S.phase='ai_shot';toast('ПРЫГАЙ!','#fff',40);}
+   // свободное перемещение вратаря влево/вправо
+   playerKeeper.position.x=Math.max(-6.5,Math.min(6.5,playerKeeper.position.x + S.gkMoveDir*dt*8.8));
+   if(S.gkJumping){S.gkJumpT=Math.min(1,S.gkJumpT+dt*4.6); playerKeeper.position.y=Math.sin(Math.PI*S.gkJumpT)*0.55; if(S.gkJumpT>=1){S.gkJumping=false; playerKeeper.position.y=0;}}
+   if(S.phase==='ai_shot'&&S.aiT>=1) resolveAi();
+ }
+ if(S.aiStrikerAnim && aiStriker.visible){
+   S.aiStrikerAnim.t=Math.min(1,S.aiStrikerAnim.t+dt*(S.phase==='ai_run'?1.0:2.0));
+   const t=S.aiStrikerAnim.t;
+   aiStriker.position.z=(S.ballStartZ+1.5) - t*1.05;
+   aLegR.rotation.x=-Math.sin(t*Math.PI)*0.95;
+   aLegL.rotation.x=Math.sin(t*Math.PI)*0.4;
+ }
+ if(S.aiKeeperAnim){
+   S.aiKeeperAnim.t=Math.min(1,S.aiKeeperAnim.t+dt*3.2);
+   aiKeeper.position.x=S.aiKeeperAnim.target*6.0*S.aiKeeperAnim.t;
+   aiKeeper.rotation.z=-S.aiKeeperAnim.target*0.35*S.aiKeeperAnim.t;
+   aiKeeper.position.y=Math.sin(Math.PI*Math.min(1,S.aiKeeperAnim.t*1.05))*0.38;
+   if(S.aiKeeperAnim.t>=1) S.aiKeeperAnim=null;
+ }
+ if(S.kickerAnim){
+   S.kickerAnim.t=Math.min(1,S.kickerAnim.t+dt*3.2);
+   const t=S.kickerAnim.t;
+   kicker.position.z=(S.ballStartZ+3.1) - t*1.6;
+   kLegR.rotation.x=-Math.sin(t*Math.PI)*1.05;
+   kLegL.rotation.x=Math.sin(t*Math.PI)*0.38;
+   if(t>=1){S.kickerAnim=null; kicker.visible=false;}
+ }
+ updateBall(dt);
+ if(S.cameraKick>0){S.cameraKick*=0.84;camera.position.x=(Math.random()-.5)*S.cameraKick;camera.position.y=3.2+(Math.random()-.5)*S.cameraKick*.45;} else {camera.position.x*=0.85;camera.position.y+=(3.2-camera.position.y)*.12;}
+ if(S.uiDirty) hud();
+}
+
+let last=performance.now();
+function loop(now){const dt=Math.min(.033,(now-last)/1000); last=now; step(dt); renderer.render(scene,camera); requestAnimationFrame(loop);} requestAnimationFrame(loop);
+
+function onKey(k){
+ if((k==='Enter') && S.phase==='player_aim') startChargeShot();
+ if(k==='1') chooseType('normal'); if(k==='2') chooseType('power'); if(k==='3') chooseType('panenka');
+ if((S.phase==='ai_shot'||S.phase==='ai_run')){
+   if(k==='ArrowLeft') S.gkMoveDir=-1;
+   if(k==='ArrowRight') S.gkMoveDir=1;
+   if((k===' '||k==='ArrowUp') && !S.saveInput){S.saveInput={x:playerKeeper.position.x,t:S.aiT}; S.gkJumping=true; S.gkJumpT=0; toast('ПРЫЖОК!','#93c5fd',30);}
+ }
+}
+addEventListener('keydown',e=>{
+ if([' ','ArrowLeft','ArrowDown','ArrowRight'].includes(e.key)) e.preventDefault();
+ if(e.key===' ' && !S.spaceDown){
+   S.spaceDown=true;
+   if(S.phase==='player_aim') startChargeShot();
+   else if((S.phase==='ai_shot'||S.phase==='ai_run') && !S.saveInput){S.saveInput={x:playerKeeper.position.x,t:S.aiT}; S.gkJumping=true; S.gkJumpT=0; toast('ПРЫЖОК!','#93c5fd',30);}
+ }
+ onKey(e.key);
+});
+addEventListener('keyup',e=>{
+ if(e.key===' ') {S.spaceDown=false; if(S.phase==='player_power'&&S.charging) releaseChargeShot();}
+ if((S.phase==='ai_shot'||S.phase==='ai_run') && (e.key==='ArrowLeft' || e.key==='ArrowRight')) S.gkMoveDir=0;
+});
+$('mobile').addEventListener('click',e=>{const b=e.target.closest('button'); if(!b)return; if(b.dataset.k) onKey(b.dataset.k==='Space'?' ':b.dataset.k); if(b.dataset.shot) chooseType(b.dataset.shot);});
+canvas.addEventListener('click',()=>{
+  if(S.phase==='player_aim') startChargeShot();
+  else if(S.phase==='player_power' && S.charging) releaseChargeShot();
+});
+
+if(!data.tutorial) startTutorial();
+else resetMatch();
+hud();
+})();
+</script>
+</body>
+</html>
