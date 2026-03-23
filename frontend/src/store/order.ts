@@ -114,7 +114,7 @@ type OrderState = {
   updateItemQty: (lineId: string, qty: number) => Promise<void>;
   removeItem: (lineId: string) => Promise<void>;
   attachCustomer: (customer: CustomerSummary | null) => Promise<void>;
-  payOrder: (payload: { method: PaymentMethod; amountTendered: number; change?: number }) => Promise<void>;
+  payOrder: (payload: { method: PaymentMethod; amountTendered: number; change?: number }) => Promise<{ evotorWarning?: string }>;
   completeOrder: () => Promise<void>;
   cancelOrder: () => Promise<void>;
   cancelReceipt: (orderId: string) => Promise<void>;
@@ -133,6 +133,11 @@ type OrderState = {
   fetchShiftHistory: (options?: { registerId?: string }) => Promise<void>;
   resetShiftHistory: () => void;
 };
+
+type PayOrderEvotorCommand =
+  | { id: string; status: string; reused: boolean; skipped?: false; reason?: never; error?: never }
+  | { skipped: true; reason: string; id?: never; status?: never; reused?: never; error?: never }
+  | { error: string; skipped?: false; reason?: never; id?: never; status?: never; reused?: never };
 
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 
@@ -511,6 +516,35 @@ const mapOrderHistoryEntry = (order: any): OrderHistoryEntry | null => {
   return historyEntry;
 };
 
+const mapPayOrderEvotorCommand = (value: unknown): PayOrderEvotorCommand | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const source = value as Record<string, unknown>;
+
+  if (source.skipped === true) {
+    return {
+      skipped: true,
+      reason: typeof source.reason === 'string' && source.reason ? source.reason : 'unknown',
+    };
+  }
+
+  if (typeof source.error === 'string' && source.error) {
+    return { error: source.error };
+  }
+
+  if (source.id && typeof source.status === 'string') {
+    return {
+      id: String(source.id),
+      status: source.status,
+      reused: source.reused === true,
+    };
+  }
+
+  return null;
+};
+
 export const useOrderStore = create<OrderState>((set, get) => ({
   orderId: null,
   items: [],
@@ -658,7 +692,8 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         amount: amountTendered,
         change: normalizedChange,
       });
-      const nextState = buildOrderState(response.data.data);
+      const orderPayload = response.data?.data;
+      const nextState = buildOrderState(orderPayload);
       const selectedDiscountIds = extractSelectedDiscountIds(nextState.appliedDiscounts ?? []);
       set((prev) => ({
         ...prev,
@@ -666,13 +701,18 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         selectedDiscountIds,
       }));
 
-      try {
-        await api.post('/api/evotor/sale-commands', { orderId });
-      } catch (error) {
-        console.warn('Failed to enqueue Evotor sale command', error);
+      const evotorCommand = mapPayOrderEvotorCommand(orderPayload?.evotorCommand);
+      let evotorWarning: string | undefined;
+      if (evotorCommand?.skipped) {
+        evotorWarning = evotorCommand.reason === 'zero_total'
+          ? 'Команда продажи не отправлена: сумма заказа равна 0.'
+          : 'Команда продажи не отправлена.';
+      } else if (evotorCommand && 'error' in evotorCommand) {
+        evotorWarning = `Команда продажи не поставлена: ${evotorCommand.error}`;
       }
 
       void get().fetchActiveOrders();
+      return { evotorWarning };
     } finally {
       set({ loading: false });
     }
