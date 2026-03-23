@@ -6,8 +6,7 @@ import { EvotorDeviceModel } from './evotor.model';
 import { EvotorSaleCommandModel } from './evotorSaleCommand.model';
 import { appConfig } from '../../config/env';
 import { authenticateUser } from '../../services/authService';
-import { OrderModel } from '../orders/order.model';
-import { buildEvotorOrderItems } from './orderTotals';
+import { EvotorEnqueueError, enqueueSaleCommandForPaidOrder } from './evotor.service';
 const asyncHandler =
   (fn: (req: any, res: any) => Promise<void>) =>
   (req: any, res: any, next: any) =>
@@ -15,7 +14,6 @@ const asyncHandler =
 
 const evotorRouter = Router();
 const CASHIER_ROLES = ['cashier', 'owner', 'superAdmin'];
-const SALE_COMMAND_TTL_MS = 5 * 60 * 1000;
 
 const maskSecret = (value: string | undefined): string | undefined => {
   if (!value) {
@@ -295,60 +293,39 @@ evotorRouter.post(
       return;
     }
 
-    const order = await OrderModel.findOne({
-      _id: new Types.ObjectId(orderId),
-      organizationId: new Types.ObjectId(organizationId),
-    }).select('_id status total items');
+    try {
+      const result = await enqueueSaleCommandForPaidOrder(organizationId, orderId, req.user?.id);
 
-    if (!order) {
-      res.status(404).json({ data: null, error: 'Order not found' });
-      return;
-    }
+      if ('skipped' in result && result.skipped) {
+        res.json({
+          data: {
+            skipped: true,
+            reason: result.reason,
+            orderId: result.orderId,
+          },
+          error: null,
+        });
+        return;
+      }
 
-    if (order.total <= 0) {
-      res.json({
+      const { command } = result;
+      res.status(result.reused ? 200 : 201).json({
         data: {
-          skipped: true,
-          reason: 'zero_total',
-          orderId: order._id,
+          id: command._id,
+          status: command.status,
+          orderId: command.orderSnapshot.id,
+          createdAt: command.createdAt,
+          reused: result.reused,
         },
         error: null,
       });
-      return;
+    } catch (error) {
+      if (error instanceof EvotorEnqueueError) {
+        res.status(error.statusCode).json({ data: null, error: error.message });
+        return;
+      }
+      throw error;
     }
-
-    const items = buildEvotorOrderItems(order.items ?? [], order.total);
-
-    if (!items.length) {
-      res.status(400).json({ data: null, error: 'Order does not have valid items' });
-      return;
-    }
-
-    const command = await EvotorSaleCommandModel.create({
-      organizationId: new Types.ObjectId(organizationId),
-      orderId: order._id,
-      requestedByUserId: req.user?.id && Types.ObjectId.isValid(req.user.id)
-        ? new Types.ObjectId(req.user.id)
-        : undefined,
-      orderSnapshot: {
-        id: order._id.toString(),
-        status: order.status,
-        total: order.total,
-        items,
-      },
-      status: 'pending',
-      expiresAt: new Date(Date.now() + SALE_COMMAND_TTL_MS),
-    });
-
-    res.status(201).json({
-      data: {
-        id: command._id,
-        status: command.status,
-        orderId: command.orderSnapshot.id,
-        createdAt: command.createdAt,
-      },
-      error: null,
-    });
   })
 );
 
@@ -384,7 +361,7 @@ evotorRouter.get(
       organizationId: new Types.ObjectId(organizationId),
       status: 'pending',
       expiresAt: { $gt: now },
-    }).sort({ createdAt: 1 });
+    }).sort({ createdAt: -1 });
 
     if (!command) {
       res.json({ data: null, error: null });

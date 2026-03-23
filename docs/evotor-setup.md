@@ -186,3 +186,25 @@ curl -sS https://yago-app.ru/api/evotor/status -H "Authorization: Bearer <ADMIN_
 Таймауты в клиенте выставлены по рекомендации Evotor:
 - `connectTimeout = 5s`;
 - `readTimeout = 10s`.
+
+## 8) Постановка sale-команды после оплаты (актуальный поток)
+
+Сейчас источник правды для запуска продажи на терминале — результат `POST /api/orders/:id/pay`.
+
+- Backend после успешного `pay` автоматически вызывает enqueue sale-команды.
+- Отдельный вызов `POST /api/evotor/sale-commands` оставлен для совместимости, но использует ту же общую бизнес-логику.
+
+### Идемпотентность enqueue
+
+Постановка команды идемпотентная:
+
+- если уже есть активная `pending` команда для той же пары `organizationId + orderId` (`expiresAt > now`), backend вернёт её же с `reused: true`;
+- если активной команды нет, создаётся новая с `reused: false`.
+
+### Значения `reused` и `skipped`
+
+- `reused: true` — новая команда не создавалась, использована существующая `pending`;
+- `reused: false` — создана новая команда;
+- `skipped: true` + `reason: "zero_total"` — команда не ставится, так как сумма заказа `<= 0`.
+
+Если enqueue не выполнен из-за ошибки, `pay` всё равно может быть успешным, а информация об ошибке enqueue вернётся в payload ответа оплаты.

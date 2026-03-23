@@ -325,8 +325,15 @@ const POSPage: React.FC = () => {
 
     setPaying(true);
     try {
-      await payOrder(payload);
+      const payResult = await payOrder(payload);
       setPaymentOpen(false);
+      if (payResult.evotorWarning) {
+        notify({
+          title: 'Оплата принята, но нужна проверка Evotor',
+          description: payResult.evotorWarning,
+          type: 'info',
+        });
+      }
     } catch (error) {
       // ignore
     } finally {

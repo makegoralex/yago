@@ -27,7 +27,11 @@ import { calculateOrderTotals } from '../discounts/discount.service';
 import { ShiftDocument, ShiftModel } from '../shifts/shift.model';
 import { orderSchemas, type OrderItemsBody, type OrderPaymentBody, type StartOrderBody } from '../../validation/orderSchemas';
 import { getRestaurantBranding } from '../restaurant/restaurantSettings.service';
-import { pushOrderToEvotor } from '../evotor/evotor.service';
+import {
+  EvotorEnqueueError,
+  enqueueSaleCommandForPaidOrder,
+  pushOrderToEvotor,
+} from '../evotor/evotor.service';
 
 const router = Router();
 
@@ -970,6 +974,38 @@ router.post(
 
     await order.save();
 
+    let evotorCommand:
+      | { id: string; status: string; reused: boolean }
+      | { skipped: true; reason: string }
+      | { error: string };
+    try {
+      const enqueueResult = await enqueueSaleCommandForPaidOrder(
+        organizationId.toString(),
+        order._id.toString(),
+        req.user?.id
+      );
+
+      if ('skipped' in enqueueResult && enqueueResult.skipped) {
+        evotorCommand = {
+          skipped: true,
+          reason: enqueueResult.reason,
+        };
+      } else {
+        evotorCommand = {
+          id: enqueueResult.command._id.toString(),
+          status: enqueueResult.command.status,
+          reused: enqueueResult.reused,
+        };
+      }
+    } catch (error) {
+      if (error instanceof EvotorEnqueueError) {
+        evotorCommand = { error: error.message };
+      } else {
+        console.error('Failed to enqueue Evotor sale command after payment', error);
+        evotorCommand = { error: 'Failed to enqueue Evotor sale command' };
+      }
+    }
+
     try {
       await deductInventoryForOrder(order);
     } catch (error) {
@@ -987,7 +1023,13 @@ router.post(
     const populatedOrder =
       (await reloadOrderWithCustomer(order._id as Types.ObjectId, order.organizationId)) ?? order;
 
-    res.json({ data: populatedOrder, error: null });
+    res.json({
+      data: {
+        ...((typeof populatedOrder.toObject === 'function' ? populatedOrder.toObject() : populatedOrder) as object),
+        evotorCommand,
+      },
+      error: null,
+    });
   })
 );
 
