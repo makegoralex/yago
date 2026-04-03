@@ -214,6 +214,79 @@ const computeProductPricing = (
 };
 
 router.get(
+  '/pos',
+  asyncHandler(async (req, res) => {
+    const organizationId = req.organization!.id;
+
+    const categories = await CategoryModel.find({ organizationId })
+      .select('_id name sortOrder')
+      .sort({ sortOrder: 1, name: 1 })
+      .lean();
+
+    const products = await ProductModel.find({
+      organizationId,
+      isActive: { $ne: false },
+    })
+      .select('_id name categoryId basePrice isActive imageUrl modifierGroups')
+      .populate({
+        path: 'modifierGroups',
+        select: '_id name selectionType required options',
+      })
+      .sort({ name: 1 })
+      .lean();
+
+    const productsWithActiveCategory = products.filter((product) =>
+      categories.some((category) => category._id.toString() === product.categoryId.toString())
+    );
+
+    const usedCategoryIds = new Set(productsWithActiveCategory.map((product) => product.categoryId.toString()));
+    const activeCategories = categories.filter((category) => usedCategoryIds.has(category._id.toString()));
+
+    const compactProducts = productsWithActiveCategory.map((product) => ({
+      _id: product._id,
+      name: product.name,
+      categoryId: product.categoryId,
+      basePrice: product.basePrice,
+      isActive: product.isActive !== false,
+      imageUrl: product.imageUrl,
+      modifierGroups: Array.isArray(product.modifierGroups)
+        ? product.modifierGroups.map((group) => {
+            const normalizedGroup = group as {
+              _id: Types.ObjectId;
+              name?: string;
+              selectionType?: 'single' | 'multiple';
+              required?: boolean;
+              options?: Array<{ _id?: Types.ObjectId; name?: string; priceChange?: number }>;
+            };
+
+            return {
+              _id: normalizedGroup._id,
+              name: normalizedGroup.name,
+              selectionType: normalizedGroup.selectionType,
+              required: normalizedGroup.required,
+              options: Array.isArray(normalizedGroup.options)
+                ? normalizedGroup.options.map((option) => ({
+                    _id: option._id,
+                    name: option.name,
+                    priceChange: option.priceChange,
+                  }))
+                : [],
+            };
+          })
+        : [],
+    }));
+
+    res.json({
+      data: {
+        categories: activeCategories,
+        products: compactProducts,
+      },
+      error: null,
+    });
+  })
+);
+
+router.get(
   '/categories',
   asyncHandler(async (req, res) => {
     const organizationId = req.organization!.id;
