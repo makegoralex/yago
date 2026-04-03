@@ -28,21 +28,22 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.get('/service-worker.js', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.status(404).end();
+});
+
 const frontendPublicPath = path.resolve(__dirname, '..', 'frontend', 'public');
 if (fs.existsSync(frontendPublicPath)) {
   app.use(
     express.static(frontendPublicPath, {
       setHeaders: (res, filePath): void => {
         if (path.basename(filePath) === 'service-worker.js') {
-          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
         }
       },
     })
   );
-
-  app.get('/service-worker.js', (_req, res) => {
-    res.sendFile(path.join(frontendPublicPath, 'service-worker.js'));
-  });
 }
 
 const posDiscountRouter = createPosDiscountRouter();
@@ -108,21 +109,44 @@ const resolveExistingBundle = (candidates: string[]): string | undefined => {
   return undefined;
 };
 
+const extractReleaseId = (distPath: string | undefined): string | undefined => {
+  if (!distPath) {
+    return undefined;
+  }
+
+  const htmlPath = path.join(distPath, 'index.html');
+  if (!fs.existsSync(htmlPath)) {
+    return undefined;
+  }
+
+  try {
+    const indexHtml = fs.readFileSync(htmlPath, 'utf8');
+    const match = indexHtml.match(/\/assets\/index-([A-Za-z0-9_-]+)\.js/);
+    return match?.[1];
+  } catch (error) {
+    console.warn('Failed to read frontend index.html for release hash:', error);
+    return undefined;
+  }
+};
+
+const setFrontendCacheHeaders = (res: Response, filePath: string): void => {
+  const normalizedPath = filePath.replace(/\\/g, '/');
+
+  if (normalizedPath.endsWith('/index.html')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return;
+  }
+
+  if (normalizedPath.includes('/assets/')) {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  }
+};
+
 let frontendDistPath = resolveExistingBundle(frontendCandidates);
+let frontendReleaseId = extractReleaseId(frontendDistPath);
 let frontendStaticMiddleware: express.RequestHandler | null = frontendDistPath
   ? express.static(frontendDistPath, {
-      setHeaders: (res, filePath): void => {
-        const normalizedPath = filePath.replace(/\\/g, '/');
-
-        if (normalizedPath.endsWith('/index.html')) {
-          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-          return;
-        }
-
-        if (normalizedPath.includes('/assets/') && /\.(?:js|css)$/.test(normalizedPath)) {
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        }
-      },
+      setHeaders: setFrontendCacheHeaders,
     })
   : null;
 
@@ -137,26 +161,32 @@ const refreshFrontendBundle = (): void => {
 
     frontendDistPath = undefined;
     frontendStaticMiddleware = null;
+    frontendReleaseId = undefined;
     return;
   }
 
-  if (maybeBundle !== frontendDistPath || !frontendStaticMiddleware) {
+  if (maybeBundle !== frontendDistPath || !frontendStaticMiddleware || !frontendReleaseId) {
     frontendDistPath = maybeBundle;
+    frontendReleaseId = extractReleaseId(frontendDistPath);
     frontendStaticMiddleware = express.static(frontendDistPath, {
-      setHeaders: (res, filePath): void => {
-        const normalizedPath = filePath.replace(/\\/g, '/');
-
-        if (normalizedPath.endsWith('/index.html')) {
-          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-          return;
-        }
-
-        if (normalizedPath.includes('/assets/') && /\.(?:js|css)$/.test(normalizedPath)) {
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        }
-      },
+      setHeaders: setFrontendCacheHeaders,
     });
   }
+};
+
+const addReleaseHeader: express.RequestHandler = (req, res, next) => {
+  if (req.path === '/') {
+    if (!frontendReleaseId) {
+      refreshFrontendBundle();
+    }
+
+    if (frontendReleaseId) {
+      res.setHeader('X-Release-Id', frontendReleaseId);
+      res.setHeader('X-Build-Hash', frontendReleaseId);
+    }
+  }
+
+  next();
 };
 
 const serveFrontendStatic: express.RequestHandler = (req, res, next) => {
@@ -222,6 +252,7 @@ if (!frontendDistPath) {
   );
 }
 
+app.use(addReleaseHeader);
 app.use(serveFrontendStatic);
 app.use(serveSpaFallback);
 
