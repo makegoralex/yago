@@ -69,14 +69,27 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
 
       set({
         categories,
-        products: products
-          .filter((product: Product) => product.isActive !== false)
-          .map((product: Product) => ({
-            ...product,
-            price: typeof product.basePrice === 'number' ? product.basePrice : product.price ?? 0,
-          })),
+        products: normalizeProducts(loadedProducts),
         error: null,
+        loading: false,
       });
+
+      while (hasMore && typeof nextOffset === 'number' && pagesLoaded < maxPages) {
+        try {
+          const page = await requestCatalog({ limit: pageLimit, offset: nextOffset });
+          loadedProducts = [...loadedProducts, ...page.products];
+          hasMore = Boolean(page.pagination?.hasMore);
+          nextOffset = typeof page.pagination?.nextOffset === 'number' ? page.pagination.nextOffset : null;
+          pagesLoaded += 1;
+
+          set({
+            products: normalizeProducts(loadedProducts),
+            error: null,
+          });
+        } catch {
+          break;
+        }
+      }
     } catch {
       set({
         categories: [],
@@ -84,7 +97,9 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
         error: 'Не удалось загрузить каталог. Проверьте интернет и попробуйте снова.',
       });
     } finally {
-      set({ loading: false });
+      if (get().loading) {
+        set({ loading: false });
+      }
     }
   },
   setActiveCategory(categoryId) {
