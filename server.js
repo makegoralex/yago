@@ -4,6 +4,11 @@ const fs = require('fs');
 
 const app = express();
 
+app.get('/service-worker.js', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.status(404).end();
+});
+
 const frontendCandidates = [
   process.env.FRONTEND_DIST_PATH,
   path.resolve(__dirname, 'frontend', 'dist'),
@@ -54,7 +59,7 @@ const cacheAwareStatic = (distPath) =>
         return;
       }
 
-      if (normalizedPath.includes('/assets/') && /\.(?:js|css)$/.test(normalizedPath)) {
+      if (normalizedPath.includes('/assets/')) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       }
     },

@@ -5,7 +5,6 @@ import App from './App';
 import './index.css';
 import { ToastProvider } from './providers/ToastProvider';
 import { ThemeProvider } from './providers/ThemeProvider';
-import { registerServiceWorker } from './serviceWorkerRegistration';
 
 const root = document.getElementById('root');
 
@@ -24,5 +23,3 @@ ReactDOM.createRoot(root).render(
     </ThemeProvider>
   </React.StrictMode>
 );
-
-registerServiceWorker();
