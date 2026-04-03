@@ -28,17 +28,13 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.get('/service-worker.js', (_req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.status(404).end();
-});
-
 const frontendPublicPath = path.resolve(__dirname, '..', 'frontend', 'public');
 if (fs.existsSync(frontendPublicPath)) {
   app.use(
     express.static(frontendPublicPath, {
       setHeaders: (res, filePath): void => {
-        if (path.basename(filePath) === 'service-worker.js') {
+        const fileName = path.basename(filePath);
+        if (fileName === 'service-worker.js' || fileName === 'manifest.json') {
           res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
         }
       },
@@ -133,6 +129,11 @@ const setFrontendCacheHeaders = (res: Response, filePath: string): void => {
   const normalizedPath = filePath.replace(/\\/g, '/');
 
   if (normalizedPath.endsWith('/index.html')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return;
+  }
+
+  if (normalizedPath.endsWith('/manifest.json') || normalizedPath.endsWith('/service-worker.js')) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     return;
   }
