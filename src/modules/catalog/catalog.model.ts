@@ -157,5 +157,6 @@ const productSchema = new Schema<ProductDocument>(
 );
 
 productSchema.index({ categoryId: 1 });
+productSchema.index({ organizationId: 1, isActive: 1, categoryId: 1 });
 
 export const ProductModel = model<ProductDocument>('Product', productSchema);

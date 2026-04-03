@@ -1,4 +1,4 @@
-import { Router, type RequestHandler } from 'express';
+import { Router, type RequestHandler, type Response } from 'express';
 import { isValidObjectId, Types } from 'mongoose';
 import { z } from 'zod';
 
@@ -38,6 +38,50 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
       next(error);
     }
   }) as RequestHandler;
+};
+
+const catalogPosLoggingMiddleware: RequestHandler = (req, res, next) => {
+  const startedAt = process.hrtime.bigint();
+  let payloadSizeBytes: number | null = null;
+  const originalJson = res.json.bind(res);
+
+  res.json = ((body: unknown) => {
+    try {
+      payloadSizeBytes = Buffer.byteLength(JSON.stringify(body));
+      if (!res.getHeader('content-length')) {
+        res.setHeader('content-length', String(payloadSizeBytes));
+      }
+    } catch {
+      payloadSizeBytes = null;
+    }
+
+    return originalJson(body);
+  }) as Response['json'];
+
+  res.on('finish', () => {
+    const durationMs = Number((process.hrtime.bigint() - startedAt) / 1000000n);
+    const contentLength = res.getHeader('content-length');
+    const responseSizeBytes =
+      typeof contentLength === 'number'
+        ? contentLength
+        : typeof contentLength === 'string'
+          ? Number(contentLength)
+          : payloadSizeBytes;
+
+    console.info(
+      '[catalog-pos]',
+      JSON.stringify({
+        method: req.method,
+        path: req.originalUrl,
+        organizationId: req.organization?.id ?? null,
+        status: res.statusCode,
+        durationMs,
+        responseSizeBytes: Number.isFinite(responseSizeBytes) ? responseSizeBytes : null,
+      })
+    );
+  });
+
+  next();
 };
 
 const normalizeIngredients = async (
@@ -215,18 +259,23 @@ const computeProductPricing = (
 
 router.get(
   '/pos',
+  catalogPosLoggingMiddleware,
   asyncHandler(async (req, res) => {
     const organizationId = req.organization!.id;
+    const limitRaw = Number(req.query.limit);
+    const offsetRaw = Number(req.query.offset);
+    const limit =
+      Number.isInteger(limitRaw) && limitRaw > 0
+        ? Math.min(limitRaw, 1000)
+        : undefined;
+    const offset = Number.isInteger(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
 
     const categories = await CategoryModel.find({ organizationId })
       .select('_id name sortOrder')
       .sort({ sortOrder: 1, name: 1 })
       .lean();
 
-    const products = await ProductModel.find({
-      organizationId,
-      isActive: { $ne: false },
-    })
+    const productsQuery = ProductModel.find({ organizationId, isActive: { $ne: false } })
       .select('_id name categoryId basePrice isActive imageUrl modifierGroups')
       .populate({
         path: 'modifierGroups',
@@ -235,7 +284,19 @@ router.get(
       .sort({ name: 1 })
       .lean();
 
-    const productsWithActiveCategory = products.filter((product) =>
+    if (offset > 0) {
+      productsQuery.skip(offset);
+    }
+
+    if (limit) {
+      productsQuery.limit(limit + 1);
+    }
+
+    const products = await productsQuery;
+    const hasMore = Boolean(limit && products.length > limit);
+    const pagedProducts = hasMore ? products.slice(0, limit) : products;
+
+    const productsWithActiveCategory = pagedProducts.filter((product) =>
       categories.some((category) => category._id.toString() === product.categoryId.toString())
     );
 
@@ -280,6 +341,14 @@ router.get(
       data: {
         categories: activeCategories,
         products: compactProducts,
+        pagination: limit
+          ? {
+              limit,
+              offset,
+              hasMore,
+              nextOffset: hasMore ? offset + limit : null,
+            }
+          : null,
       },
       error: null,
     });
