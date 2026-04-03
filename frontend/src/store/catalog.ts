@@ -60,10 +60,10 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
     set({ loading: true, error: null });
 
     const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-    const maxAttempts = 3;
-    const backoffMs = [500, 1200];
-    const pageLimit = 200;
-    const requestTimeoutMs = 15000;
+    const maxAttempts = 2;
+    const backoffMs = [500];
+    const pageLimit = 150;
+    const requestTimeoutMs = 12000;
 
     try {
       type CatalogResponse = {
@@ -77,17 +77,22 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
         };
       };
 
-      const requestPage = async (offset: number) => {
+      const normalizeProducts = (products: Product[]) =>
+        products
+          .filter((product: Product) => product.isActive !== false)
+          .map((product: Product) => ({
+            ...product,
+            price: typeof product.basePrice === 'number' ? product.basePrice : product.price ?? 0,
+          }));
+
+      const requestCatalog = async (params?: { limit?: number; offset?: number }) => {
         let response: Awaited<ReturnType<typeof api.get<CatalogResponse>>> | null = null;
         let lastError: unknown;
 
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
           try {
             response = await api.get<CatalogResponse>('/api/catalog/pos', {
-              params: {
-                limit: pageLimit,
-                offset,
-              },
+              params,
               timeout: requestTimeoutMs,
             });
             break;
@@ -111,33 +116,51 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
         return { categories, products, pagination };
       };
 
-      const firstPage = await requestPage(0);
+      try {
+        const fullCatalog = await requestCatalog();
+        set({
+          categories: fullCatalog.categories,
+          products: normalizeProducts(fullCatalog.products),
+          error: null,
+          loading: false,
+        });
+        return;
+      } catch {
+        // fallback ниже: частями, чтобы интерфейс не "висел" на медленных устройствах
+      }
+
+      const firstPage = await requestCatalog({ limit: pageLimit, offset: 0 });
       const categories = firstPage.categories;
-      const allProducts: Product[] = [...firstPage.products];
+      let loadedProducts = [...firstPage.products];
 
       let hasMore = Boolean(firstPage.pagination?.hasMore);
       let nextOffset = typeof firstPage.pagination?.nextOffset === 'number' ? firstPage.pagination.nextOffset : null;
       let pagesLoaded = 1;
       const maxPages = 50;
 
-      while (hasMore && typeof nextOffset === 'number' && pagesLoaded < maxPages) {
-        const page = await requestPage(nextOffset);
-        allProducts.push(...page.products);
-        hasMore = Boolean(page.pagination?.hasMore);
-        nextOffset = typeof page.pagination?.nextOffset === 'number' ? page.pagination.nextOffset : null;
-        pagesLoaded += 1;
-      }
-
       set({
         categories,
-        products: allProducts
-          .filter((product: Product) => product.isActive !== false)
-          .map((product: Product) => ({
-            ...product,
-            price: typeof product.basePrice === 'number' ? product.basePrice : product.price ?? 0,
-          })),
+        products: normalizeProducts(loadedProducts),
         error: null,
+        loading: false,
       });
+
+      while (hasMore && typeof nextOffset === 'number' && pagesLoaded < maxPages) {
+        try {
+          const page = await requestCatalog({ limit: pageLimit, offset: nextOffset });
+          loadedProducts = [...loadedProducts, ...page.products];
+          hasMore = Boolean(page.pagination?.hasMore);
+          nextOffset = typeof page.pagination?.nextOffset === 'number' ? page.pagination.nextOffset : null;
+          pagesLoaded += 1;
+
+          set({
+            products: normalizeProducts(loadedProducts),
+            error: null,
+          });
+        } catch {
+          break;
+        }
+      }
     } catch {
       set({
         categories: [],
@@ -145,7 +168,9 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
         error: 'Не удалось загрузить каталог. Проверьте интернет и попробуйте снова.',
       });
     } finally {
-      set({ loading: false });
+      if (get().loading) {
+        set({ loading: false });
+      }
     }
   },
   setActiveCategory(categoryId) {
