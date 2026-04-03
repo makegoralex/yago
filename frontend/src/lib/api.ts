@@ -8,6 +8,7 @@ const resolvedBaseURL =
 
 const api = axios.create({
   baseURL: resolvedBaseURL,
+  timeout: 10000,
 });
 
 let refreshRequest: Promise<{ accessToken: string; refreshToken: string }> | null = null;
@@ -70,6 +71,20 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const method = String(originalRequest?.method ?? 'get').toLowerCase();
+    const canRetryRequest = method === 'get' || method === 'head' || method === 'options';
+    const isTimeout = error.code === 'ECONNABORTED' || String(error.message ?? '').toLowerCase().includes('timeout');
+    const isNetworkError = !error.response;
+
+    if (
+      originalRequest &&
+      canRetryRequest &&
+      (isTimeout || isNetworkError) &&
+      !originalRequest._networkRetry
+    ) {
+      originalRequest._networkRetry = true;
+      return api(originalRequest);
+    }
 
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
