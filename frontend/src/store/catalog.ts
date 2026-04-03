@@ -49,6 +49,14 @@ type CatalogState = {
   setActiveCategory: (categoryId: string | null) => void;
 };
 
+const normalizeProducts = (products: Product[]): Product[] =>
+  products
+    .filter((product) => product.isActive !== false)
+    .map((product) => ({
+      ...product,
+      price: typeof product.basePrice === 'number' ? product.basePrice : product.price ?? 0,
+    }));
+
 export const useCatalogStore = create<CatalogState>((set, get) => ({
   categories: [],
   products: [],
@@ -59,30 +67,10 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
     if (get().loading) return;
     set({ loading: true, error: null });
 
-    const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-    const maxAttempts = 3;
-    const backoffMs = [500, 1200];
-
     try {
-      let response: Awaited<ReturnType<typeof api.get<{ data?: { categories?: Category[]; products?: Product[] } }>>> | null = null;
-      let lastError: unknown;
-
-      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        try {
-          response = await api.get('/api/catalog/pos', { timeout: 8000 });
-          break;
-        } catch (error) {
-          lastError = error;
-
-          if (attempt < maxAttempts - 1) {
-            await sleep(backoffMs[attempt] ?? backoffMs[backoffMs.length - 1]);
-          }
-        }
-      }
-
-      if (!response) {
-        throw lastError ?? new Error('Каталог временно недоступен');
-      }
+      const response = await api.get<{ data?: { categories?: Category[]; products?: Product[] } }>('/api/catalog/pos', {
+        timeout: 20000,
+      });
 
       const payload = response.data?.data ?? {};
       const categories = Array.isArray(payload.categories) ? payload.categories : [];
@@ -90,12 +78,7 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
 
       set({
         categories,
-        products: products
-          .filter((product: Product) => product.isActive !== false)
-          .map((product: Product) => ({
-            ...product,
-            price: typeof product.basePrice === 'number' ? product.basePrice : product.price ?? 0,
-          })),
+        products: normalizeProducts(products),
         error: null,
       });
     } catch {

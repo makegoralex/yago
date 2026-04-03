@@ -56,10 +56,13 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
     const registerId = options?.registerId ?? DEFAULT_POS_CONTEXT.registerId;
     set({ loading: true, error: null });
     try {
-      const response = await api.get('/api/shifts/current', { params: { registerId } });
+      const response = await api.get('/api/shifts/current', {
+        params: { registerId },
+        timeout: 12000,
+      });
       const mapped = mapShift(response.data?.data);
       const nextShift = mapped?.status === 'open' ? mapped : null;
-      set({ currentShift: nextShift });
+      set({ currentShift: nextShift, error: null });
       return nextShift;
     } catch (error) {
       set({ error: 'Не удалось загрузить смену', currentShift: null });
