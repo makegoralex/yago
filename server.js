@@ -27,7 +27,23 @@ const resolveExistingBundle = () => {
 };
 
 let frontendDistPath = resolveExistingBundle();
-let frontendStaticMiddleware = frontendDistPath ? express.static(frontendDistPath) : null;
+const cacheAwareStatic = (distPath) =>
+  express.static(distPath, {
+    setHeaders: (res, filePath) => {
+      const normalizedPath = filePath.replace(/\\/g, '/');
+
+      if (normalizedPath.endsWith('/index.html')) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        return;
+      }
+
+      if (normalizedPath.includes('/assets/') && /\.(?:js|css)$/.test(normalizedPath)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  });
+
+let frontendStaticMiddleware = frontendDistPath ? cacheAwareStatic(frontendDistPath) : null;
 
 const refreshFrontendBundle = () => {
   const maybeBundle = resolveExistingBundle();
@@ -38,7 +54,7 @@ const refreshFrontendBundle = () => {
   }
   if (maybeBundle !== frontendDistPath || !frontendStaticMiddleware) {
     frontendDistPath = maybeBundle;
-    frontendStaticMiddleware = express.static(frontendDistPath);
+    frontendStaticMiddleware = cacheAwareStatic(frontendDistPath);
   }
 };
 
@@ -86,6 +102,7 @@ const serveSpaFallback = (req, res, next) => {
     return next();
   }
 
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.sendFile(path.join(distPath, 'index.html'), (err) => {
     if (err) {
       if (err.code === 'ENOENT') {

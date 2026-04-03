@@ -110,7 +110,20 @@ const resolveExistingBundle = (candidates: string[]): string | undefined => {
 
 let frontendDistPath = resolveExistingBundle(frontendCandidates);
 let frontendStaticMiddleware: express.RequestHandler | null = frontendDistPath
-  ? express.static(frontendDistPath)
+  ? express.static(frontendDistPath, {
+      setHeaders: (res, filePath): void => {
+        const normalizedPath = filePath.replace(/\\/g, '/');
+
+        if (normalizedPath.endsWith('/index.html')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          return;
+        }
+
+        if (normalizedPath.includes('/assets/') && /\.(?:js|css)$/.test(normalizedPath)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    })
   : null;
 
 const refreshFrontendBundle = (): void => {
@@ -129,7 +142,20 @@ const refreshFrontendBundle = (): void => {
 
   if (maybeBundle !== frontendDistPath || !frontendStaticMiddleware) {
     frontendDistPath = maybeBundle;
-    frontendStaticMiddleware = express.static(frontendDistPath);
+    frontendStaticMiddleware = express.static(frontendDistPath, {
+      setHeaders: (res, filePath): void => {
+        const normalizedPath = filePath.replace(/\\/g, '/');
+
+        if (normalizedPath.endsWith('/index.html')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          return;
+        }
+
+        if (normalizedPath.includes('/assets/') && /\.(?:js|css)$/.test(normalizedPath)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    });
   }
 };
 
@@ -176,6 +202,7 @@ const serveSpaFallback = (req: Request, res: Response, next: NextFunction): void
     return;
   }
 
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.sendFile(path.join(distPath, 'index.html'), (err) => {
     if (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
