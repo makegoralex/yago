@@ -60,27 +60,14 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
     const backoffMs = [450];
 
     try {
-      let lastError: unknown;
-
-      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        try {
-          const response = await api.get('/api/shifts/current', {
-            params: { registerId },
-            timeout: 9000,
-          });
-          const mapped = mapShift(response.data?.data);
-          const nextShift = mapped?.status === 'open' ? mapped : null;
-          set({ currentShift: nextShift, error: null });
-          return nextShift;
-        } catch (error) {
-          lastError = error;
-          if (attempt < maxAttempts - 1) {
-            await sleep(backoffMs[attempt] ?? backoffMs[backoffMs.length - 1]);
-          }
-        }
-      }
-
-      throw lastError ?? new Error('Shift request failed');
+      const response = await api.get('/api/shifts/current', {
+        params: { registerId },
+        timeout: 12000,
+      });
+      const mapped = mapShift(response.data?.data);
+      const nextShift = mapped?.status === 'open' ? mapped : null;
+      set({ currentShift: nextShift, error: null });
+      return nextShift;
     } catch (error) {
       set({ error: 'Не удалось загрузить смену', currentShift: null });
       throw error;

@@ -59,84 +59,13 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
     if (get().loading) return;
     set({ loading: true, error: null });
 
-    const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-    const maxAttempts = 2;
-    const backoffMs = [500];
-    const pageLimit = 150;
-    const requestTimeoutMs = 12000;
-
     try {
-      type CatalogResponse = {
-        data?: {
-          categories?: Category[];
-          products?: Product[];
-          pagination?: {
-            hasMore?: boolean;
-            nextOffset?: number | null;
-          } | null;
-        };
-      };
-
-      const normalizeProducts = (products: Product[]) =>
-        products
-          .filter((product: Product) => product.isActive !== false)
-          .map((product: Product) => ({
-            ...product,
-            price: typeof product.basePrice === 'number' ? product.basePrice : product.price ?? 0,
-          }));
-
-      const requestCatalog = async (params?: { limit?: number; offset?: number }) => {
-        let response: Awaited<ReturnType<typeof api.get<CatalogResponse>>> | null = null;
-        let lastError: unknown;
-
-        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-          try {
-            response = await api.get<CatalogResponse>('/api/catalog/pos', {
-              params,
-              timeout: requestTimeoutMs,
-            });
-            break;
-          } catch (error) {
-            lastError = error;
-            if (attempt < maxAttempts - 1) {
-              await sleep(backoffMs[attempt] ?? backoffMs[backoffMs.length - 1]);
-            }
-          }
-        }
-
-        if (!response) {
-          throw lastError ?? new Error('Каталог временно недоступен');
-        }
-
-        const payload = response.data?.data ?? {};
-        const categories = Array.isArray(payload.categories) ? payload.categories : [];
-        const products = Array.isArray(payload.products) ? payload.products : [];
-        const pagination = payload.pagination ?? null;
-
-        return { categories, products, pagination };
-      };
-
-      try {
-        const fullCatalog = await requestCatalog();
-        set({
-          categories: fullCatalog.categories,
-          products: normalizeProducts(fullCatalog.products),
-          error: null,
-          loading: false,
-        });
-        return;
-      } catch {
-        // fallback ниже: частями, чтобы интерфейс не "висел" на медленных устройствах
-      }
-
-      const firstPage = await requestCatalog({ limit: pageLimit, offset: 0 });
-      const categories = firstPage.categories;
-      let loadedProducts = [...firstPage.products];
-
-      let hasMore = Boolean(firstPage.pagination?.hasMore);
-      let nextOffset = typeof firstPage.pagination?.nextOffset === 'number' ? firstPage.pagination.nextOffset : null;
-      let pagesLoaded = 1;
-      const maxPages = 50;
+      const response = await api.get<{ data?: { categories?: Category[]; products?: Product[] } }>('/api/catalog/pos', {
+        timeout: 20000,
+      });
+      const payload = response.data?.data ?? {};
+      const categories = Array.isArray(payload.categories) ? payload.categories : [];
+      const products = Array.isArray(payload.products) ? payload.products : [];
 
       set({
         categories,
