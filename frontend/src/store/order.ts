@@ -130,7 +130,7 @@ type OrderState = {
   clearDiscount: () => Promise<void>;
   fetchAvailableDiscounts: () => Promise<void>;
   toggleDiscount: (discountId: string) => Promise<void>;
-  fetchShiftHistory: (options?: { registerId?: string }) => Promise<void>;
+  fetchShiftHistory: (options?: { registerId?: string; limit?: number; offset?: number }) => Promise<void>;
   resetShiftHistory: () => void;
 };
 
@@ -972,7 +972,11 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set({ shiftHistoryLoading: true });
     try {
       const response = await api.get('/api/orders/history/current-shift', {
-        params: { registerId },
+        params: {
+          registerId,
+          ...(typeof options?.limit === 'number' ? { limit: options.limit } : {}),
+          ...(typeof options?.offset === 'number' ? { offset: options.offset } : {}),
+        },
       });
       const payload = Array.isArray(response.data?.data) ? response.data.data : [];
       const mapped = payload
