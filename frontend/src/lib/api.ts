@@ -10,6 +10,50 @@ const api = axios.create({
   baseURL: resolvedBaseURL,
 });
 
+let refreshRequest: Promise<{ accessToken: string; refreshToken: string }> | null = null;
+
+const refreshSession = async () => {
+  const authState = useAuthStore.getState();
+  const session = authState.session ??
+    (authState.accessToken && authState.refreshToken && authState.user
+      ? {
+          user: authState.user,
+          accessToken: authState.accessToken,
+          refreshToken: authState.refreshToken,
+          remember: authState.remember,
+        }
+      : null);
+
+  if (!session?.refreshToken || !session?.user) {
+    useAuthStore.getState().clearSession();
+    throw new Error('Missing refresh session');
+  }
+
+  if (!refreshRequest) {
+    refreshRequest = axios
+      .post(`${resolvedBaseURL}/api/auth/refresh`, {
+        refreshToken: session.refreshToken,
+      })
+      .then((response) => {
+        const nextTokens = response.data.data as { accessToken: string; refreshToken: string };
+        useAuthStore
+          .getState()
+          .setSession({
+            user: session.user,
+            accessToken: nextTokens.accessToken,
+            refreshToken: nextTokens.refreshToken,
+            remember: session.remember,
+          });
+        return nextTokens;
+      })
+      .finally(() => {
+        refreshRequest = null;
+      });
+  }
+
+  return refreshRequest;
+};
+
 api.interceptors.request.use((config) => {
   const authState = useAuthStore.getState();
   const accessToken = authState.session?.accessToken ?? authState.accessToken ?? undefined;
@@ -26,41 +70,13 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    const authState = useAuthStore.getState();
-    const session = authState.session ??
-      (authState.accessToken && authState.refreshToken && authState.user
-        ? {
-            user: authState.user,
-            accessToken: authState.accessToken,
-            refreshToken: authState.refreshToken,
-            remember: authState.remember,
-          }
-        : null);
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      if (!session?.refreshToken || !session?.user) {
-        useAuthStore.getState().clearSession();
-        return Promise.reject(error);
-      }
-
       try {
-        const refreshResponse = await axios.post(`${resolvedBaseURL}/api/auth/refresh`, {
-          refreshToken: session.refreshToken,
-        });
-
-        const newTokens = refreshResponse.data.data;
-
-        useAuthStore
-          .getState()
-          .setSession({
-            user: session.user,
-            accessToken: newTokens.accessToken,
-            refreshToken: newTokens.refreshToken,
-            remember: session.remember,
-          });
-
+        const newTokens = await refreshSession();
+        originalRequest.headers = originalRequest.headers ?? {};
         originalRequest.headers.Authorization = `Bearer ${newTokens.accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
