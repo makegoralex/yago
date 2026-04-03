@@ -7,8 +7,19 @@ export const useMediaQuery = (query: string) => {
     const media = window.matchMedia(query);
     const handler = () => setMatches(media.matches);
     handler();
-    media.addEventListener('change', handler);
-    return () => media.removeEventListener('change', handler);
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', handler);
+    } else {
+      media.addListener(handler);
+    }
+
+    return () => {
+      if (typeof media.removeEventListener === 'function') {
+        media.removeEventListener('change', handler);
+      } else {
+        media.removeListener(handler);
+      }
+    };
   }, [query]);
 
   return matches;
