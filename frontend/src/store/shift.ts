@@ -55,6 +55,10 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
   async fetchCurrentShift(options) {
     const registerId = options?.registerId ?? DEFAULT_POS_CONTEXT.registerId;
     set({ loading: true, error: null });
+    const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+    const maxAttempts = 2;
+    const backoffMs = [450];
+
     try {
       const response = await api.get('/api/shifts/current', {
         params: { registerId },
