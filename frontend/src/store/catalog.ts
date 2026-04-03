@@ -62,35 +62,75 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
     const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
     const maxAttempts = 3;
     const backoffMs = [500, 1200];
+    const pageLimit = 200;
+    const requestTimeoutMs = 15000;
 
     try {
-      let response: Awaited<ReturnType<typeof api.get<{ data?: { categories?: Category[]; products?: Product[] } }>>> | null = null;
-      let lastError: unknown;
+      type CatalogResponse = {
+        data?: {
+          categories?: Category[];
+          products?: Product[];
+          pagination?: {
+            hasMore?: boolean;
+            nextOffset?: number | null;
+          } | null;
+        };
+      };
 
-      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        try {
-          response = await api.get('/api/catalog/pos', { timeout: 8000 });
-          break;
-        } catch (error) {
-          lastError = error;
+      const requestPage = async (offset: number) => {
+        let response: Awaited<ReturnType<typeof api.get<CatalogResponse>>> | null = null;
+        let lastError: unknown;
 
-          if (attempt < maxAttempts - 1) {
-            await sleep(backoffMs[attempt] ?? backoffMs[backoffMs.length - 1]);
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          try {
+            response = await api.get<CatalogResponse>('/api/catalog/pos', {
+              params: {
+                limit: pageLimit,
+                offset,
+              },
+              timeout: requestTimeoutMs,
+            });
+            break;
+          } catch (error) {
+            lastError = error;
+            if (attempt < maxAttempts - 1) {
+              await sleep(backoffMs[attempt] ?? backoffMs[backoffMs.length - 1]);
+            }
           }
         }
-      }
 
-      if (!response) {
-        throw lastError ?? new Error('Каталог временно недоступен');
-      }
+        if (!response) {
+          throw lastError ?? new Error('Каталог временно недоступен');
+        }
 
-      const payload = response.data?.data ?? {};
-      const categories = Array.isArray(payload.categories) ? payload.categories : [];
-      const products = Array.isArray(payload.products) ? payload.products : [];
+        const payload = response.data?.data ?? {};
+        const categories = Array.isArray(payload.categories) ? payload.categories : [];
+        const products = Array.isArray(payload.products) ? payload.products : [];
+        const pagination = payload.pagination ?? null;
+
+        return { categories, products, pagination };
+      };
+
+      const firstPage = await requestPage(0);
+      const categories = firstPage.categories;
+      const allProducts: Product[] = [...firstPage.products];
+
+      let hasMore = Boolean(firstPage.pagination?.hasMore);
+      let nextOffset = typeof firstPage.pagination?.nextOffset === 'number' ? firstPage.pagination.nextOffset : null;
+      let pagesLoaded = 1;
+      const maxPages = 50;
+
+      while (hasMore && typeof nextOffset === 'number' && pagesLoaded < maxPages) {
+        const page = await requestPage(nextOffset);
+        allProducts.push(...page.products);
+        hasMore = Boolean(page.pagination?.hasMore);
+        nextOffset = typeof page.pagination?.nextOffset === 'number' ? page.pagination.nextOffset : null;
+        pagesLoaded += 1;
+      }
 
       set({
         categories,
-        products: products
+        products: allProducts
           .filter((product: Product) => product.isActive !== false)
           .map((product: Product) => ({
             ...product,
