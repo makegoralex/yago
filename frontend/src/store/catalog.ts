@@ -49,6 +49,14 @@ type CatalogState = {
   setActiveCategory: (categoryId: string | null) => void;
 };
 
+const normalizeProducts = (products: Product[]): Product[] =>
+  products
+    .filter((product) => product.isActive !== false)
+    .map((product) => ({
+      ...product,
+      price: typeof product.basePrice === 'number' ? product.basePrice : product.price ?? 0,
+    }));
+
 export const useCatalogStore = create<CatalogState>((set, get) => ({
   categories: [],
   products: [],
@@ -63,13 +71,14 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
       const response = await api.get<{ data?: { categories?: Category[]; products?: Product[] } }>('/api/catalog/pos', {
         timeout: 20000,
       });
+
       const payload = response.data?.data ?? {};
       const categories = Array.isArray(payload.categories) ? payload.categories : [];
       const products = Array.isArray(payload.products) ? payload.products : [];
 
       set({
         categories,
-        products: normalizeProducts(loadedProducts),
+        products: normalizeProducts(products),
         error: null,
         loading: false,
       });
