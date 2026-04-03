@@ -44,7 +44,7 @@ type CatalogState = {
   products: Product[];
   activeCategoryId: string | null;
   loading: boolean;
-  fetchCatalog: () => Promise<void>;
+  fetchCatalog: (options?: { limit?: number; offset?: number }) => Promise<void>;
   setActiveCategory: (categoryId: string | null) => void;
 };
 
@@ -53,13 +53,17 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
   products: [],
   activeCategoryId: null,
   loading: false,
-  async fetchCatalog() {
+  async fetchCatalog(options) {
     if (get().loading) return;
     set({ loading: true });
     try {
+      const params = {
+        ...(typeof options?.limit === 'number' ? { limit: options.limit } : {}),
+        ...(typeof options?.offset === 'number' ? { offset: options.offset } : {}),
+      };
       const [categoriesRes, productsRes] = await Promise.all([
         api.get('/api/catalog/categories'),
-        api.get('/api/catalog/products'),
+        api.get('/api/catalog/products', { params }),
       ]);
       set({
         categories: categoriesRes.data.data || [],

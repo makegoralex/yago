@@ -23,7 +23,19 @@ import { useShiftStore, type ShiftSummary } from '../store/shift';
 import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
 import { useToast } from '../providers/ToastProvider';
+import { isAxiosError } from 'axios';
 
+const REQUEST_TIMEOUT_MS = 12000;
+const CATALOG_PAGE_SIZE = 60;
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> => {
+  return await Promise.race<T>([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error('timeout')), timeoutMs);
+    }),
+  ]);
+};
 
 const getKitchenStatusLabel = (status?: 'pending' | 'in_progress' | 'ready' | null): string | null => {
   if (status === 'pending') return 'Кухня: ожидает';
@@ -172,6 +184,7 @@ const POSPage: React.FC = () => {
   const isShiftLoading = useShiftStore((state) => state.loading);
   const isOpeningShift = useShiftStore((state) => state.opening);
   const isClosingShift = useShiftStore((state) => state.closing);
+  const authHandledRef = useRef(false);
 
   const formatBillingDate = (value?: string | null) =>
     value ? new Date(value).toLocaleDateString('ru-RU') : '—';
@@ -191,6 +204,10 @@ const POSPage: React.FC = () => {
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isShiftPanelOpen, setShiftPanelOpen] = useState(false);
   const [modifierProduct, setModifierProduct] = useState<Product | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [backgroundLoadError, setBackgroundLoadError] = useState<string | null>(null);
+  const [shiftHistoryError, setShiftHistoryError] = useState<string | null>(null);
+  const [catalogVisibleCount, setCatalogVisibleCount] = useState(CATALOG_PAGE_SIZE);
   const orderTagsEnabled = useRestaurantStore((state) => state.enableOrderTags);
   const loyaltyRedeemAllCategories = useRestaurantStore((state) => state.loyaltyRedeemAllCategories);
   const loyaltyRedeemCategoryIds = useRestaurantStore((state) => state.loyaltyRedeemCategoryIds);
@@ -220,11 +237,50 @@ const POSPage: React.FC = () => {
     return Math.max(Math.min(remainingTotal, loyaltyEligibleSubtotal), 0);
   }, [subtotal, discount, loyaltyEligibleSubtotal]);
 
+  const handleAuthFailure = useCallback(
+    (error: unknown) => {
+      if (!isAxiosError(error)) {
+        return false;
+      }
+      if (error.response?.status !== 401 && error.response?.status !== 403) {
+        return false;
+      }
+      if (authHandledRef.current) {
+        return true;
+      }
+      authHandledRef.current = true;
+      notify({ title: 'Сессия истекла. Войдите снова.', type: 'error' });
+      navigate('/login', { replace: true });
+      return true;
+    },
+    [navigate, notify]
+  );
+
   useEffect(() => {
-    void fetchCatalog();
-    void fetchActiveOrders();
-    void fetchAvailableDiscounts();
-  }, [fetchCatalog, fetchActiveOrders, fetchAvailableDiscounts]);
+    void withTimeout(fetchCatalog({ limit: 200 }))
+      .then(() => {
+        setCatalogError(null);
+      })
+      .catch((error) => {
+        if (handleAuthFailure(error)) {
+          return;
+        }
+        setCatalogError('Не удалось загрузить каталог. Повторите попытку.');
+      });
+  }, [fetchCatalog, handleAuthFailure]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void withTimeout(fetchAvailableDiscounts())
+        .catch((error) => {
+          if (handleAuthFailure(error)) {
+            return;
+          }
+          setBackgroundLoadError('Часть данных загружена с ошибкой. Скидки недоступны.');
+        });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchAvailableDiscounts, handleAuthFailure]);
 
   useEffect(() => {
     if (isStartingOrder || orderId || activeOrders.length === 0) {
@@ -251,9 +307,14 @@ const POSPage: React.FC = () => {
 
   useEffect(() => {
     if (activeSection === 'reports') {
-      void fetchActiveOrders();
+      void withTimeout(fetchActiveOrders()).catch((error) => {
+        if (handleAuthFailure(error)) {
+          return;
+        }
+        setBackgroundLoadError('Не удалось загрузить активные заказы.');
+      });
     }
-  }, [activeSection, fetchActiveOrders]);
+  }, [activeSection, fetchActiveOrders, handleAuthFailure]);
 
   useEffect(() => {
     void fetchCurrentShift().catch(() => undefined);
@@ -267,8 +328,17 @@ const POSPage: React.FC = () => {
       return;
     }
 
-    void fetchShiftHistory().catch(() => undefined);
-  }, [currentShiftId, fetchShiftHistory, resetShiftHistory]);
+    void withTimeout(fetchShiftHistory({ limit: 50 }))
+      .then(() => {
+        setShiftHistoryError(null);
+      })
+      .catch((error) => {
+        if (handleAuthFailure(error)) {
+          return;
+        }
+        setShiftHistoryError('Не удалось загрузить историю смены.');
+      });
+  }, [currentShiftId, fetchShiftHistory, handleAuthFailure, resetShiftHistory]);
 
   const filteredProducts = useMemo(() => {
     if (!activeCategoryId) {
@@ -276,6 +346,10 @@ const POSPage: React.FC = () => {
     }
     return products.filter((product) => product.categoryId === activeCategoryId);
   }, [products, activeCategoryId]);
+  const visibleProducts = useMemo(
+    () => filteredProducts.slice(0, catalogVisibleCount),
+    [filteredProducts, catalogVisibleCount]
+  );
 
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -293,6 +367,10 @@ const POSPage: React.FC = () => {
   const startOrderButtonLabel = isStartingOrder ? 'Создание…' : 'Создать заказ';
   const shiftStatus = isShiftLoading ? 'loading' : currentShift ? 'open' : 'closed';
   const shouldShowProductSearch = isTablet || activeSection === 'products';
+
+  useEffect(() => {
+    setCatalogVisibleCount(CATALOG_PAGE_SIZE);
+  }, [activeCategoryId, searchQuery]);
 
   const handleStartOrder = async () => {
     if (!requireActiveSubscription()) {
@@ -651,6 +729,10 @@ const POSPage: React.FC = () => {
                     <div key={index} className="h-28 animate-pulse rounded-2xl bg-slate-200/70" />
                   ))}
                 </div>
+              ) : catalogError ? (
+                <div className="col-span-full rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                  {catalogError}
+                </div>
               ) : (
                 <div
                   className={`grid gap-2 sm:gap-2.5 ${
@@ -660,7 +742,7 @@ const POSPage: React.FC = () => {
                   }`}
                 >
                   {activeSection === 'products'
-                    ? filteredProducts.map((product) => (
+                    ? visibleProducts.map((product) => (
                         <ProductCard
                           key={product._id}
                           product={product}
@@ -734,8 +816,29 @@ const POSPage: React.FC = () => {
                       Нет товаров в категории
                     </div>
                   ) : null}
+                  {activeSection === 'products' && filteredProducts.length > visibleProducts.length ? (
+                    <div className="col-span-full flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setCatalogVisibleCount((prev) => prev + CATALOG_PAGE_SIZE)}
+                        className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600"
+                      >
+                        Показать ещё ({filteredProducts.length - visibleProducts.length})
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               )}
+              {backgroundLoadError ? (
+                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  {backgroundLoadError}
+                </p>
+              ) : null}
+              {shiftHistoryError ? (
+                <p className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  {shiftHistoryError}
+                </p>
+              ) : null}
             </div>
           </div>
           <div className="hidden min-h-0 lg:flex lg:h-full lg:flex-[0_0_280px] lg:min-w-[280px] lg:max-w-[280px] xl:flex-[0_0_300px] xl:min-w-[300px] xl:max-w-[300px] 2xl:flex-[0_0_340px] 2xl:min-w-[340px] 2xl:max-w-[340px] lg:flex-shrink-0 lg:flex-col lg:pr-1">

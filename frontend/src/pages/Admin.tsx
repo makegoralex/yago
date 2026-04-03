@@ -55,6 +55,19 @@ const extractErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
+const REQUEST_TIMEOUT_MS = 15000;
+const DASHBOARD_LIST_PAGE_SIZE = 10;
+const RECEIPT_HISTORY_PAGE_SIZE = 20;
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> => {
+  return await Promise.race<T>([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error('timeout')), timeoutMs);
+    }),
+  ]);
+};
+
 type Ingredient = {
   _id: string;
   name: string;
@@ -654,6 +667,8 @@ const AdminPage: React.FC = () => {
     []
   );
   const [loadingDashboard, setLoadingDashboard] = useState(true);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [dashboardLoaded, setDashboardLoaded] = useState(false);
   const [summary, setSummary] = useState({
     totalOrders: 0,
     totalRevenue: 0,
@@ -665,6 +680,10 @@ const AdminPage: React.FC = () => {
   const [daily, setDaily] = useState<{ date: string; revenue: number; orders: number }[]>([]);
   const [topProducts, setTopProducts] = useState<{ name: string; qty: number }[]>([]);
   const [topCustomers, setTopCustomers] = useState<{ name: string; totalSpent: number }[]>([]);
+  const [topListsLoading, setTopListsLoading] = useState(false);
+  const [topListsError, setTopListsError] = useState<string | null>(null);
+  const [topProductsVisibleCount, setTopProductsVisibleCount] = useState(DASHBOARD_LIST_PAGE_SIZE);
+  const [topCustomersVisibleCount, setTopCustomersVisibleCount] = useState(DASHBOARD_LIST_PAGE_SIZE);
   const [dashboardFilters, setDashboardFilters] = useState({ from: '', to: '' });
   const [dashboardPeriod, setDashboardPeriod] = useState<{ from?: string; to?: string } | null>(null);
   const [salesShiftStats, setSalesShiftStats] = useState<SalesAndShiftStats | null>(null);
@@ -681,8 +700,11 @@ const AdminPage: React.FC = () => {
   const [receiptHistory, setReceiptHistory] = useState<ReceiptHistoryOrder[]>([]);
   const [receiptHistoryLoading, setReceiptHistoryLoading] = useState(false);
   const [receiptHistoryError, setReceiptHistoryError] = useState<string | null>(null);
+  const [receiptHistoryLoaded, setReceiptHistoryLoaded] = useState(false);
+  const [receiptHistoryVisibleCount, setReceiptHistoryVisibleCount] = useState(RECEIPT_HISTORY_PAGE_SIZE);
 
   const [menuLoading, setMenuLoading] = useState(false);
+  const [menuError, setMenuError] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
@@ -875,6 +897,7 @@ const AdminPage: React.FC = () => {
   const [cashRegisterLoaded, setCashRegisterLoaded] = useState(false);
   const [cashRegisterSaving, setCashRegisterSaving] = useState(false);
   const [cashRegisterError, setCashRegisterError] = useState<string | null>(null);
+  const authHandledRef = useRef(false);
 
   useEffect(() => {
     setBrandingForm({ name: restaurantName, logoUrl: restaurantLogo });
@@ -896,6 +919,24 @@ const AdminPage: React.FC = () => {
     setLoyaltyRedeemAllDraft(loyaltyRedeemAllCategories);
     setLoyaltyRedeemCategoryDraft(loyaltyRedeemCategoryIds);
   }, [loyaltyRedeemAllCategories, loyaltyRedeemCategoryIds]);
+  const handleAuthFailure = useCallback(
+    (error: unknown) => {
+      if (!isAxiosError(error)) {
+        return false;
+      }
+      if (error.response?.status !== 401 && error.response?.status !== 403) {
+        return false;
+      }
+      if (authHandledRef.current) {
+        return true;
+      }
+      authHandledRef.current = true;
+      notify({ title: 'Сессия истекла. Выполните вход заново.', type: 'error' });
+      navigate('/login', { replace: true });
+      return true;
+    },
+    [navigate, notify]
+  );
   const [discountForm, setDiscountForm] = useState({
     name: '',
     description: '',
@@ -942,26 +983,48 @@ const AdminPage: React.FC = () => {
   const loadDashboard = useCallback(async (filters?: { from?: string; to?: string }) => {
     try {
       setLoadingDashboard(true);
+      setDashboardError(null);
       const params = {
         ...(filters?.from ? { from: filters.from } : {}),
         ...(filters?.to ? { to: filters.to } : {}),
       };
-      const [summaryRes, dailyRes, productsRes, customersRes] = await Promise.all([
-        api.get('/api/reports/summary'),
-        api.get('/api/reports/daily', { params }),
-        api.get('/api/reports/top-products', { params }),
-        api.get('/api/reports/top-customers'),
+      const [summaryRes, dailyRes] = await Promise.all([
+        withTimeout(api.get('/api/reports/summary')),
+        withTimeout(api.get('/api/reports/daily', { params })),
       ]);
       setSummary(summaryRes.data.data);
       setDaily(normalizeDailyReport(dailyRes.data.data));
-      setTopProducts(normalizeTopProducts(productsRes.data.data));
-      setTopCustomers(customersRes.data.data);
+      setTopListsLoading(true);
+      setTopListsError(null);
+      void Promise.all([
+        withTimeout(api.get('/api/reports/top-products', { params })),
+        withTimeout(api.get('/api/reports/top-customers')),
+      ])
+        .then(([productsRes, customersRes]) => {
+          setTopProducts(normalizeTopProducts(productsRes.data.data));
+          setTopCustomers(customersRes.data.data);
+        })
+        .catch((error) => {
+          if (handleAuthFailure(error)) {
+            return;
+          }
+          setTopListsError('Не удалось загрузить топ-списки.');
+        })
+        .finally(() => {
+          setTopListsLoading(false);
+        });
     } catch (error) {
-      notify({ title: 'Не удалось загрузить отчеты', type: 'error' });
+      if (handleAuthFailure(error)) {
+        return;
+      }
+      const message = 'Не удалось загрузить ключевые отчеты';
+      setDashboardError(message);
+      notify({ title: message, type: 'error' });
     } finally {
       setLoadingDashboard(false);
+      setDashboardLoaded(true);
     }
-  }, [notify]);
+  }, [handleAuthFailure, notify]);
 
   const loadSalesAndShiftStats = useCallback(
     async (filters?: { from?: string; to?: string }) => {
@@ -973,13 +1036,16 @@ const AdminPage: React.FC = () => {
           ...(filters?.to ? { to: filters.to } : {}),
         };
 
-        const response = await api.get('/api/admin/stats/sales-and-shifts', {
+        const response = await withTimeout(api.get('/api/admin/stats/sales-and-shifts', {
           params,
-        });
+        }));
 
         const payload = getResponseData<SalesAndShiftStats | LegacySalesAndShiftStats>(response);
         setSalesShiftStats(normalizeSalesAndShiftStats(payload));
       } catch (error) {
+        if (handleAuthFailure(error)) {
+          return;
+        }
         console.error('Не удалось загрузить статистику смен', error);
         let message = 'Не удалось загрузить статистику смен';
         if (isAxiosError(error)) {
@@ -998,7 +1064,7 @@ const AdminPage: React.FC = () => {
         setSalesStatsLoaded(true);
       }
     },
-    [notify]
+    [handleAuthFailure, notify]
   );
 
 
@@ -1015,10 +1081,13 @@ const AdminPage: React.FC = () => {
             : {}),
         };
 
-        const response = await api.get('/api/admin/stats/discount-analytics', { params });
+        const response = await withTimeout(api.get('/api/admin/stats/discount-analytics', { params }));
         const payload = getResponseData<DiscountAnalyticsStats>(response);
         setDiscountAnalytics(payload ?? null);
       } catch (error) {
+        if (handleAuthFailure(error)) {
+          return;
+        }
         console.error('Не удалось загрузить аналитику по акциям', error);
         const message = extractErrorMessage(error, 'Не удалось загрузить аналитику по акциям');
         setDiscountAnalyticsError(message);
@@ -1028,7 +1097,7 @@ const AdminPage: React.FC = () => {
         setDiscountAnalyticsLoaded(true);
       }
     },
-    [notify]
+    [handleAuthFailure, notify]
   );
 
   const handleApplyDiscountAnalytics = (event: React.FormEvent<HTMLFormElement>) => {
@@ -1062,12 +1131,17 @@ const AdminPage: React.FC = () => {
       setReceiptHistoryLoading(true);
       setReceiptHistoryError(null);
       try {
-        const response = await api.get('/api/orders/history/by-date', {
+        const response = await withTimeout(api.get('/api/orders/history/by-date', {
           params: { date },
-        });
+        }));
         const data = Array.isArray(response.data?.data) ? response.data.data : [];
         setReceiptHistory(data.map((order: unknown) => mapReceiptHistoryOrder(order)));
+        setReceiptHistoryVisibleCount(RECEIPT_HISTORY_PAGE_SIZE);
+        setReceiptHistoryLoaded(true);
       } catch (error) {
+        if (handleAuthFailure(error)) {
+          return;
+        }
         console.error('Не удалось загрузить историю чеков', error);
         setReceiptHistoryError('Не удалось загрузить историю чеков');
         notify({ title: 'Не удалось загрузить историю чеков', type: 'error' });
@@ -1075,7 +1149,7 @@ const AdminPage: React.FC = () => {
         setReceiptHistoryLoading(false);
       }
     },
-    [notify]
+    [handleAuthFailure, notify]
   );
 
   const handleCancelReceipt = useCallback(
@@ -1099,11 +1173,12 @@ const AdminPage: React.FC = () => {
 
   const loadMenuData = useCallback(async () => {
     setMenuLoading(true);
+    setMenuError(null);
     try {
       let aggregatedModifiers: ModifierGroup[] | null = null;
 
       try {
-        const response = await api.get('/api/admin/catalog');
+        const response = await withTimeout(api.get('/api/admin/catalog'));
         const payload = getResponseData<{
           categories?: Category[];
           products?: Product[];
@@ -1121,10 +1196,10 @@ const AdminPage: React.FC = () => {
       } catch (primaryError) {
         console.warn('Админский агрегированный каталог недоступен, выполняем поэлементную загрузку', primaryError);
         const [categoriesRes, productsRes, ingredientsRes, modifierGroupsRes] = await Promise.all([
-          api.get('/api/catalog/categories'),
-          api.get('/api/catalog/products', { params: { includeInactive: true } }),
-          api.get('/api/catalog/ingredients'),
-          api.get('/api/catalog/modifier-groups'),
+          withTimeout(api.get('/api/catalog/categories')),
+          withTimeout(api.get('/api/catalog/products', { params: { includeInactive: true, limit: 250 } })),
+          withTimeout(api.get('/api/catalog/ingredients')),
+          withTimeout(api.get('/api/catalog/modifier-groups')),
         ]);
 
         setCategories(getResponseData<Category[]>(categoriesRes) ?? []);
@@ -1135,7 +1210,7 @@ const AdminPage: React.FC = () => {
 
       if (!aggregatedModifiers) {
         try {
-          const modifierGroupsRes = await api.get('/api/catalog/modifier-groups');
+          const modifierGroupsRes = await withTimeout(api.get('/api/catalog/modifier-groups'));
           setModifierGroups(getResponseData<ModifierGroup[]>(modifierGroupsRes) ?? []);
         } catch (modifierError) {
           console.error('Не удалось загрузить модификаторы', modifierError);
@@ -1145,7 +1220,7 @@ const AdminPage: React.FC = () => {
 
       if (!aggregatedModifiers) {
         try {
-          const modifierGroupsRes = await api.get('/api/catalog/modifier-groups');
+          const modifierGroupsRes = await withTimeout(api.get('/api/catalog/modifier-groups'));
           setModifierGroups(getResponseData<ModifierGroup[]>(modifierGroupsRes) ?? []);
         } catch (modifierError) {
           console.error('Не удалось загрузить модификаторы', modifierError);
@@ -1153,12 +1228,16 @@ const AdminPage: React.FC = () => {
         }
       }
     } catch (error) {
+      if (handleAuthFailure(error)) {
+        return;
+      }
       console.error('Не удалось загрузить меню', error);
+      setMenuError('Не удалось загрузить меню.');
       notify({ title: 'Не удалось загрузить меню', type: 'error' });
     } finally {
       setMenuLoading(false);
     }
-  }, [notify]);
+  }, [handleAuthFailure, notify]);
 
   const loadInventoryData = useCallback(async () => {
     setInventoryLoading(true);
@@ -2330,15 +2409,10 @@ const AdminPage: React.FC = () => {
   };
 
   useEffect(() => {
-    void loadDashboard();
-  }, [loadDashboard]);
-
-  useEffect(() => {
-    void loadReceiptHistory(receiptHistoryDate);
-  }, [loadReceiptHistory, receiptHistoryDate]);
-
-  useEffect(() => {
     if (activeTab === 'dashboard') {
+      if (!loadingDashboard && !dashboardLoaded) {
+        void loadDashboard();
+      }
       if (!salesStatsLoading && !salesStatsLoaded) {
         void loadSalesAndShiftStats();
       }
@@ -2347,6 +2421,9 @@ const AdminPage: React.FC = () => {
       }
       if (!discountsLoading && !discountsReady) {
         void loadDiscounts();
+      }
+      if (!receiptHistoryLoading && !receiptHistoryLoaded) {
+        void loadReceiptHistory(receiptHistoryDate);
       }
     }
 
@@ -2431,6 +2508,9 @@ const AdminPage: React.FC = () => {
     loadStockReceipts,
     discountsLoading,
     discountsReady,
+    loadingDashboard,
+    dashboardLoaded,
+    loadDashboard,
     loadDiscounts,
     salesStatsLoading,
     salesStatsLoaded,
@@ -2438,6 +2518,10 @@ const AdminPage: React.FC = () => {
     discountAnalyticsLoading,
     discountAnalyticsLoaded,
     loadDiscountAnalytics,
+    receiptHistoryLoading,
+    receiptHistoryLoaded,
+    loadReceiptHistory,
+    receiptHistoryDate,
     cashiersLoading,
     cashiersLoaded,
     loadCashiersData,
@@ -2488,6 +2572,18 @@ const AdminPage: React.FC = () => {
     totalPointsIssued: summary.totalPointsIssued,
     totalPointsRedeemed: summary.totalPointsRedeemed,
   }), [summary.totalPointsIssued, summary.totalPointsRedeemed]);
+  const visibleTopProducts = useMemo(
+    () => topProducts.slice(0, topProductsVisibleCount),
+    [topProducts, topProductsVisibleCount]
+  );
+  const visibleTopCustomers = useMemo(
+    () => topCustomers.slice(0, topCustomersVisibleCount),
+    [topCustomers, topCustomersVisibleCount]
+  );
+  const visibleReceiptHistory = useMemo(
+    () => receiptHistory.slice(0, receiptHistoryVisibleCount),
+    [receiptHistory, receiptHistoryVisibleCount]
+  );
 
   const loyaltyRateValue = Number(loyaltyRateDraft);
   const loyaltyRateNormalized = Number.isFinite(loyaltyRateValue) ? loyaltyRateValue : loyaltyRate;
@@ -5056,6 +5152,10 @@ const AdminPage: React.FC = () => {
               <div key={index} className="h-32 animate-pulse rounded-2xl bg-slate-200/70" />
             ))}
           </div>
+        ) : dashboardError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+            {dashboardError}
+          </div>
         ) : (
           <> 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -5310,7 +5410,7 @@ const AdminPage: React.FC = () => {
                   <p className="text-sm text-slate-500">Чеки за выбранную дату не найдены.</p>
                 ) : (
                   <ul className="max-h-80 space-y-3 overflow-y-auto pr-1">
-                    {receiptHistory.map((order) => (
+                    {visibleReceiptHistory.map((order) => (
                       <li key={order._id} className="rounded-2xl border border-slate-100 p-3">
                         <div className="flex items-center justify-between gap-3">
                           <div>
@@ -5365,6 +5465,15 @@ const AdminPage: React.FC = () => {
                     ))}
                   </ul>
                 )}
+                {receiptHistory.length > visibleReceiptHistory.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setReceiptHistoryVisibleCount((prev) => prev + RECEIPT_HISTORY_PAGE_SIZE)}
+                    className="mt-3 rounded-2xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600"
+                  >
+                    Показать ещё чеки
+                  </button>
+                ) : null}
               </Card>
             </div>
             <Card title="Период для графиков">
@@ -5532,9 +5641,15 @@ const AdminPage: React.FC = () => {
                 }
               >
                 <div className="h-72 w-full">
-                  {topProducts.length ? (
+                  {topListsError ? (
+                    <div className="flex h-full items-center justify-center rounded-xl bg-rose-50 text-sm text-rose-600">
+                      {topListsError}
+                    </div>
+                  ) : topListsLoading ? (
+                    <div className="h-full animate-pulse rounded-2xl bg-slate-200/70" />
+                  ) : topProducts.length ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart layout="vertical" data={topProducts} margin={{ left: 20, right: 16, bottom: 12, top: 12 }}>
+                      <BarChart layout="vertical" data={visibleTopProducts} margin={{ left: 20, right: 16, bottom: 12, top: 12 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                         <XAxis type="number" stroke="#64748b" tickFormatter={(value) => `${formatCurrencyShort(value)} шт.`} />
                         <YAxis type="category" dataKey="name" stroke="#64748b" width={120} />
@@ -5561,12 +5676,21 @@ const AdminPage: React.FC = () => {
                     </div>
                   )}
                 </div>
+                {topProducts.length > visibleTopProducts.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setTopProductsVisibleCount((prev) => prev + DASHBOARD_LIST_PAGE_SIZE)}
+                    className="mt-3 rounded-2xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600"
+                  >
+                    Показать ещё позиции
+                  </button>
+                ) : null}
               </Card>
             </div>
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
               <Card title="Лучшие клиенты">
                 <ul className="space-y-3">
-                  {topCustomers.map((customer) => (
+                  {visibleTopCustomers.map((customer) => (
                     <li
                       key={customer.name}
                       className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft"
@@ -5576,6 +5700,15 @@ const AdminPage: React.FC = () => {
                     </li>
                   ))}
                 </ul>
+                {topCustomers.length > visibleTopCustomers.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setTopCustomersVisibleCount((prev) => prev + DASHBOARD_LIST_PAGE_SIZE)}
+                    className="mt-3 rounded-2xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600"
+                  >
+                    Показать ещё клиентов
+                  </button>
+                ) : null}
               </Card>
               <Card title="Баллы лояльности">
                 <div className="rounded-2xl bg-emerald-50 p-6 text-emerald-700">
@@ -5836,6 +5969,10 @@ const AdminPage: React.FC = () => {
                     </div>
                     {menuLoading ? (
                       <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
+                    ) : menuError ? (
+                      <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                        {menuError}
+                      </div>
                     ) : filteredProducts.length ? (
                       <>
                         <div className="hidden md:grid grid-cols-[minmax(0,1fr)_100px_120px_110px_120px_40px] gap-3 px-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
