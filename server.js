@@ -27,6 +27,23 @@ const resolveExistingBundle = () => {
 };
 
 let frontendDistPath = resolveExistingBundle();
+const extractReleaseId = (distPath) => {
+  if (!distPath) return undefined;
+
+  const htmlPath = path.join(distPath, 'index.html');
+  if (!fs.existsSync(htmlPath)) return undefined;
+
+  try {
+    const indexHtml = fs.readFileSync(htmlPath, 'utf8');
+    const match = indexHtml.match(/\/assets\/index-([A-Za-z0-9_-]+)\.js/);
+    return match?.[1];
+  } catch (error) {
+    console.warn('Failed to read frontend index.html for release hash:', error);
+    return undefined;
+  }
+};
+
+let frontendReleaseId = extractReleaseId(frontendDistPath);
 const cacheAwareStatic = (distPath) =>
   express.static(distPath, {
     setHeaders: (res, filePath) => {
@@ -50,12 +67,27 @@ const refreshFrontendBundle = () => {
   if (!maybeBundle) {
     frontendDistPath = undefined;
     frontendStaticMiddleware = null;
+    frontendReleaseId = undefined;
     return;
   }
-  if (maybeBundle !== frontendDistPath || !frontendStaticMiddleware) {
+  if (maybeBundle !== frontendDistPath || !frontendStaticMiddleware || !frontendReleaseId) {
     frontendDistPath = maybeBundle;
     frontendStaticMiddleware = cacheAwareStatic(frontendDistPath);
+    frontendReleaseId = extractReleaseId(frontendDistPath);
   }
+};
+
+const addReleaseHeader = (req, res, next) => {
+  if (req.path === '/') {
+    if (!frontendReleaseId) {
+      refreshFrontendBundle();
+    }
+    if (frontendReleaseId) {
+      res.setHeader('X-Release-Id', frontendReleaseId);
+      res.setHeader('X-Build-Hash', frontendReleaseId);
+    }
+  }
+  next();
 };
 
 const serveFrontendStatic = (req, res, next) => {
@@ -120,6 +152,7 @@ if (!frontendDistPath) {
   );
 }
 
+app.use(addReleaseHeader);
 app.use(serveFrontendStatic);
 app.use(serveSpaFallback);
 
