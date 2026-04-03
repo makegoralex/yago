@@ -5,12 +5,15 @@ import App from './App';
 import './index.css';
 import { ToastProvider } from './providers/ToastProvider';
 import { ThemeProvider } from './providers/ThemeProvider';
+import { unregisterLegacyServiceWorkers } from './lib/unregisterLegacyServiceWorkers';
 
 const root = document.getElementById('root');
 
 if (!root) {
   throw new Error('Root element not found');
 }
+
+void unregisterLegacyServiceWorkers();
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
