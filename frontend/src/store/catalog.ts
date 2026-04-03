@@ -44,7 +44,8 @@ type CatalogState = {
   products: Product[];
   activeCategoryId: string | null;
   loading: boolean;
-  fetchCatalog: (options?: { limit?: number; offset?: number }) => Promise<void>;
+  error: string | null;
+  fetchCatalog: () => Promise<void>;
   setActiveCategory: (categoryId: string | null) => void;
 };
 
@@ -53,21 +54,31 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
   products: [],
   activeCategoryId: null,
   loading: false,
-  async fetchCatalog(options) {
+  error: null,
+  async fetchCatalog() {
     if (get().loading) return;
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
-      const params = {
-        ...(typeof options?.limit === 'number' ? { limit: options.limit } : {}),
-        ...(typeof options?.offset === 'number' ? { offset: options.offset } : {}),
-      };
-      const [categoriesRes, productsRes] = await Promise.all([
-        api.get('/api/catalog/categories'),
-        api.get('/api/catalog/products', { params }),
-      ]);
+      const response = await api.get('/api/catalog/pos', { timeout: 8000 });
+      const payload = response.data?.data ?? {};
+      const categories = Array.isArray(payload.categories) ? payload.categories : [];
+      const products = Array.isArray(payload.products) ? payload.products : [];
+
       set({
-        categories: categoriesRes.data.data || [],
-        products: (productsRes.data.data || []).filter((product: Product) => product.isActive !== false),
+        categories,
+        products: products
+          .filter((product: Product) => product.isActive !== false)
+          .map((product: Product) => ({
+            ...product,
+            price: typeof product.basePrice === 'number' ? product.basePrice : product.price ?? 0,
+          })),
+        error: null,
+      });
+    } catch {
+      set({
+        categories: [],
+        products: [],
+        error: 'Каталог временно недоступен',
       });
     } finally {
       set({ loading: false });

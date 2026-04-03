@@ -130,6 +130,7 @@ const POSPage: React.FC = () => {
   const setActiveCategory = useCatalogStore((state) => state.setActiveCategory);
   const fetchCatalog = useCatalogStore((state) => state.fetchCatalog);
   const loading = useCatalogStore((state) => state.loading);
+  const catalogError = useCatalogStore((state) => state.error);
 
   const items = useOrderStore((state) => state.items);
   const subtotal = useOrderStore((state) => state.subtotal);
@@ -650,6 +651,10 @@ const POSPage: React.FC = () => {
                   {Array.from({ length: 6 }).map((_, index) => (
                     <div key={index} className="h-28 animate-pulse rounded-2xl bg-slate-200/70" />
                   ))}
+                </div>
+              ) : catalogError ? (
+                <div className="col-span-full rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
+                  {catalogError}
                 </div>
               ) : (
                 <div
