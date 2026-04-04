@@ -7,15 +7,11 @@ self.addEventListener('activate', (event) => {
     (async () => {
       const cacheKeys = await caches.keys();
       await Promise.all(cacheKeys.map((key) => caches.delete(key)));
-
-      await self.registration.unregister();
-
-      const clients = await self.clients.matchAll({ type: 'window' });
-      await Promise.all(clients.map((client) => client.navigate(client.url)));
+      await self.clients.claim();
     })()
   );
 });
 
 self.addEventListener('fetch', () => {
-  // Intentionally no request interception during service worker decommission.
+  // No interception: always fallback to browser network pipeline.
 });

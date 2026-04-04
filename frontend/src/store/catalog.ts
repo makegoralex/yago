@@ -82,23 +82,6 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
         error: null,
         loading: false,
       });
-
-      while (hasMore && typeof nextOffset === 'number' && pagesLoaded < maxPages) {
-        try {
-          const page = await requestCatalog({ limit: pageLimit, offset: nextOffset });
-          loadedProducts = [...loadedProducts, ...page.products];
-          hasMore = Boolean(page.pagination?.hasMore);
-          nextOffset = typeof page.pagination?.nextOffset === 'number' ? page.pagination.nextOffset : null;
-          pagesLoaded += 1;
-
-          set({
-            products: normalizeProducts(loadedProducts),
-            error: null,
-          });
-        } catch {
-          break;
-        }
-      }
     } catch {
       set({
         categories: [],
