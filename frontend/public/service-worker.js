@@ -1,17 +1,20 @@
-self.addEventListener('install', () => {
+self.addEventListener('install', function () {
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', function (event) {
   event.waitUntil(
-    (async () => {
-      const cacheKeys = await caches.keys();
-      await Promise.all(cacheKeys.map((key) => caches.delete(key)));
-      await self.clients.claim();
-    })()
+    caches
+      .keys()
+      .then(function (cacheKeys) {
+        return Promise.all(
+          cacheKeys.map(function (cacheKey) {
+            return caches.delete(cacheKey);
+          })
+        );
+      })
+      .then(function () {
+        return self.registration.unregister();
+      })
   );
-});
-
-self.addEventListener('fetch', () => {
-  // No interception: always fallback to browser network pipeline.
 });
