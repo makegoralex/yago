@@ -933,13 +933,23 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     await get().syncItems(get().items, { manualDiscount: 0, discountIds: [] });
   },
   async fetchAvailableDiscounts() {
+    const currentDiscounts = get().availableDiscounts;
     try {
       const response = await api.get('/api/orders/discounts/available');
       const discounts = mapDiscountSummaries(response.data?.data);
       set({ availableDiscounts: discounts });
     } catch (error) {
       console.error('Не удалось загрузить скидки', error);
-      set({ availableDiscounts: [] });
+      set({ availableDiscounts: currentDiscounts });
+
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        const retryResponse = await api.get('/api/orders/discounts/available');
+        const retryDiscounts = mapDiscountSummaries(retryResponse.data?.data);
+        set({ availableDiscounts: retryDiscounts });
+      } catch (retryError) {
+        console.error('Повторная загрузка скидок не удалась', retryError);
+      }
     }
   },
   async toggleDiscount(discountId) {
