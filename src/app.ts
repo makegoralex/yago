@@ -1,8 +1,7 @@
 import express, { NextFunction, Request, Response } from 'express';
+import compression, { CompressionFilter } from 'compression';
 import fs from 'fs';
 import path from 'path';
-import zlib from 'zlib';
-import { PassThrough } from 'stream';
 import swaggerUi from 'swagger-ui-express';
 
 import { authMiddleware } from './middleware/auth';
@@ -24,82 +23,73 @@ import organizationsRouter from './routes/organizations';
 import contentRouter from './routes/content';
 import printJobRouter from './modules/printing/printJob.router';
 import evotorRouter from './modules/evotor/evotor.router';
+import {
+  getClientCompatibilityMetrics,
+  isIos15Safari,
+  parseClientProfile,
+  recordConnectError,
+  recordRequestStart,
+  recordResponseAbort,
+  recordTtfb,
+} from './observability/clientCompatibility';
 
 const app = express();
 
 const COMPRESSIBLE_TYPES = /text\/html|application\/javascript|text\/css|application\/json/i;
+const compressionFilter: CompressionFilter = (req: Request, res: Response) => {
+  const contentType = String(res.getHeader('Content-Type') ?? '');
+  if (contentType && !COMPRESSIBLE_TYPES.test(contentType)) {
+    return false;
+  }
+
+  return compression.filter(req, res);
+};
+
 app.use((req, res, next) => {
-  if (req.method === 'HEAD' || req.headers['x-no-compression']) {
-    next();
-    return;
+  const profile = parseClientProfile(String(req.headers['user-agent'] ?? ''));
+  recordRequestStart(profile);
+
+  if (isIos15Safari(profile)) {
+    const sanitized = String(req.headers['accept-encoding'] ?? '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter((token) => token && !token.startsWith('br'))
+      .join(', ');
+    req.headers['accept-encoding'] = sanitized || 'gzip';
   }
 
-  const acceptEncoding = String(req.headers['accept-encoding'] ?? '');
-  const supportsBr = acceptEncoding.includes('br');
-  const supportsGzip = acceptEncoding.includes('gzip');
-  if (!supportsBr && !supportsGzip) {
-    next();
-    return;
-  }
-
-  const rawWrite = res.write.bind(res);
-  const rawEnd = res.end.bind(res);
-  let compressStream: zlib.BrotliCompress | zlib.Gzip | null = null;
-  let shouldCompress = false;
-  let initialized = false;
-
-  const initCompression = (): void => {
-    if (initialized) {
-      return;
+  const startedAt = process.hrtime.bigint();
+  let firstByteSent = false;
+  const rawWriteHead = res.writeHead.bind(res);
+  res.writeHead = ((...args: Parameters<Response['writeHead']>) => {
+    if (!firstByteSent) {
+      const ttfbMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      recordTtfb(profile, ttfbMs);
+      firstByteSent = true;
     }
-    initialized = true;
+    return rawWriteHead(...args);
+  }) as Response['writeHead'];
 
-    const contentType = String(res.getHeader('Content-Type') ?? '');
-    shouldCompress = COMPRESSIBLE_TYPES.test(contentType);
-    if (!shouldCompress) {
-      return;
+  req.on('aborted', () => {
+    recordConnectError(profile);
+  });
+
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      recordResponseAbort(profile);
     }
-
-    res.removeHeader('Content-Length');
-    res.setHeader('Vary', 'Accept-Encoding');
-    compressStream = supportsBr ? zlib.createBrotliCompress() : zlib.createGzip();
-    res.setHeader('Content-Encoding', supportsBr ? 'br' : 'gzip');
-
-    const passthrough = new PassThrough();
-    passthrough.pipe(compressStream).on('data', (chunk: Buffer) => rawWrite(chunk));
-    (res as Response & { __compressPassthrough?: PassThrough }).__compressPassthrough = passthrough;
-  };
-
-  res.write = ((chunk: unknown, ...args: unknown[]) => {
-    initCompression();
-    if (shouldCompress && compressStream) {
-      const passthrough = (res as Response & { __compressPassthrough?: PassThrough }).__compressPassthrough;
-      passthrough?.write(chunk as never);
-      return true;
-    }
-
-    return rawWrite(chunk as never, ...(args as []));
-  }) as typeof res.write;
-
-  res.end = ((chunk?: unknown, ...args: unknown[]) => {
-    initCompression();
-    if (shouldCompress && compressStream) {
-      const passthrough = (res as Response & { __compressPassthrough?: PassThrough }).__compressPassthrough;
-      if (chunk) {
-        passthrough?.end(chunk as never);
-      } else {
-        passthrough?.end();
-      }
-
-      compressStream.on('end', () => rawEnd(undefined, ...(args as [])));
-      return res as unknown as Response;
-    }
-
-    return rawEnd(chunk as never, ...(args as []));
-  }) as typeof res.end;
+  });
 
   next();
 });
+
+app.use(
+  compression({
+    threshold: 1024,
+    filter: compressionFilter,
+    brotli: { enabled: true },
+  })
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -128,6 +118,10 @@ const posDiscountRouter = createPosDiscountRouter();
 
 app.get('/healthz', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/healthz/client-compat', (_req, res) => {
+  res.json({ metrics: getClientCompatibilityMetrics() });
 });
 
 app.use('/api/auth', authRouter);
