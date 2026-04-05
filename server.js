@@ -1,8 +1,68 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const zlib = require('zlib');
+const { PassThrough } = require('stream');
 
 const app = express();
+
+const COMPRESSIBLE_TYPES = /text\/html|application\/javascript|text\/css|application\/json/i;
+app.use((req, res, next) => {
+  if (req.method === 'HEAD' || req.headers['x-no-compression']) return next();
+
+  const acceptEncoding = String(req.headers['accept-encoding'] || '');
+  const supportsBr = acceptEncoding.includes('br');
+  const supportsGzip = acceptEncoding.includes('gzip');
+  if (!supportsBr && !supportsGzip) return next();
+
+  const rawWrite = res.write.bind(res);
+  const rawEnd = res.end.bind(res);
+  let shouldCompress = false;
+  let initialized = false;
+  let compressStream = null;
+  let passthrough = null;
+
+  const initCompression = () => {
+    if (initialized) return;
+    initialized = true;
+
+    const contentType = String(res.getHeader('Content-Type') || '');
+    shouldCompress = COMPRESSIBLE_TYPES.test(contentType);
+    if (!shouldCompress) return;
+
+    res.removeHeader('Content-Length');
+    res.setHeader('Vary', 'Accept-Encoding');
+    compressStream = supportsBr ? zlib.createBrotliCompress() : zlib.createGzip();
+    res.setHeader('Content-Encoding', supportsBr ? 'br' : 'gzip');
+    passthrough = new PassThrough();
+    passthrough.pipe(compressStream).on('data', (chunk) => rawWrite(chunk));
+  };
+
+  res.write = (chunk, ...args) => {
+    initCompression();
+    if (shouldCompress && passthrough) {
+      passthrough.write(chunk);
+      return true;
+    }
+    return rawWrite(chunk, ...args);
+  };
+
+  res.end = (chunk, ...args) => {
+    initCompression();
+    if (shouldCompress && passthrough && compressStream) {
+      if (chunk) {
+        passthrough.end(chunk);
+      } else {
+        passthrough.end();
+      }
+      compressStream.on('end', () => rawEnd(undefined, ...args));
+      return res;
+    }
+    return rawEnd(chunk, ...args);
+  };
+
+  next();
+});
 
 const frontendCandidates = [
   process.env.FRONTEND_DIST_PATH,
