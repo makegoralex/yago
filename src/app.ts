@@ -1,6 +1,8 @@
 import express, { NextFunction, Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
+import { PassThrough } from 'stream';
 import swaggerUi from 'swagger-ui-express';
 
 import { authMiddleware } from './middleware/auth';
@@ -24,6 +26,80 @@ import printJobRouter from './modules/printing/printJob.router';
 import evotorRouter from './modules/evotor/evotor.router';
 
 const app = express();
+
+const COMPRESSIBLE_TYPES = /text\/html|application\/javascript|text\/css|application\/json/i;
+app.use((req, res, next) => {
+  if (req.method === 'HEAD' || req.headers['x-no-compression']) {
+    next();
+    return;
+  }
+
+  const acceptEncoding = String(req.headers['accept-encoding'] ?? '');
+  const supportsBr = acceptEncoding.includes('br');
+  const supportsGzip = acceptEncoding.includes('gzip');
+  if (!supportsBr && !supportsGzip) {
+    next();
+    return;
+  }
+
+  const rawWrite = res.write.bind(res);
+  const rawEnd = res.end.bind(res);
+  let compressStream: zlib.BrotliCompress | zlib.Gzip | null = null;
+  let shouldCompress = false;
+  let initialized = false;
+
+  const initCompression = (): void => {
+    if (initialized) {
+      return;
+    }
+    initialized = true;
+
+    const contentType = String(res.getHeader('Content-Type') ?? '');
+    shouldCompress = COMPRESSIBLE_TYPES.test(contentType);
+    if (!shouldCompress) {
+      return;
+    }
+
+    res.removeHeader('Content-Length');
+    res.setHeader('Vary', 'Accept-Encoding');
+    compressStream = supportsBr ? zlib.createBrotliCompress() : zlib.createGzip();
+    res.setHeader('Content-Encoding', supportsBr ? 'br' : 'gzip');
+
+    const passthrough = new PassThrough();
+    passthrough.pipe(compressStream).on('data', (chunk: Buffer) => rawWrite(chunk));
+    (res as Response & { __compressPassthrough?: PassThrough }).__compressPassthrough = passthrough;
+  };
+
+  res.write = ((chunk: unknown, ...args: unknown[]) => {
+    initCompression();
+    if (shouldCompress && compressStream) {
+      const passthrough = (res as Response & { __compressPassthrough?: PassThrough }).__compressPassthrough;
+      passthrough?.write(chunk as never);
+      return true;
+    }
+
+    return rawWrite(chunk as never, ...(args as []));
+  }) as typeof res.write;
+
+  res.end = ((chunk?: unknown, ...args: unknown[]) => {
+    initCompression();
+    if (shouldCompress && compressStream) {
+      const passthrough = (res as Response & { __compressPassthrough?: PassThrough }).__compressPassthrough;
+      if (chunk) {
+        passthrough?.end(chunk as never);
+      } else {
+        passthrough?.end();
+      }
+
+      compressStream.on('end', () => rawEnd(undefined, ...(args as [])));
+      return res as unknown as Response;
+    }
+
+    return rawEnd(chunk as never, ...(args as []));
+  }) as typeof res.end;
+
+  next();
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

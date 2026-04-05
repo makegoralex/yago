@@ -105,6 +105,10 @@ authRouter.post('/login', evotorRequestDebug('POST /api/auth/login'), validateRe
 });
 
 authRouter.post('/refresh', evotorRequestDebug('POST /api/auth/refresh'), validateRequest({ body: authSchemas.refresh }), async (req: Request, res: Response) => {
+  const startedAt = Date.now();
+  const rawUserAgent = String(req.headers['user-agent'] ?? 'unknown');
+  const userAgent = rawUserAgent.slice(0, 180);
+
   try {
     const { refreshToken } = req.body as RefreshBody;
 
@@ -125,9 +129,20 @@ authRouter.post('/refresh', evotorRequestDebug('POST /api/auth/refresh'), valida
       },
       error: null,
     });
+    console.info('[auth-refresh]', {
+      status: 200,
+      latencyMs: Date.now() - startedAt,
+      userAgent,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Invalid refresh token';
     res.status(401).json({ data: null, error: message || 'Invalid refresh token' });
+    console.warn('[auth-refresh]', {
+      status: 401,
+      latencyMs: Date.now() - startedAt,
+      userAgent,
+      error: message,
+    });
   }
 });
 
