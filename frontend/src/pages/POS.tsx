@@ -1,14 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import HeaderBar from '../components/ui/HeaderBar';
 import CategorySidebar from '../components/ui/CategorySidebar';
 import ProductCard from '../components/ui/ProductCard';
 import OrderPanel from '../components/ui/OrderPanel';
-import PaymentModal from '../components/ui/PaymentModal';
-import LoyaltyModal from '../components/ui/LoyaltyModal';
-import RedeemPointsModal from '../components/ui/RedeemPointsModal';
-import ModifierModal from '../components/ui/ModifierModal';
 import { useCatalogStore, type Product } from '../store/catalog';
 import {
   useOrderStore,
@@ -23,6 +19,12 @@ import { useShiftStore, type ShiftSummary } from '../store/shift';
 import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
 import { useToast } from '../providers/ToastProvider';
+import { initDebug } from '../lib/initDebug';
+
+const PaymentModal = lazy(() => import('../components/ui/PaymentModal'));
+const LoyaltyModal = lazy(() => import('../components/ui/LoyaltyModal'));
+const RedeemPointsModal = lazy(() => import('../components/ui/RedeemPointsModal'));
+const ModifierModal = lazy(() => import('../components/ui/ModifierModal'));
 
 
 const getKitchenStatusLabel = (status?: 'pending' | 'in_progress' | 'ready' | null): string | null => {
@@ -173,6 +175,11 @@ const POSPage: React.FC = () => {
   const isShiftLoading = useShiftStore((state) => state.loading);
   const isOpeningShift = useShiftStore((state) => state.opening);
   const isClosingShift = useShiftStore((state) => state.closing);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const [catalogInitError, setCatalogInitError] = useState<string | null>(null);
+  const [orderInitLoading, setOrderInitLoading] = useState(false);
+  const [orderInitError, setOrderInitError] = useState<string | null>(null);
+  const [backgroundInitError, setBackgroundInitError] = useState<string | null>(null);
 
   const formatBillingDate = (value?: string | null) =>
     value ? new Date(value).toLocaleDateString('ru-RU') : '—';
@@ -221,14 +228,75 @@ const POSPage: React.FC = () => {
     return Math.max(Math.min(remainingTotal, loyaltyEligibleSubtotal), 0);
   }, [subtotal, discount, loyaltyEligibleSubtotal]);
 
-  useEffect(() => {
-    void fetchCatalog();
-    void fetchActiveOrders();
-    void fetchAvailableDiscounts();
-  }, [fetchCatalog, fetchActiveOrders, fetchAvailableDiscounts]);
+  const initializePos = useCallback(async () => {
+    initDebug.start('pos_init');
+    setCatalogReady(false);
+    setCatalogInitError(null);
+    setOrderInitError(null);
+    setBackgroundInitError(null);
+
+    try {
+      initDebug.start('fetchCatalog');
+      await fetchCatalog();
+      const catalogState = useCatalogStore.getState();
+      if (catalogState.error) {
+        setCatalogInitError(catalogState.error);
+        initDebug.error('fetchCatalog', catalogState.error);
+        return;
+      }
+      setCatalogReady(true);
+      initDebug.end('fetchCatalog');
+    } catch (error) {
+      setCatalogInitError('Не удалось загрузить каталог. Проверьте интернет и повторите попытку.');
+      initDebug.error('fetchCatalog', error);
+      return;
+    }
+
+    setOrderInitLoading(true);
+    try {
+      initDebug.start('fetchActiveOrders');
+      await fetchActiveOrders();
+      initDebug.end('fetchActiveOrders');
+
+      const latestOrders = useOrderStore.getState().activeOrders;
+      const draftOrder = latestOrders.find((order) => order.status === 'draft') ?? latestOrders[0];
+      if (draftOrder) {
+        await loadOrder(draftOrder._id);
+      }
+    } catch (error) {
+      setOrderInitError('Не удалось восстановить активные заказы. Основная витрина работает, попробуйте обновить заказы позже.');
+      initDebug.error('fetchActiveOrders', error);
+    } finally {
+      setOrderInitLoading(false);
+    }
+
+    void (async () => {
+      try {
+        await fetchAvailableDiscounts();
+      } catch (error) {
+        initDebug.error('fetchAvailableDiscounts', error);
+      }
+
+      try {
+        const shift = await fetchCurrentShift();
+        if (shift?._id) {
+          await fetchShiftHistory();
+        }
+      } catch (error) {
+        setBackgroundInitError('Фоновые данные (смена/история) загружены не полностью. Можно продолжать работу.');
+        initDebug.error('fetchShiftHistory', error);
+      } finally {
+        initDebug.end('pos_init');
+      }
+    })();
+  }, [fetchCatalog, fetchActiveOrders, loadOrder, fetchAvailableDiscounts, fetchCurrentShift, fetchShiftHistory]);
 
   useEffect(() => {
-    if (isStartingOrder || orderId || activeOrders.length === 0) {
+    void initializePos();
+  }, [initializePos]);
+
+  useEffect(() => {
+    if (orderInitLoading || isStartingOrder || orderId || activeOrders.length === 0) {
       return;
     }
 
@@ -238,7 +306,7 @@ const POSPage: React.FC = () => {
     }
 
     void loadOrder(draftOrder._id);
-  }, [isStartingOrder, orderId, activeOrders, loadOrder]);
+  }, [orderInitLoading, isStartingOrder, orderId, activeOrders, loadOrder]);
 
   useEffect(() => {
     if (!orderId) {
@@ -255,10 +323,6 @@ const POSPage: React.FC = () => {
       void fetchActiveOrders();
     }
   }, [activeSection, fetchActiveOrders]);
-
-  useEffect(() => {
-    void fetchCurrentShift().catch(() => undefined);
-  }, [fetchCurrentShift]);
 
   const currentShiftId = currentShift?._id;
 
@@ -305,11 +369,13 @@ const POSPage: React.FC = () => {
     }
 
     setStartingOrder(true);
+    initDebug.start('createDraft', { forceNew: true });
     try {
       await createDraft({ forceNew: true });
     } catch (error) {
-      // ignore
+      initDebug.error('createDraft', error);
     } finally {
+      initDebug.end('createDraft', { forceNew: true });
       setStartingOrder(false);
     }
   };
@@ -645,16 +711,36 @@ const POSPage: React.FC = () => {
                 ) : (
                   <p className="mt-2 text-sm text-slate-500">Нет активных заказов.</p>
                 )}
+                {orderInitLoading ? (
+                  <p className="mt-2 text-xs text-slate-500">Восстанавливаем активные заказы…</p>
+                ) : null}
+                {orderInitError ? (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {orderInitError}
+                  </div>
+                ) : null}
+                {backgroundInitError ? (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {backgroundInitError}
+                  </div>
+                ) : null}
               </div>
-              {loading ? (
+              {loading && !catalogReady ? (
                 <div className="grid gap-2 sm:gap-2.5 md:grid-cols-2 xl:grid-cols-3">
                   {Array.from({ length: 6 }).map((_, index) => (
                     <div key={index} className="h-28 animate-pulse rounded-2xl bg-slate-200/70" />
                   ))}
                 </div>
-              ) : catalogError ? (
+              ) : catalogError || catalogInitError ? (
                 <div className="col-span-full rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
-                  {catalogError}
+                  <p>{catalogError ?? catalogInitError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void initializePos()}
+                    className="mt-3 rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-700"
+                  >
+                    Повторить загрузку
+                  </button>
                 </div>
               ) : (
                 <div
@@ -793,34 +879,42 @@ const POSPage: React.FC = () => {
           </div>
         </div>
       )}
-      <PaymentModal
-        open={isPaymentOpen}
-        total={total}
-        method={paymentMethod}
-        onClose={() => setPaymentOpen(false)}
-        onConfirm={handlePayConfirm}
-        isProcessing={isPaying}
-      />
-      {modifierProduct ? (
-        <ModifierModal
-          product={modifierProduct}
-          onClose={handleModifierClose}
-          onConfirm={handleModifierConfirm}
-        />
-      ) : null}
-      <LoyaltyModal
-        open={isLoyaltyOpen}
-        onClose={() => setLoyaltyOpen(false)}
-        onAttach={(selectedCustomer) => void handleAttachCustomer(selectedCustomer)}
-      />
-      <RedeemPointsModal
-        open={isRedeemOpen}
-        onClose={() => setRedeemOpen(false)}
-        maxPoints={redeemablePoints}
-        maxAmount={maxLoyaltyAmount}
-        onSubmit={(value) => handleRedeemConfirm(value)}
-        isProcessing={isRedeeming}
-      />
+      <Suspense fallback={null}>
+        {isPaymentOpen ? (
+          <PaymentModal
+            open={isPaymentOpen}
+            total={total}
+            method={paymentMethod}
+            onClose={() => setPaymentOpen(false)}
+            onConfirm={handlePayConfirm}
+            isProcessing={isPaying}
+          />
+        ) : null}
+        {modifierProduct ? (
+          <ModifierModal
+            product={modifierProduct}
+            onClose={handleModifierClose}
+            onConfirm={handleModifierConfirm}
+          />
+        ) : null}
+        {isLoyaltyOpen ? (
+          <LoyaltyModal
+            open={isLoyaltyOpen}
+            onClose={() => setLoyaltyOpen(false)}
+            onAttach={(selectedCustomer) => void handleAttachCustomer(selectedCustomer)}
+          />
+        ) : null}
+        {isRedeemOpen ? (
+          <RedeemPointsModal
+            open={isRedeemOpen}
+            onClose={() => setRedeemOpen(false)}
+            maxPoints={redeemablePoints}
+            maxAmount={maxLoyaltyAmount}
+            onSubmit={(value) => handleRedeemConfirm(value)}
+            isProcessing={isRedeeming}
+          />
+        ) : null}
+      </Suspense>
       <FloatingPanelOverlay open={isHistoryOpen} onClose={() => setHistoryOpen(false)}>
         <ReceiptHistoryCard
           shift={currentShift}
