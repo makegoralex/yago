@@ -898,42 +898,34 @@ const POSPage: React.FC = () => {
           </div>
         </div>
       )}
-      <Suspense fallback={null}>
-        {isPaymentOpen ? (
-          <PaymentModal
-            open={isPaymentOpen}
-            total={total}
-            method={paymentMethod}
-            onClose={() => setPaymentOpen(false)}
-            onConfirm={handlePayConfirm}
-            isProcessing={isPaying}
-          />
-        ) : null}
-        {modifierProduct ? (
-          <ModifierModal
-            product={modifierProduct}
-            onClose={handleModifierClose}
-            onConfirm={handleModifierConfirm}
-          />
-        ) : null}
-        {isLoyaltyOpen ? (
-          <LoyaltyModal
-            open={isLoyaltyOpen}
-            onClose={() => setLoyaltyOpen(false)}
-            onAttach={(selectedCustomer) => void handleAttachCustomer(selectedCustomer)}
-          />
-        ) : null}
-        {isRedeemOpen ? (
-          <RedeemPointsModal
-            open={isRedeemOpen}
-            onClose={() => setRedeemOpen(false)}
-            maxPoints={redeemablePoints}
-            maxAmount={maxLoyaltyAmount}
-            onSubmit={(value) => handleRedeemConfirm(value)}
-            isProcessing={isRedeeming}
-          />
-        ) : null}
-      </Suspense>
+      <PaymentModal
+        open={isPaymentOpen}
+        total={total}
+        method={paymentMethod}
+        onClose={() => setPaymentOpen(false)}
+        onConfirm={handlePayConfirm}
+        isProcessing={isPaying}
+      />
+      {modifierProduct ? (
+        <ModifierModal
+          product={modifierProduct}
+          onClose={handleModifierClose}
+          onConfirm={handleModifierConfirm}
+        />
+      ) : null}
+      <LoyaltyModal
+        open={isLoyaltyOpen}
+        onClose={() => setLoyaltyOpen(false)}
+        onAttach={(selectedCustomer: CustomerSummary | null) => void handleAttachCustomer(selectedCustomer)}
+      />
+      <RedeemPointsModal
+        open={isRedeemOpen}
+        onClose={() => setRedeemOpen(false)}
+        maxPoints={redeemablePoints}
+        maxAmount={maxLoyaltyAmount}
+        onSubmit={(value: number) => handleRedeemConfirm(value)}
+        isProcessing={isRedeeming}
+      />
       <FloatingPanelOverlay open={isHistoryOpen} onClose={() => setHistoryOpen(false)}>
         <ReceiptHistoryCard
           shift={currentShift}
