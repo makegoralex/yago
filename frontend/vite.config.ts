@@ -9,7 +9,7 @@ export default defineConfig({
     react(),
     legacy({
       targets: ['defaults', 'Safari >= 13', 'iOS >= 13'],
-      modernPolyfills: true,
+      modernPolyfills: false,
       renderLegacyChunks: true,
     }),
   ],
