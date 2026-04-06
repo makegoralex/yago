@@ -1,19 +1,13 @@
 export function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', async () => {
-      try {
-        const registration = await navigator.serviceWorker.register('/service-worker.js', {
-          updateViaCache: 'none',
-        });
+  // Intentionally disabled: we keep runtime SW turned off until Safari/iPad stability work is fully validated.
+  if (!('serviceWorker' in navigator)) return;
 
-        await registration.update();
-
-        setInterval(() => {
-          registration.update().catch(() => undefined);
-        }, 60 * 60 * 1000);
-      } catch (error) {
-        console.error('Service worker registration failed', error);
-      }
-    });
-  }
+  window.addEventListener('load', async () => {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    } catch (error) {
+      console.error('Service worker cleanup failed', error);
+    }
+  });
 }
