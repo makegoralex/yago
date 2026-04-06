@@ -33,6 +33,23 @@ const getKitchenStatusLabel = (status?: 'pending' | 'in_progress' | 'ready' | nu
   if (status === 'ready') return 'Кухня: готово';
   return null;
 };
+
+const withStepTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
 const POSPage: React.FC = () => {
   const navigate = useNavigate();
   const isDesktop = useMediaQuery('(min-width: 1280px)');
@@ -234,34 +251,41 @@ const POSPage: React.FC = () => {
     setCatalogInitError(null);
     setOrderInitError(null);
     setBackgroundInitError(null);
+    let canContinue = true;
 
     try {
       initDebug.start('fetchCatalog');
-      await fetchCatalog();
+      await withStepTimeout(fetchCatalog(), 16000, 'Catalog init timeout');
       const catalogState = useCatalogStore.getState();
       if (catalogState.error) {
+        canContinue = false;
         setCatalogInitError(catalogState.error);
         initDebug.error('fetchCatalog', catalogState.error);
-        return;
+      } else {
+        setCatalogReady(true);
+        initDebug.end('fetchCatalog');
       }
-      setCatalogReady(true);
-      initDebug.end('fetchCatalog');
     } catch (error) {
+      canContinue = false;
       setCatalogInitError('Не удалось загрузить каталог. Проверьте интернет и повторите попытку.');
       initDebug.error('fetchCatalog', error);
+    }
+
+    if (!canContinue) {
+      initDebug.end('pos_init', { status: 'catalog_failed' });
       return;
     }
 
     setOrderInitLoading(true);
     try {
       initDebug.start('fetchActiveOrders');
-      await fetchActiveOrders();
+      await withStepTimeout(fetchActiveOrders(), 12000, 'Active orders init timeout');
       initDebug.end('fetchActiveOrders');
 
       const latestOrders = useOrderStore.getState().activeOrders;
       const draftOrder = latestOrders.find((order) => order.status === 'draft') ?? latestOrders[0];
       if (draftOrder) {
-        await loadOrder(draftOrder._id);
+        await withStepTimeout(loadOrder(draftOrder._id), 12000, 'Load draft timeout');
       }
     } catch (error) {
       setOrderInitError('Не удалось восстановить активные заказы. Основная витрина работает, попробуйте обновить заказы позже.');
@@ -272,7 +296,7 @@ const POSPage: React.FC = () => {
 
     void (async () => {
       try {
-        await fetchAvailableDiscounts();
+        await withStepTimeout(fetchAvailableDiscounts(), 10000, 'Discounts warmup timeout');
       } catch (error) {
         initDebug.error('fetchAvailableDiscounts', error);
       }

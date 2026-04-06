@@ -1,9 +1,7 @@
 import React, { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import LoginPage from './pages/Login';
-import SettingsPage from './pages/Settings';
 import LandingPage from './pages/Landing';
-import SwaggerNotice from './pages/SwaggerNotice';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import { type AuthUser, type UserRole, useAuthStore } from './store/auth';
 import MobileNav from './components/ui/MobileNav';
@@ -12,6 +10,8 @@ import { useTheme } from './providers/ThemeProvider';
 import { initDebug } from './lib/initDebug';
 
 const POSPage = lazy(() => import('./pages/POS'));
+const SettingsPage = lazy(() => import('./pages/Settings'));
+const SwaggerNotice = lazy(() => import('./pages/SwaggerNotice'));
 const AdminPage = lazy(() => import('./pages/Admin'));
 const SuperAdminPage = lazy(() => import('./pages/SuperAdmin'));
 const KDSPage = lazy(() => import('./pages/KDS'));
