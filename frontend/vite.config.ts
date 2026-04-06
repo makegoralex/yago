@@ -25,7 +25,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    target: 'es2017',
+    target: 'es2015',
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -38,28 +38,6 @@ export default defineConfig({
             if (id.includes('/xlsx/')) return 'xlsx';
             if (id.includes('lucide-react')) return 'icons';
           }
-
-          if (id.includes('/src/pages/Admin') || id.includes('/src/pages/SuperAdmin') || id.includes('/src/components/admin')) {
-            return 'admin';
-          }
-
-          if (id.includes('/src/pages/Blog') || id.includes('/src/pages/News') || id.includes('/src/pages/Docs')) {
-            return 'blog-news';
-          }
-
-          if (
-            id.includes('/src/pages/POS') ||
-            id.includes('/src/store/order') ||
-            id.includes('/src/store/catalog') ||
-            id.includes('/src/components/ui/OrderPanel')
-          ) {
-            return 'pos-core';
-          }
-
-          if (id.includes('/src/pages/Landing') || id.includes('/src/components/ui/LandingHeader')) {
-            return 'landing';
-          }
-
           return undefined;
         },
       },

@@ -21,11 +21,6 @@ import { useBillingInfo } from '../hooks/useBillingInfo';
 import { useToast } from '../providers/ToastProvider';
 import { initDebug } from '../lib/initDebug';
 
-const PaymentModal = lazy(() => import('../components/ui/PaymentModal'));
-const LoyaltyModal = lazy(() => import('../components/ui/LoyaltyModal'));
-const RedeemPointsModal = lazy(() => import('../components/ui/RedeemPointsModal'));
-const ModifierModal = lazy(() => import('../components/ui/ModifierModal'));
-
 
 const getKitchenStatusLabel = (status?: 'pending' | 'in_progress' | 'ready' | null): string | null => {
   if (status === 'pending') return 'Кухня: ожидает';
