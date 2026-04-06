@@ -1,24 +1,27 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import LoginPage from './pages/Login';
 import POSPage from './pages/POS';
-import AdminPage from './pages/Admin';
 import SettingsPage from './pages/Settings';
 import LandingPage from './pages/Landing';
-import SuperAdminPage from './pages/SuperAdmin';
-import KDSPage from './pages/KDS';
-import OSSPage from './pages/OSS';
-import BlogPage from './pages/Blog';
-import BlogPostPage from './pages/BlogPost';
-import DocsPage from './pages/Docs';
-import NewsPage from './pages/News';
-import NewsPostPage from './pages/NewsPost';
 import SwaggerNotice from './pages/SwaggerNotice';
+
+const AdminPage = lazy(() => import('./pages/Admin'));
+const SuperAdminPage = lazy(() => import('./pages/SuperAdmin'));
+const KDSPage = lazy(() => import('./pages/KDS'));
+const OSSPage = lazy(() => import('./pages/OSS'));
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import { type AuthUser, type UserRole, useAuthStore } from './store/auth';
 import MobileNav from './components/ui/MobileNav';
 import { useRestaurantStore } from './store/restaurant';
 import { useTheme } from './providers/ThemeProvider';
+
+const BlogPage = lazy(() => import('./pages/Blog'));
+const BlogPostPage = lazy(() => import('./pages/BlogPost'));
+
+const DocsPage = lazy(() => import('./pages/Docs'));
+const NewsPage = lazy(() => import('./pages/News'));
+const NewsPostPage = lazy(() => import('./pages/NewsPost'));
 
 const OWNER_ROLES: UserRole[] = ['owner'];
 
@@ -68,6 +71,7 @@ const App: React.FC = () => {
   return (
     <>
       <ThemeScopeSync />
+      <Suspense fallback={<div style={{ padding: '24px' }}>Загрузка...</div>}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/blog" element={<BlogPage />} />
@@ -91,6 +95,7 @@ const App: React.FC = () => {
         <Route path="/" element={user ? <Navigate to={getLandingRoute(user)} replace /> : <LandingPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
       <MobileNav />
     </>
   );

@@ -1,28 +1,17 @@
-const APP_CACHE_PREFIXES = ['yago-', 'workbox-precache'];
-
-self.addEventListener('install', function () {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
-self.addEventListener('activate', function (event) {
-  event.waitUntil(
-    caches
-      .keys()
-      .then(function (cacheKeys) {
-        return Promise.all(
-          cacheKeys
-            .filter(function (cacheKey) {
-              return APP_CACHE_PREFIXES.some(function (prefix) {
-                return cacheKey.indexOf(prefix) === 0;
-              });
-            })
-            .map(function (cacheKey) {
-              return caches.delete(cacheKey);
-            })
-        );
-      })
-      .then(function () {
-        return self.registration.unregister();
-      })
-  );
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map((key) => caches.delete(key)));
+    await self.registration.unregister();
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clients) {
+      client.navigate(client.url);
+    }
+  })());
 });
+
+self.addEventListener('fetch', () => {});
