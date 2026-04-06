@@ -1,14 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import HeaderBar from '../components/ui/HeaderBar';
 import CategorySidebar from '../components/ui/CategorySidebar';
 import ProductCard from '../components/ui/ProductCard';
 import OrderPanel from '../components/ui/OrderPanel';
-import PaymentModal from '../components/ui/PaymentModal';
-import LoyaltyModal from '../components/ui/LoyaltyModal';
-import RedeemPointsModal from '../components/ui/RedeemPointsModal';
-import ModifierModal from '../components/ui/ModifierModal';
 import { useCatalogStore, type Product } from '../store/catalog';
 import {
   useOrderStore,
