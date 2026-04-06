@@ -849,7 +849,9 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     }
   },
   async fetchActiveOrders() {
-    const response = await api.get('/api/orders/active');
+    const response = await api.get('/api/orders/active', {
+      timeout: 12000,
+    });
     const orders = Array.isArray(response.data.data)
       ? response.data.data.map((order: any) => ({
           _id: order._id,
@@ -935,7 +937,9 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   async fetchAvailableDiscounts() {
     const currentDiscounts = get().availableDiscounts;
     try {
-      const response = await api.get('/api/orders/discounts/available');
+      const response = await api.get('/api/orders/discounts/available', {
+        timeout: 12000,
+      });
       const discounts = mapDiscountSummaries(response.data?.data);
       set({ availableDiscounts: discounts });
     } catch (error) {
@@ -944,7 +948,9 @@ export const useOrderStore = create<OrderState>((set, get) => ({
 
       try {
         await new Promise((resolve) => setTimeout(resolve, 1200));
-        const retryResponse = await api.get('/api/orders/discounts/available');
+        const retryResponse = await api.get('/api/orders/discounts/available', {
+          timeout: 12000,
+        });
         const retryDiscounts = mapDiscountSummaries(retryResponse.data?.data);
         set({ availableDiscounts: retryDiscounts });
       } catch (retryError) {
@@ -983,6 +989,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     try {
       const response = await api.get('/api/orders/history/current-shift', {
         params: { registerId },
+        timeout: 12000,
       });
       const payload = Array.isArray(response.data?.data) ? response.data.data : [];
       const mapped = payload
