@@ -21,6 +21,11 @@ import { useBillingInfo } from '../hooks/useBillingInfo';
 import { useToast } from '../providers/ToastProvider';
 import { initDebug } from '../lib/initDebug';
 
+const PaymentModal = lazy(() => import('../components/ui/PaymentModal'));
+const LoyaltyModal = lazy(() => import('../components/ui/LoyaltyModal'));
+const RedeemPointsModal = lazy(() => import('../components/ui/RedeemPointsModal'));
+const ModifierModal = lazy(() => import('../components/ui/ModifierModal'));
+
 
 const getKitchenStatusLabel = (status?: 'pending' | 'in_progress' | 'ready' | null): string | null => {
   if (status === 'pending') return 'Кухня: ожидает';
@@ -898,34 +903,42 @@ const POSPage: React.FC = () => {
           </div>
         </div>
       )}
-      <PaymentModal
-        open={isPaymentOpen}
-        total={total}
-        method={paymentMethod}
-        onClose={() => setPaymentOpen(false)}
-        onConfirm={handlePayConfirm}
-        isProcessing={isPaying}
-      />
-      {modifierProduct ? (
-        <ModifierModal
-          product={modifierProduct}
-          onClose={handleModifierClose}
-          onConfirm={handleModifierConfirm}
-        />
-      ) : null}
-      <LoyaltyModal
-        open={isLoyaltyOpen}
-        onClose={() => setLoyaltyOpen(false)}
-        onAttach={(selectedCustomer: CustomerSummary | null) => void handleAttachCustomer(selectedCustomer)}
-      />
-      <RedeemPointsModal
-        open={isRedeemOpen}
-        onClose={() => setRedeemOpen(false)}
-        maxPoints={redeemablePoints}
-        maxAmount={maxLoyaltyAmount}
-        onSubmit={(value: number) => handleRedeemConfirm(value)}
-        isProcessing={isRedeeming}
-      />
+      <Suspense fallback={null}>
+        {isPaymentOpen ? (
+          <PaymentModal
+            open={isPaymentOpen}
+            total={total}
+            method={paymentMethod}
+            onClose={() => setPaymentOpen(false)}
+            onConfirm={handlePayConfirm}
+            isProcessing={isPaying}
+          />
+        ) : null}
+        {modifierProduct ? (
+          <ModifierModal
+            product={modifierProduct}
+            onClose={handleModifierClose}
+            onConfirm={handleModifierConfirm}
+          />
+        ) : null}
+        {isLoyaltyOpen ? (
+          <LoyaltyModal
+            open={isLoyaltyOpen}
+            onClose={() => setLoyaltyOpen(false)}
+            onAttach={(selectedCustomer: CustomerSummary | null) => void handleAttachCustomer(selectedCustomer)}
+          />
+        ) : null}
+        {isRedeemOpen ? (
+          <RedeemPointsModal
+            open={isRedeemOpen}
+            onClose={() => setRedeemOpen(false)}
+            maxPoints={redeemablePoints}
+            maxAmount={maxLoyaltyAmount}
+            onSubmit={(value: number) => handleRedeemConfirm(value)}
+            isProcessing={isRedeeming}
+          />
+        ) : null}
+      </Suspense>
       <FloatingPanelOverlay open={isHistoryOpen} onClose={() => setHistoryOpen(false)}>
         <ReceiptHistoryCard
           shift={currentShift}
