@@ -30,6 +30,10 @@ const PRODUCT_GRID_OVERSCAN_ROWS = 2;
 const PRODUCT_ROW_BASE_HEIGHT = 180;
 const PRODUCT_ROW_GAP_BASE = 8;
 const PRODUCT_ROW_GAP_SM = 10;
+const POS_BACKGROUND_REQUEST_STAGE = Number(import.meta.env.VITE_POS_BACKGROUND_REQUEST_STAGE ?? '1');
+
+const shouldFetchActiveOrders = POS_BACKGROUND_REQUEST_STAGE >= 2;
+const shouldRunSecondaryBackgroundRequests = POS_BACKGROUND_REQUEST_STAGE >= 3;
 
 const getKitchenStatusLabel = (status?: 'pending' | 'in_progress' | 'ready' | null): string | null => {
   if (status === 'pending') return 'Кухня: ожидает';
@@ -252,22 +256,29 @@ const POSPage: React.FC = () => {
       return;
     }
 
-    setOrderInitLoading(true);
-    try {
-      initDebug.start('fetchActiveOrders');
-      await withStepTimeout(fetchActiveOrders(), 12000, 'Active orders init timeout');
-      initDebug.end('fetchActiveOrders');
+    if (shouldFetchActiveOrders) {
+      setOrderInitLoading(true);
+      try {
+        initDebug.start('fetchActiveOrders');
+        await withStepTimeout(fetchActiveOrders(), 12000, 'Active orders init timeout');
+        initDebug.end('fetchActiveOrders');
 
-      const latestOrders = useOrderStore.getState().activeOrders;
-      const draftOrder = latestOrders.find((order) => order.status === 'draft') ?? latestOrders[0];
-      if (draftOrder) {
-        await withStepTimeout(loadOrder(draftOrder._id), 12000, 'Load draft timeout');
+        const latestOrders = useOrderStore.getState().activeOrders;
+        const draftOrder = latestOrders.find((order) => order.status === 'draft') ?? latestOrders[0];
+        if (draftOrder) {
+          await withStepTimeout(loadOrder(draftOrder._id), 12000, 'Load draft timeout');
+        }
+      } catch (error) {
+        setOrderInitError('Не удалось восстановить активные заказы. Основная витрина работает, попробуйте обновить заказы позже.');
+        initDebug.error('fetchActiveOrders', error);
+      } finally {
+        setOrderInitLoading(false);
       }
-    } catch (error) {
-      setOrderInitError('Не удалось восстановить активные заказы. Основная витрина работает, попробуйте обновить заказы позже.');
-      initDebug.error('fetchActiveOrders', error);
-    } finally {
-      setOrderInitLoading(false);
+    }
+
+    if (!shouldRunSecondaryBackgroundRequests) {
+      initDebug.end('pos_init', { status: 'catalog_only' });
+      return;
     }
 
     void (async () => {
@@ -296,6 +307,10 @@ const POSPage: React.FC = () => {
   }, [initializePos]);
 
   useEffect(() => {
+    if (!shouldFetchActiveOrders) {
+      return;
+    }
+
     if (orderInitLoading || isStartingOrder || orderId || activeOrders.length === 0) {
       return;
     }
@@ -309,6 +324,10 @@ const POSPage: React.FC = () => {
   }, [orderInitLoading, isStartingOrder, orderId, activeOrders, loadOrder]);
 
   useEffect(() => {
+    if (!shouldFetchActiveOrders) {
+      return;
+    }
+
     if (!orderId) {
       return;
     }
@@ -319,6 +338,10 @@ const POSPage: React.FC = () => {
   }, [activeOrders, orderId, resetOrder]);
 
   useEffect(() => {
+    if (!shouldFetchActiveOrders) {
+      return;
+    }
+
     if (activeSection === 'reports') {
       void fetchActiveOrders();
     }
@@ -327,6 +350,10 @@ const POSPage: React.FC = () => {
   const currentShiftId = currentShift?._id;
 
   useEffect(() => {
+    if (!shouldRunSecondaryBackgroundRequests) {
+      return;
+    }
+
     if (!currentShiftId) {
       resetShiftHistory();
       return;
