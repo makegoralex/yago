@@ -26,6 +26,24 @@ const LazyLoyaltyModal = lazy(() => import('../components/ui/LoyaltyModal'));
 const LazyRedeemPointsModal = lazy(() => import('../components/ui/RedeemPointsModal'));
 const LazyModifierModal = lazy(() => import('../components/ui/ModifierModal'));
 
+const PaymentModal = lazy(() => import('../components/ui/PaymentModal'));
+const LoyaltyModal = lazy(() => import('../components/ui/LoyaltyModal'));
+const RedeemPointsModal = lazy(() => import('../components/ui/RedeemPointsModal'));
+const ModifierModal = lazy(() => import('../components/ui/ModifierModal'));
+
+const PaymentModal = lazy(() => import('../components/ui/PaymentModal'));
+const LoyaltyModal = lazy(() => import('../components/ui/LoyaltyModal'));
+const RedeemPointsModal = lazy(() => import('../components/ui/RedeemPointsModal'));
+const ModifierModal = lazy(() => import('../components/ui/ModifierModal'));
+
+const PRODUCT_GRID_OVERSCAN_ROWS = 2;
+const PRODUCT_ROW_BASE_HEIGHT = 180;
+const PRODUCT_ROW_GAP_BASE = 8;
+const PRODUCT_ROW_GAP_SM = 10;
+const POS_BACKGROUND_REQUEST_STAGE = Number(import.meta.env.VITE_POS_BACKGROUND_REQUEST_STAGE ?? '1');
+
+const shouldFetchActiveOrders = POS_BACKGROUND_REQUEST_STAGE >= 2;
+const shouldRunSecondaryBackgroundRequests = POS_BACKGROUND_REQUEST_STAGE >= 3;
 
 const getKitchenStatusLabel = (status?: 'pending' | 'in_progress' | 'ready' | null): string | null => {
   if (status === 'pending') return 'Кухня: ожидает';
@@ -54,6 +72,10 @@ const POSPage: React.FC = () => {
   const navigate = useNavigate();
   const isDesktop = useMediaQuery('(min-width: 1280px)');
   const isTablet = useMediaQuery('(min-width: 1024px)');
+  const isSm = useMediaQuery('(min-width: 640px)');
+  const isMd = useMediaQuery('(min-width: 768px)');
+  const isXl = useMediaQuery('(min-width: 1280px)');
+  const is2xl = useMediaQuery('(min-width: 1536px)');
   const { notify } = useToast();
   const {
     billing,
@@ -66,6 +88,8 @@ const POSPage: React.FC = () => {
   const categories = useCatalogStore((state) => state.categories);
   const products = useCatalogStore((state) => state.products);
   const productListRef = useRef<HTMLDivElement>(null);
+  const productGridRef = useRef<HTMLDivElement>(null);
+  const rafScrollRef = useRef<number | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.add('pos-locked');
@@ -107,44 +131,6 @@ const POSPage: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
-    const container = productListRef.current;
-    if (!container) {
-      return;
-    }
-
-    let startY = 0;
-
-    const handleTouchStart = (event: TouchEvent) => {
-      startY = event.touches[0]?.clientY ?? 0;
-    };
-
-    const handleTouchMove = (event: TouchEvent) => {
-      const currentY = event.touches[0]?.clientY ?? 0;
-      const deltaY = currentY - startY;
-      const { scrollTop, scrollHeight, clientHeight } = container;
-
-      if (scrollHeight <= clientHeight) {
-        event.preventDefault();
-        return;
-      }
-
-      const isAtTop = scrollTop <= 0;
-      const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1;
-
-      if ((isAtTop && deltaY > 0) || (isAtBottom && deltaY < 0)) {
-        event.preventDefault();
-      }
-    };
-
-    container.addEventListener('touchstart', handleTouchStart, { passive: true });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-
-    return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-    };
-  }, []);
   const activeCategoryId = useCatalogStore((state) => state.activeCategoryId);
   const setActiveCategory = useCatalogStore((state) => state.setActiveCategory);
   const fetchCatalog = useCatalogStore((state) => state.fetchCatalog);
@@ -213,6 +199,10 @@ const POSPage: React.FC = () => {
   const [isRedeemOpen, setRedeemOpen] = useState(false);
   const [isRedeeming, setRedeeming] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [productGridScrollTop, setProductGridScrollTop] = useState(0);
+  const [productGridViewportHeight, setProductGridViewportHeight] = useState(0);
+  const [productGridOffsetTop, setProductGridOffsetTop] = useState(0);
+  const [productGridRowHeight, setProductGridRowHeight] = useState(PRODUCT_ROW_BASE_HEIGHT);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isShiftPanelOpen, setShiftPanelOpen] = useState(false);
   const [modifierProduct, setModifierProduct] = useState<Product | null>(null);
@@ -333,6 +323,10 @@ const POSPage: React.FC = () => {
   }, [orderInitLoading, isStartingOrder, orderId, activeOrders, loadOrder]);
 
   useEffect(() => {
+    if (!shouldFetchActiveOrders) {
+      return;
+    }
+
     if (!orderId) {
       return;
     }
@@ -343,6 +337,10 @@ const POSPage: React.FC = () => {
   }, [activeOrders, orderId, resetOrder]);
 
   useEffect(() => {
+    if (!shouldFetchActiveOrders) {
+      return;
+    }
+
     if (activeSection === 'reports') {
       void fetchActiveOrders();
     }
@@ -351,6 +349,10 @@ const POSPage: React.FC = () => {
   const currentShiftId = currentShift?._id;
 
   useEffect(() => {
+    if (!shouldRunSecondaryBackgroundRequests) {
+      return;
+    }
+
     if (!currentShiftId) {
       resetShiftHistory();
       return;
@@ -365,6 +367,109 @@ const POSPage: React.FC = () => {
     }
     return products.filter((product) => product.categoryId === activeCategoryId);
   }, [products, activeCategoryId]);
+
+  const productGridColumns = useMemo(() => {
+    if (is2xl) return 6;
+    if (isXl) return 5;
+    if (isMd) return 4;
+    if (isSm) return 3;
+    return 2;
+  }, [is2xl, isMd, isSm, isXl]);
+
+  const productGridRowGap = isSm ? PRODUCT_ROW_GAP_SM : PRODUCT_ROW_GAP_BASE;
+
+  const productRows = useMemo(() => {
+    if (activeSection !== 'products') {
+      return [];
+    }
+
+    const rows: Product[][] = [];
+    for (let index = 0; index < filteredProducts.length; index += productGridColumns) {
+      rows.push(filteredProducts.slice(index, index + productGridColumns));
+    }
+    return rows;
+  }, [activeSection, filteredProducts, productGridColumns]);
+
+  const totalProductRows = productRows.length;
+  const visibleGridTop = Math.max(productGridScrollTop - productGridOffsetTop, 0);
+  const visibleGridBottom = Math.max(productGridScrollTop + productGridViewportHeight - productGridOffsetTop, 0);
+  const visibleStartRow = Math.max(Math.floor(visibleGridTop / Math.max(productGridRowHeight, 1)) - PRODUCT_GRID_OVERSCAN_ROWS, 0);
+  const visibleEndRow = Math.min(
+    Math.ceil(visibleGridBottom / Math.max(productGridRowHeight, 1)) + PRODUCT_GRID_OVERSCAN_ROWS,
+    totalProductRows,
+  );
+  const virtualRows = productRows.slice(visibleStartRow, visibleEndRow);
+
+  useEffect(() => {
+    const scrollContainer = productListRef.current;
+    const gridContainer = productGridRef.current;
+    if (!scrollContainer || !gridContainer) {
+      return;
+    }
+
+    const updateGridMetrics = () => {
+      setProductGridViewportHeight(scrollContainer.clientHeight);
+      setProductGridOffsetTop(gridContainer.offsetTop);
+    };
+
+    const handleScroll = () => {
+      if (rafScrollRef.current !== null) {
+        return;
+      }
+
+      rafScrollRef.current = window.requestAnimationFrame(() => {
+        setProductGridScrollTop(scrollContainer.scrollTop);
+        rafScrollRef.current = null;
+      });
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateGridMetrics();
+    });
+
+    resizeObserver.observe(scrollContainer);
+    resizeObserver.observe(gridContainer);
+
+    updateGridMetrics();
+    setProductGridScrollTop(scrollContainer.scrollTop);
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      resizeObserver.disconnect();
+      scrollContainer.removeEventListener('scroll', handleScroll);
+      if (rafScrollRef.current !== null) {
+        window.cancelAnimationFrame(rafScrollRef.current);
+      }
+      rafScrollRef.current = null;
+    };
+  }, [activeSection]);
+
+  useEffect(() => {
+    setProductGridScrollTop(productListRef.current?.scrollTop ?? 0);
+  }, [activeCategoryId, searchQuery, activeSection]);
+
+  useEffect(() => {
+    if (!filteredProducts.length) {
+      return;
+    }
+
+    const probeRow = document.querySelector<HTMLElement>('[data-product-row-probe="true"]');
+    if (!probeRow) {
+      return;
+    }
+
+    const updateProbeHeight = () => {
+      setProductGridRowHeight(probeRow.getBoundingClientRect().height + productGridRowGap);
+    };
+
+    updateProbeHeight();
+    const rowObserver = new ResizeObserver(updateProbeHeight);
+    rowObserver.observe(probeRow);
+
+    return () => {
+      rowObserver.disconnect();
+    };
+  }, [filteredProducts.length, productGridColumns, productGridRowGap, visibleStartRow, visibleEndRow]);
 
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -694,6 +799,7 @@ const POSPage: React.FC = () => {
             <div
               ref={productListRef}
               className="custom-scrollbar flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto overflow-x-hidden overscroll-x-none overscroll-y-none pr-1 touch-pan-y sm:space-y-2.5"
+              style={{ WebkitOverflowScrolling: 'touch' }}
             >
               <div className="rounded-xl bg-white p-2 shadow-soft sm:p-2.5">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -777,21 +883,39 @@ const POSPage: React.FC = () => {
                 </div>
               ) : (
                 <div
+                  ref={productGridRef}
                   className={`grid gap-2 sm:gap-2.5 ${
                     activeSection === 'products'
                       ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
                       : 'grid-cols-1'
                   }`}
                 >
-                  {activeSection === 'products'
-                    ? filteredProducts.map((product) => (
-                        <ProductCard
-                          key={product._id}
-                          product={product}
-                          onSelect={(selectedProduct) => handleAddProduct(selectedProduct)}
-                        />
-                      ))
-                    : null}
+                  {activeSection === 'products' ? (
+                    <div
+                      className="col-span-full relative"
+                      style={{ height: `${totalProductRows * Math.max(productGridRowHeight, 1)}px` }}
+                    >
+                      {virtualRows.map((rowProducts, rowOffset) => {
+                        const rowIndex = visibleStartRow + rowOffset;
+                        return (
+                          <div
+                            key={`product-row-${rowIndex}`}
+                            data-product-row-probe={rowOffset === 0 ? 'true' : undefined}
+                            className="absolute left-0 right-0 grid gap-2 sm:gap-2.5 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
+                            style={{ top: `${rowIndex * Math.max(productGridRowHeight, 1)}px` }}
+                          >
+                            {rowProducts.map((product) => (
+                              <ProductCard
+                                key={product._id}
+                                product={product}
+                                onSelect={(selectedProduct) => handleAddProduct(selectedProduct)}
+                              />
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                   {activeSection === 'customers' ? (
                     <div className="col-span-full rounded-2xl bg-white p-6 shadow-soft">
                       <p className="text-lg font-semibold text-slate-900">Быстрые действия</p>
