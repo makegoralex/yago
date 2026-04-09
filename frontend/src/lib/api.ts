@@ -5,6 +5,7 @@ import { detectClientPlatform, getBuildMarker, logClientEvent } from './observab
 const resolvedBaseURL =
   import.meta.env.VITE_API_URL ||
   (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+const resolvedRefreshPath = import.meta.env.VITE_AUTH_REFRESH_PATH || '/api/auth/refresh';
 
 const api = axios.create({
   baseURL: resolvedBaseURL,
@@ -79,7 +80,7 @@ const refreshSession = async (): Promise<RefreshTokens> => {
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         try {
-          const response = await axios.post(`${resolvedBaseURL}/api/auth/refresh`, {
+          const response = await axios.post(`${resolvedBaseURL}${resolvedRefreshPath}`, {
             refreshToken: session.refreshToken,
           });
 
