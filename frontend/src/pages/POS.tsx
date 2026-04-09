@@ -1,10 +1,16 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import HeaderBar from '../components/ui/HeaderBar';
 import CategorySidebar from '../components/ui/CategorySidebar';
 import ProductCard from '../components/ui/ProductCard';
 import OrderPanel from '../components/ui/OrderPanel';
+import {
+  POSLazyLoyaltyModal,
+  POSLazyModifierModal,
+  POSLazyPaymentModal,
+  POSLazyRedeemPointsModal,
+} from '../components/ui/lazyPosModals';
 import { useCatalogStore, type Product } from '../store/catalog';
 import {
   useOrderStore,
@@ -1038,7 +1044,7 @@ const POSPage: React.FC = () => {
       )}
       <Suspense fallback={null}>
         {isPaymentOpen ? (
-          <LazyPaymentModal
+          <POSLazyPaymentModal
             open={isPaymentOpen}
             total={total}
             method={paymentMethod}
@@ -1048,21 +1054,21 @@ const POSPage: React.FC = () => {
           />
         ) : null}
         {modifierProduct ? (
-          <LazyModifierModal
+          <POSLazyModifierModal
             product={modifierProduct}
             onClose={handleModifierClose}
             onConfirm={handleModifierConfirm}
           />
         ) : null}
         {isLoyaltyOpen ? (
-          <LazyLoyaltyModal
+          <POSLazyLoyaltyModal
             open={isLoyaltyOpen}
             onClose={() => setLoyaltyOpen(false)}
             onAttach={(selectedCustomer: CustomerSummary | null) => void handleAttachCustomer(selectedCustomer)}
           />
         ) : null}
         {isRedeemOpen ? (
-          <LazyRedeemPointsModal
+          <POSLazyRedeemPointsModal
             open={isRedeemOpen}
             onClose={() => setRedeemOpen(false)}
             maxPoints={redeemablePoints}
