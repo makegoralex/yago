@@ -5,6 +5,7 @@ import api from '../lib/api';
 import { fetchContent, loadContent, saveContent } from '../lib/contentStore';
 import { useAuthStore } from '../store/auth';
 import type { BlogPost, InstructionLink, NewsItem, ScreenshotItem } from '../constants/content';
+import type { ContentCollection } from '../lib/contentStore';
 
 type BillingInfo = {
   plan: 'trial' | 'paid' | string;
@@ -155,6 +156,7 @@ const SuperAdminPage: React.FC = () => {
   const [screenshotDrafts, setScreenshotDrafts] = useState<ScreenshotItem[]>(initialContent.screenshotGallery);
   const [screenshotForm, setScreenshotForm] = useState({ title: '', description: '' });
   const [editingScreenshotIndex, setEditingScreenshotIndex] = useState<number | null>(null);
+  const [lastSyncedContent, setLastSyncedContent] = useState<ContentCollection | null>(null);
 
   const greeting = useMemo(() => {
     const name = user?.name?.trim();
@@ -489,6 +491,7 @@ const SuperAdminPage: React.FC = () => {
       setBlogDrafts(nextContent.blogPosts);
       setInstructionDrafts(nextContent.instructionLinks);
       setScreenshotDrafts(nextContent.screenshotGallery);
+      setLastSyncedContent(nextContent);
     });
     return () => {
       isActive = false;
@@ -496,13 +499,25 @@ const SuperAdminPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    void saveContent({
+    const currentContent: ContentCollection = {
       newsItems: newsDrafts,
       blogPosts: blogDrafts,
       instructionLinks: instructionDrafts,
       screenshotGallery: screenshotDrafts,
+    };
+
+    if (!lastSyncedContent) {
+      return;
+    }
+
+    if (JSON.stringify(currentContent) === JSON.stringify(lastSyncedContent)) {
+      return;
+    }
+
+    void saveContent(currentContent).then(() => {
+      setLastSyncedContent(currentContent);
     });
-  }, [blogDrafts, instructionDrafts, newsDrafts, screenshotDrafts]);
+  }, [blogDrafts, instructionDrafts, lastSyncedContent, newsDrafts, screenshotDrafts]);
 
   const handleToggleBilling = async (nextValue: boolean) => {
     setBillingConfigSaving(true);
