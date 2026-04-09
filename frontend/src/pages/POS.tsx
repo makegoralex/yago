@@ -21,6 +21,11 @@ import { useBillingInfo } from '../hooks/useBillingInfo';
 import { useToast } from '../providers/ToastProvider';
 import { initDebug } from '../lib/initDebug';
 
+const LazyPaymentModal = lazy(() => import('../components/ui/PaymentModal'));
+const LazyLoyaltyModal = lazy(() => import('../components/ui/LoyaltyModal'));
+const LazyRedeemPointsModal = lazy(() => import('../components/ui/RedeemPointsModal'));
+const LazyModifierModal = lazy(() => import('../components/ui/ModifierModal'));
+
 const PaymentModal = lazy(() => import('../components/ui/PaymentModal'));
 const LoyaltyModal = lazy(() => import('../components/ui/LoyaltyModal'));
 const RedeemPointsModal = lazy(() => import('../components/ui/RedeemPointsModal'));
@@ -1033,7 +1038,7 @@ const POSPage: React.FC = () => {
       )}
       <Suspense fallback={null}>
         {isPaymentOpen ? (
-          <PaymentModal
+          <LazyPaymentModal
             open={isPaymentOpen}
             total={total}
             method={paymentMethod}
@@ -1043,21 +1048,21 @@ const POSPage: React.FC = () => {
           />
         ) : null}
         {modifierProduct ? (
-          <ModifierModal
+          <LazyModifierModal
             product={modifierProduct}
             onClose={handleModifierClose}
             onConfirm={handleModifierConfirm}
           />
         ) : null}
         {isLoyaltyOpen ? (
-          <LoyaltyModal
+          <LazyLoyaltyModal
             open={isLoyaltyOpen}
             onClose={() => setLoyaltyOpen(false)}
             onAttach={(selectedCustomer: CustomerSummary | null) => void handleAttachCustomer(selectedCustomer)}
           />
         ) : null}
         {isRedeemOpen ? (
-          <RedeemPointsModal
+          <LazyRedeemPointsModal
             open={isRedeemOpen}
             onClose={() => setRedeemOpen(false)}
             maxPoints={redeemablePoints}
