@@ -100,6 +100,18 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
       set({ currentShift: nextShift, error: null });
       return nextShift;
     } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        try {
+          const recoveredShift = await get().fetchCurrentShift();
+          if (recoveredShift) {
+            set({ error: null });
+            return recoveredShift;
+          }
+        } catch {
+          // ignore nested recovery error, fallback to original behavior below
+        }
+      }
+
       set({ error: 'Не удалось открыть смену' });
       throw error;
     } finally {

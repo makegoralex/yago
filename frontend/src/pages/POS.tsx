@@ -26,6 +26,11 @@ const LoyaltyModal = lazy(() => import('../components/ui/LoyaltyModal'));
 const RedeemPointsModal = lazy(() => import('../components/ui/RedeemPointsModal'));
 const ModifierModal = lazy(() => import('../components/ui/ModifierModal'));
 
+const PaymentModal = lazy(() => import('../components/ui/PaymentModal'));
+const LoyaltyModal = lazy(() => import('../components/ui/LoyaltyModal'));
+const RedeemPointsModal = lazy(() => import('../components/ui/RedeemPointsModal'));
+const ModifierModal = lazy(() => import('../components/ui/ModifierModal'));
+
 const PRODUCT_GRID_OVERSCAN_ROWS = 2;
 const PRODUCT_ROW_BASE_HEIGHT = 180;
 const PRODUCT_ROW_GAP_BASE = 8;
@@ -256,29 +261,22 @@ const POSPage: React.FC = () => {
       return;
     }
 
-    if (shouldFetchActiveOrders) {
-      setOrderInitLoading(true);
-      try {
-        initDebug.start('fetchActiveOrders');
-        await withStepTimeout(fetchActiveOrders(), 12000, 'Active orders init timeout');
-        initDebug.end('fetchActiveOrders');
+    setOrderInitLoading(true);
+    try {
+      initDebug.start('fetchActiveOrders');
+      await withStepTimeout(fetchActiveOrders(), 12000, 'Active orders init timeout');
+      initDebug.end('fetchActiveOrders');
 
-        const latestOrders = useOrderStore.getState().activeOrders;
-        const draftOrder = latestOrders.find((order) => order.status === 'draft') ?? latestOrders[0];
-        if (draftOrder) {
-          await withStepTimeout(loadOrder(draftOrder._id), 12000, 'Load draft timeout');
-        }
-      } catch (error) {
-        setOrderInitError('Не удалось восстановить активные заказы. Основная витрина работает, попробуйте обновить заказы позже.');
-        initDebug.error('fetchActiveOrders', error);
-      } finally {
-        setOrderInitLoading(false);
+      const latestOrders = useOrderStore.getState().activeOrders;
+      const draftOrder = latestOrders.find((order) => order.status === 'draft') ?? latestOrders[0];
+      if (draftOrder) {
+        await withStepTimeout(loadOrder(draftOrder._id), 12000, 'Load draft timeout');
       }
-    }
-
-    if (!shouldRunSecondaryBackgroundRequests) {
-      initDebug.end('pos_init', { status: 'catalog_only' });
-      return;
+    } catch (error) {
+      setOrderInitError('Не удалось восстановить активные заказы. Основная витрина работает, попробуйте обновить заказы позже.');
+      initDebug.error('fetchActiveOrders', error);
+    } finally {
+      setOrderInitLoading(false);
     }
 
     void (async () => {
@@ -307,10 +305,6 @@ const POSPage: React.FC = () => {
   }, [initializePos]);
 
   useEffect(() => {
-    if (!shouldFetchActiveOrders) {
-      return;
-    }
-
     if (orderInitLoading || isStartingOrder || orderId || activeOrders.length === 0) {
       return;
     }
@@ -630,7 +624,16 @@ const POSPage: React.FC = () => {
       await fetchShiftHistory().catch(() => undefined);
       setShiftPanelOpen(false);
     } catch (error) {
-      // ignore
+      const recoveredShift = await fetchCurrentShift().catch(() => null);
+      if (recoveredShift) {
+        await fetchShiftHistory().catch(() => undefined);
+        setShiftPanelOpen(false);
+        notify({
+          title: 'Смена уже была открыта',
+          description: 'Состояние синхронизировано.',
+          type: 'info',
+        });
+      }
     }
   };
 
