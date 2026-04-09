@@ -124,6 +124,10 @@ app.get('/healthz/client-compat', (_req, res) => {
   res.json({ metrics: getClientCompatibilityMetrics() });
 });
 
+app.post('/api/refresh/auth', (req, res) => {
+  res.redirect(307, '/api/auth/refresh');
+});
+
 app.use('/api/auth', authRouter);
 app.use('/api/content', contentRouter);
 app.use('/api/organizations', organizationsRouter);
