@@ -4,13 +4,14 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
-import android.util.Log
+import androidx.appcompat.app.AlertDialog
 import com.yago.evotor.auth.ApiClient
 import com.yago.evotor.auth.LoginActivity
 import com.yago.evotor.auth.SessionStorage
@@ -28,7 +29,15 @@ class MainActivity : IntegrationAppCompatActivity() {
     @Volatile private var isProcessingRemoteSaleCommand = false
     @Volatile private var pendingRemoteOrderId: String? = null
     private val activeOrders = mutableListOf<ApiClient.ActiveOrder>()
+    private var availableProducts: List<ApiClient.CatalogProduct> = emptyList()
+    private var availableDiscounts: List<ApiClient.DiscountSummary> = emptyList()
     private lateinit var ordersAdapter: ArrayAdapter<String>
+
+    companion object {
+        private const val TAG = "YagoEvotor"
+        private const val DEFAULT_LOCATION_ID = "main-store"
+        private const val DEFAULT_REGISTER_ID = "front-register"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +57,7 @@ class MainActivity : IntegrationAppCompatActivity() {
         val statusText = findViewById<TextView>(R.id.statusText)
         val ordersListView = findViewById<ListView>(R.id.ordersList)
         val saleButton = findViewById<Button>(R.id.saleButton)
+        val createOrderButton = findViewById<Button>(R.id.createOrderButton)
         val logoutButton = findViewById<Button>(R.id.logoutButton)
 
         ordersAdapter =
@@ -64,6 +74,7 @@ class MainActivity : IntegrationAppCompatActivity() {
             getString(R.string.pos_ready_message, organizationLabel)
 
         saleButton.isEnabled = false
+        createOrderButton.isEnabled = false
 
         ordersListView.setOnItemClickListener { _, _, position, _ ->
             saleButton.isEnabled = position in activeOrders.indices
@@ -92,6 +103,7 @@ class MainActivity : IntegrationAppCompatActivity() {
             }
 
             try {
+                logPoint("manual_sale_requested", mapOf("orderId" to order.id))
                 if (!openSellReceiptWithItems(order)) {
                     Toast.makeText(
                         this,
@@ -100,13 +112,28 @@ class MainActivity : IntegrationAppCompatActivity() {
                     ).show()
                 }
             } catch (error: Throwable) {
-                Log.e("YagoEvotor", "Manual sale launch failed", error)
+                Log.e(TAG, "Manual sale launch failed", error)
                 Toast.makeText(
                     this,
                     getString(R.string.sale_intent_error),
                     Toast.LENGTH_SHORT
                 ).show()
             }
+        }
+
+        createOrderButton.setOnClickListener {
+            val latestSession = sessionStorage.loadSession()
+            if (latestSession == null) {
+                Toast.makeText(this, getString(R.string.session_expired), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            if (availableProducts.isEmpty()) {
+                Toast.makeText(this, getString(R.string.catalog_empty), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            openCreateOrderDialog(latestSession)
         }
 
         logoutButton.setOnClickListener {
@@ -123,6 +150,7 @@ class MainActivity : IntegrationAppCompatActivity() {
 
                         runOnUiThread {
                             updateOrders(orders)
+                            createOrderButton.isEnabled = availableProducts.isNotEmpty()
                             saleButton.isEnabled =
                                 ordersListView.checkedItemPosition in activeOrders.indices
                         }
@@ -144,6 +172,7 @@ class MainActivity : IntegrationAppCompatActivity() {
                             finish()
                         }
                     } catch (error: Exception) {
+                        Log.e(TAG, "Polling failed", error)
                         val details = error.message?.takeIf { it.isNotBlank() }
                             ?: getString(R.string.error_unknown)
 
@@ -178,6 +207,10 @@ class MainActivity : IntegrationAppCompatActivity() {
         val currentSession = sessionStorage.loadSession() ?: throw SessionExpiredException()
 
         return try {
+            logPoint("fetch_orders_started")
+            val products = ApiClient.fetchCatalogProducts(currentSession.baseUrl, currentSession.accessToken)
+            availableProducts = products
+            availableDiscounts = ApiClient.fetchAvailableDiscounts(currentSession.baseUrl, currentSession.accessToken)
             ApiClient.fetchActiveOrders(currentSession.baseUrl, currentSession.accessToken)
         } catch (error: ApiClient.ApiException) {
             if (error.statusCode != 401 && error.statusCode != 403) throw error
@@ -195,6 +228,11 @@ class MainActivity : IntegrationAppCompatActivity() {
                 )
             sessionStorage.saveSession(updatedSession)
 
+            logPoint("session_refreshed")
+
+            val products = ApiClient.fetchCatalogProducts(updatedSession.baseUrl, updatedSession.accessToken)
+            availableProducts = products
+            availableDiscounts = ApiClient.fetchAvailableDiscounts(updatedSession.baseUrl, updatedSession.accessToken)
             ApiClient.fetchActiveOrders(updatedSession.baseUrl, updatedSession.accessToken)
         }
     }
@@ -299,7 +337,7 @@ class MainActivity : IntegrationAppCompatActivity() {
         isProcessingRemoteSaleCommand = true
         pendingRemoteOrderId = command.targetOrderId
 
-        Log.i("YagoEvotor", "Received remote sale command ${command.id} for order ${command.targetOrderId}")
+        logPoint("remote_sale_command_received", mapOf("commandId" to command.id, "orderId" to command.targetOrderId))
 
         runOnUiThread {
             try {
@@ -319,7 +357,7 @@ class MainActivity : IntegrationAppCompatActivity() {
                                 "evotor_sale_receipt_activity_not_available"
                             )
                         } catch (ackError: Exception) {
-                            Log.e("YagoEvotor", "Failed to ack unavailable activity", ackError)
+                            Log.e(TAG, "Failed to ack unavailable activity", ackError)
                         } finally {
                             isProcessingRemoteSaleCommand = false
                             pendingRemoteOrderId = null
@@ -339,14 +377,14 @@ class MainActivity : IntegrationAppCompatActivity() {
                             "accepted"
                         )
                     } catch (error: Exception) {
-                        Log.e("YagoEvotor", "Failed to ack accepted sale command", error)
+                        Log.e(TAG, "Failed to ack accepted sale command", error)
                     } finally {
                         isProcessingRemoteSaleCommand = false
                         pendingRemoteOrderId = null
                     }
                 }.start()
             } catch (error: Exception) {
-                Log.e("YagoEvotor", "Remote sale command handling failed", error)
+                Log.e(TAG, "Remote sale command handling failed", error)
                 Thread {
                     try {
                         ApiClient.ackSaleCommand(
@@ -357,7 +395,7 @@ class MainActivity : IntegrationAppCompatActivity() {
                             error.message ?: "Failed to open sell receipt"
                         )
                     } catch (ackError: Exception) {
-                        Log.e("YagoEvotor", "Failed to ack failed sale command", ackError)
+                        Log.e(TAG, "Failed to ack failed sale command", ackError)
                     } finally {
                         isProcessingRemoteSaleCommand = false
                         pendingRemoteOrderId = null
@@ -369,17 +407,18 @@ class MainActivity : IntegrationAppCompatActivity() {
 
     private fun openSellReceiptEditor(): Boolean {
         return try {
+            logPoint("evotor_sell_intent_open")
             val intent = NavigationApi.createIntentForSellReceiptEdit(false)
             val canHandle = intent.resolveActivity(packageManager) != null
             if (!canHandle) {
-                Log.w("YagoEvotor", "No activity found for Evotor sell receipt intent")
+                Log.w(TAG, "No activity found for Evotor sell receipt intent")
                 false
             } else {
                 startActivity(intent)
                 true
             }
         } catch (error: Throwable) {
-            Log.e("YagoEvotor", "Failed to start Evotor sell receipt activity", error)
+            Log.e(TAG, "Failed to start Evotor sell receipt activity", error)
             false
         }
     }
@@ -389,8 +428,138 @@ class MainActivity : IntegrationAppCompatActivity() {
     }
 
     private fun openSellReceiptEditorWithPendingOrder(order: ApiClient.ActiveOrder): Boolean {
+        logPoint("pending_order_stored", mapOf("orderId" to order.id, "itemsCount" to order.items.size.toString()))
         PendingSellOrderStore.set(order)
         return openSellReceiptEditor()
     }
 
+    private fun openCreateOrderDialog(session: com.yago.evotor.auth.Session) {
+        val productTitles = availableProducts.map { product ->
+            getString(
+                R.string.catalog_item_row,
+                product.name,
+                currencyFormat.format(product.price)
+            )
+        }.toTypedArray()
+
+        val selected = BooleanArray(productTitles.size)
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.create_order_dialog_title))
+            .setMultiChoiceItems(productTitles, selected) { _, which, isChecked ->
+                selected[which] = isChecked
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(getString(R.string.create_order_next)) { _, _ ->
+                val selectedProducts = availableProducts.filterIndexed { index, _ -> selected.getOrElse(index) { false } }
+                if (selectedProducts.isEmpty()) {
+                    Toast.makeText(this, getString(R.string.create_order_products_required), Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                openDiscountDialog(session, selectedProducts)
+            }
+            .show()
+    }
+
+    private fun openDiscountDialog(
+        session: com.yago.evotor.auth.Session,
+        selectedProducts: List<ApiClient.CatalogProduct>
+    ) {
+        if (availableDiscounts.isEmpty()) {
+            createOrderAndSync(session, selectedProducts, emptyList())
+            return
+        }
+
+        val discountTitles = availableDiscounts.map { discount ->
+            getString(
+                R.string.discount_item_row,
+                discount.name,
+                if (discount.type == "percentage") "${discount.value.toInt()}%" else "${currencyFormat.format(discount.value)} ₽"
+            )
+        }.toTypedArray()
+
+        val selected = BooleanArray(discountTitles.size)
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.create_order_discounts_title))
+            .setMultiChoiceItems(discountTitles, selected) { _, which, isChecked ->
+                selected[which] = isChecked
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(getString(R.string.create_order_submit)) { _, _ ->
+                val selectedDiscountIds = availableDiscounts
+                    .filterIndexed { index, _ -> selected.getOrElse(index) { false } }
+                    .map { it.id }
+
+                createOrderAndSync(session, selectedProducts, selectedDiscountIds)
+            }
+            .show()
+    }
+
+    private fun createOrderAndSync(
+        session: com.yago.evotor.auth.Session,
+        selectedProducts: List<ApiClient.CatalogProduct>,
+        selectedDiscountIds: List<String>
+    ) {
+        Toast.makeText(this, getString(R.string.create_order_in_progress), Toast.LENGTH_SHORT).show()
+
+        Thread {
+            try {
+                logPoint("create_order_started", mapOf("productsCount" to selectedProducts.size.toString()))
+
+                val result = ApiClient.createOrderFromProducts(
+                    baseUrl = session.baseUrl,
+                    accessToken = session.accessToken,
+                    locationId = DEFAULT_LOCATION_ID,
+                    registerId = DEFAULT_REGISTER_ID,
+                    products = selectedProducts,
+                    selectedDiscountIds = selectedDiscountIds
+                )
+
+                availableDiscounts = result.availableDiscounts
+
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.create_order_success, result.order.id.takeLast(6)),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    logPoint("create_order_success", mapOf("orderId" to result.order.id))
+                    refreshOrdersAfterCreate(result.order.id)
+                }
+            } catch (error: Exception) {
+                Log.e(TAG, "Failed to create order", error)
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.create_order_error, error.message ?: getString(R.string.error_unknown)),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun refreshOrdersAfterCreate(orderId: String) {
+        val listView = findViewById<ListView>(R.id.ordersList)
+        Thread {
+            val session = SessionStorage(this).loadSession() ?: return@Thread
+            try {
+                val orders = ApiClient.fetchActiveOrders(session.baseUrl, session.accessToken)
+                runOnUiThread {
+                    updateOrders(orders)
+                    val index = activeOrders.indexOfFirst { it.id == orderId }
+                    if (index >= 0) {
+                        listView.setItemChecked(index, true)
+                    }
+                }
+            } catch (error: Exception) {
+                Log.w(TAG, "Unable to refresh orders after create", error)
+            }
+        }.start()
+    }
+
+    private fun logPoint(stage: String, details: Map<String, String> = emptyMap()) {
+        Log.i(TAG, "[flow] $stage ${if (details.isEmpty()) "" else details}")
+    }
 }

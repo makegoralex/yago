@@ -22,8 +22,10 @@ class SellReceiptIntegrationService : IntegrationService() {
                     event: BeforePositionsEditedEvent,
                     callback: Callback
                 ) {
+                    Log.i(TAG, "[flow] before_positions_edited_received action=$action")
                     val order = PendingSellOrderStore.peek()
                     if (order == null || order.items.isEmpty()) {
+                        Log.i(TAG, "[flow] pending_order_not_found_or_empty")
                         if (order != null) {
                             PendingSellOrderStore.consumeFirst()
                         }
@@ -52,12 +54,14 @@ class SellReceiptIntegrationService : IntegrationService() {
                     }
 
                     if (changes.isEmpty()) {
+                        Log.w(TAG, "[flow] no_position_changes_generated orderId=${order.id}")
                         PendingSellOrderStore.consumeFirst()
                         callback.skip()
                         return
                     }
 
                     try {
+                        Log.i(TAG, "[flow] injecting_positions orderId=${order.id} count=${changes.size}")
                         callback.onResult(buildBeforePositionsEditedEventResult(changes))
                         PendingSellOrderStore.consumeFirst()
                     } catch (error: Throwable) {

@@ -1,5 +1,6 @@
 package com.yago.evotor
 
+import android.util.Log
 import com.yago.evotor.auth.ApiClient
 
 object PendingSellOrderStore {
@@ -15,6 +16,8 @@ object PendingSellOrderStore {
         while (queue.size > 5) {
             queue.removeFirstOrNull()
         }
+
+        Log.i("YagoEvotor", "[flow] pending_store_set orderId=${order.id} queueSize=${queue.size}")
     }
 
     @Synchronized
@@ -22,6 +25,7 @@ object PendingSellOrderStore {
 
     @Synchronized
     fun consumeFirst() {
-        queue.removeFirstOrNull()
+        val removed = queue.removeFirstOrNull()
+        Log.i("YagoEvotor", "[flow] pending_store_consume orderId=${removed?.id ?: "none"} queueSize=${queue.size}")
     }
 }
