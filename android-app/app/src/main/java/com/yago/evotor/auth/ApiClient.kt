@@ -1,6 +1,7 @@
 package com.yago.evotor.auth
 
 import android.content.Context
+import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -38,9 +39,28 @@ object ApiClient {
     )
 
     data class OrderItem(
+        val productId: String? = null,
         val name: String,
         val qty: Double,
         val total: Double
+    )
+
+    data class CatalogProduct(
+        val id: String,
+        val name: String,
+        val price: Double
+    )
+
+    data class DiscountSummary(
+        val id: String,
+        val name: String,
+        val type: String,
+        val value: Double
+    )
+
+    data class CreateOrderResult(
+        val order: ActiveOrder,
+        val availableDiscounts: List<DiscountSummary>
     )
 
     data class ActiveOrder(
@@ -160,6 +180,7 @@ object ApiClient {
 
                 items.add(
                     OrderItem(
+                        productId = normalizeId(itemJson.opt("productId")),
                         name = name,
                         qty = itemJson.optDouble("qty", 0.0),
                         total = itemJson.optDouble("total", 0.0)
@@ -212,6 +233,7 @@ object ApiClient {
 
             items.add(
                 OrderItem(
+                    productId = normalizeId(itemJson.opt("productId")),
                     name = name,
                     qty = itemJson.optDouble("qty", 0.0),
                     total = itemJson.optDouble("total", 0.0)
@@ -229,6 +251,197 @@ object ApiClient {
                 items = items
             )
         )
+    }
+
+    fun fetchCatalogProducts(baseUrl: String, accessToken: String): List<CatalogProduct> {
+        val endpoint = baseUrl.trimEnd('/') + "/api/catalog/pos"
+
+        val response = executeRequest(
+            endpoint,
+            "GET",
+            null,
+            mapOf("X-Yago-App-Token" to accessToken)
+        )
+
+        if (response.statusCode !in 200..299) {
+            throw ApiException(response.statusCode, extractErrorMessage(response.body))
+        }
+
+        val root = JSONObject(response.body)
+        val data = root.optJSONObject("data") ?: JSONObject()
+        val productsArray = data.optJSONArray("products") ?: JSONArray()
+
+        val products = mutableListOf<CatalogProduct>()
+        for (i in 0 until productsArray.length()) {
+            val productJson = productsArray.optJSONObject(i) ?: continue
+            val id = normalizeId(productJson.opt("_id")) ?: continue
+            val name = productJson.optString("name", "").trim()
+            if (name.isBlank()) continue
+
+            val price = when {
+                productJson.has("basePrice") -> productJson.optDouble("basePrice", 0.0)
+                productJson.has("price") -> productJson.optDouble("price", 0.0)
+                else -> 0.0
+            }
+
+            products.add(CatalogProduct(id = id, name = name, price = price))
+        }
+
+        return products
+    }
+
+    fun createOrderFromProducts(
+        baseUrl: String,
+        accessToken: String,
+        locationId: String,
+        registerId: String,
+        products: List<CatalogProduct>,
+        selectedDiscountIds: List<String>
+    ): CreateOrderResult {
+        if (products.isEmpty()) {
+            throw ApiException(null, "Не выбраны товары для заказа")
+        }
+
+        val startPayload = JSONObject().apply {
+            put("locationId", locationId)
+            put("registerId", registerId)
+        }
+
+        val started = executeRequest(
+            baseUrl.trimEnd('/') + "/api/orders/start",
+            "POST",
+            startPayload,
+            mapOf("X-Yago-App-Token" to accessToken)
+        )
+
+        if (started.statusCode !in 200..299) {
+            throw ApiException(started.statusCode, extractErrorMessage(started.body))
+        }
+
+        val startRoot = JSONObject(started.body)
+        val startedOrder = startRoot.optJSONObject("data")
+            ?: throw ApiException(null, "Сервер не вернул созданный заказ")
+
+        val orderId = normalizeId(startedOrder.opt("_id"))
+            ?: throw ApiException(null, "Сервер не вернул id заказа")
+
+        val items = JSONArray()
+        products.forEach { product ->
+            items.put(
+                JSONObject().apply {
+                    put("productId", product.id)
+                    put("qty", 1)
+                }
+            )
+        }
+
+        val updatePayload = JSONObject().apply {
+            put("items", items)
+            if (selectedDiscountIds.isNotEmpty()) {
+                put("discountIds", JSONArray(selectedDiscountIds))
+            }
+        }
+
+        val updated = executeRequest(
+            baseUrl.trimEnd('/') + "/api/orders/$orderId/items",
+            "POST",
+            updatePayload,
+            mapOf("X-Yago-App-Token" to accessToken)
+        )
+
+        if (updated.statusCode !in 200..299) {
+            throw ApiException(updated.statusCode, extractErrorMessage(updated.body))
+        }
+
+        val updatedRoot = JSONObject(updated.body)
+        val updatedOrder = updatedRoot.optJSONObject("data")
+            ?: throw ApiException(null, "Сервер не вернул обновлённый заказ")
+
+        return CreateOrderResult(
+            order = parseOrder(updatedOrder),
+            availableDiscounts = fetchAvailableDiscounts(baseUrl, accessToken, orderId)
+        )
+    }
+
+    fun fetchAvailableDiscounts(baseUrl: String, accessToken: String, orderId: String? = null): List<DiscountSummary> {
+        val endpoint = if (orderId.isNullOrBlank()) {
+            baseUrl.trimEnd('/') + "/api/orders/discounts/available"
+        } else {
+            baseUrl.trimEnd('/') + "/api/orders/discounts/available?orderId=$orderId"
+        }
+        val response = executeRequest(
+            endpoint,
+            "GET",
+            null,
+            mapOf("X-Yago-App-Token" to accessToken)
+        )
+
+        if (response.statusCode !in 200..299) {
+            Log.w("YagoEvotor", "Unable to fetch discounts for created order: ${response.statusCode}")
+            return emptyList()
+        }
+
+        val root = JSONObject(response.body)
+        val dataArray = root.optJSONArray("data") ?: JSONArray()
+        val discounts = mutableListOf<DiscountSummary>()
+
+        for (i in 0 until dataArray.length()) {
+            val discountJson = dataArray.optJSONObject(i) ?: continue
+            val id = normalizeId(discountJson.opt("_id")) ?: continue
+            val name = discountJson.optString("name", "").trim()
+            if (name.isBlank()) continue
+
+            discounts += DiscountSummary(
+                id = id,
+                name = name,
+                type = discountJson.optString("type", "fixed"),
+                value = discountJson.optDouble("value", 0.0)
+            )
+        }
+
+        return discounts
+    }
+
+    private fun parseOrder(orderJson: JSONObject): ActiveOrder {
+        val itemsArray = orderJson.optJSONArray("items") ?: JSONArray()
+        val items = mutableListOf<OrderItem>()
+
+        for (j in 0 until itemsArray.length()) {
+            val itemJson = itemsArray.optJSONObject(j) ?: continue
+            val name = itemJson.optString("name", "")
+            if (name.isBlank()) continue
+
+            items.add(
+                OrderItem(
+                    productId = normalizeId(itemJson.opt("productId")),
+                    name = name,
+                    qty = itemJson.optDouble("qty", 0.0),
+                    total = itemJson.optDouble("total", 0.0)
+                )
+            )
+        }
+
+        return ActiveOrder(
+            id = normalizeId(orderJson.opt("_id")) ?: orderJson.optString("id", ""),
+            status = orderJson.optString("status", ""),
+            total = orderJson.optDouble("total", 0.0),
+            items = items
+        )
+    }
+
+    private fun normalizeId(value: Any?): String? {
+        if (value == null || value == JSONObject.NULL) {
+            return null
+        }
+
+        return when (value) {
+            is JSONObject -> {
+                val nested = value.optString("_id", "")
+                nested.takeIf { it.isNotBlank() }
+            }
+
+            else -> value.toString().takeIf { it.isNotBlank() }
+        }
     }
 
     fun ackSaleCommand(
@@ -322,7 +535,10 @@ object ApiClient {
             ?: throw ApiException(null, "ApiClient is not initialized. Call initialize() first.")
 
         return try {
+            val startedAt = System.nanoTime()
             client.newCall(requestBuilder.build()).execute().use { response ->
+                val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+                Log.d("YagoEvotor", "HTTP $method $endpoint -> ${response.code} (${elapsedMs}ms)")
                 HttpResponse(
                     statusCode = response.code,
                     body = response.body?.string().orEmpty()
