@@ -34,6 +34,7 @@ export const orderSchemas = {
       items: z.array(orderItemSchema),
       manualDiscount: z.number().nonnegative().optional(),
       discountIds: z.array(objectIdSchema).optional(),
+      certificateCode: z.string().trim().min(1).max(64).nullish(),
       customerId: objectIdSchema.nullish(),
       orderTag: orderTagSchema,
     }),

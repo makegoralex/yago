@@ -26,6 +26,7 @@ import {
   withErrorHandling as withDiscountErrorHandling,
 } from '../modules/discounts/discount.router';
 import { fetchDiscountAnalyticsStats, fetchSalesAndShiftStats } from '../modules/adminStats/adminStats.service';
+import { CertificateModel } from '../modules/certificates/certificate.model';
 import {
   CashierServiceError,
   createCashierAccount,
@@ -589,5 +590,42 @@ router.get(
     res.json({ data: stats, error: null });
   })
 );
+
+
+const generateCertificateCode = (): string => `CERT-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+
+router.get('/certificates', asyncHandler(async (req: Request, res: Response) => {
+  const organizationId = getOrganizationObjectId(req);
+  if (!organizationId) {
+    res.status(403).json({ data: null, error: 'Organization context is required' });
+    return;
+  }
+  const data = await CertificateModel.find({ organizationId }).sort({ createdAt: -1 }).lean();
+  res.json({ data, error: null });
+}));
+
+router.post('/certificates', asyncHandler(async (req: Request, res: Response) => {
+  const organizationId = getOrganizationObjectId(req);
+  if (!organizationId) {
+    res.status(403).json({ data: null, error: 'Organization context is required' });
+    return;
+  }
+  const nominal = Number(req.body?.nominal);
+  const multiUse = Boolean(req.body?.multiUse);
+  const categoryIds = Array.isArray(req.body?.categoryIds) ? req.body.categoryIds.filter((id: string) => Types.ObjectId.isValid(id)).map((id: string) => new Types.ObjectId(id)) : [];
+  const qty = Math.max(1, Number(req.body?.quantity ?? 1));
+  const customCode = typeof req.body?.code === 'string' ? req.body.code.trim().toUpperCase() : '';
+  if (!Number.isFinite(nominal) || nominal <= 0) {
+    res.status(400).json({ data: null, error: 'nominal must be > 0' });
+    return;
+  }
+  const created = [];
+  for (let i = 0; i < qty; i += 1) {
+    const code = customCode && qty === 1 ? customCode : generateCertificateCode();
+    const doc = await CertificateModel.create({ organizationId, code, nominal, remaining: nominal, categoryIds, multiUse, isActive: true });
+    created.push(doc);
+  }
+  res.status(201).json({ data: created, error: null });
+}));
 
 export default router;

@@ -7,6 +7,7 @@ import { enforceActiveSubscription } from '../../middleware/subscription';
 import { validateRequest } from '../../middleware/validation';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
 import { CustomerModel } from '../customers/customer.model';
+import { CertificateModel } from '../certificates/certificate.model';
 import {
   earnLoyaltyPoints,
   redeemLoyaltyPoints,
@@ -386,6 +387,7 @@ type ItemsRequestPayload = {
   items: ItemPayload[];
   manualDiscount?: number;
   discountIds?: string[];
+  certificateCode?: string | null;
   customerId?: string | null;
   orderTag?: string | null;
 };
@@ -840,12 +842,47 @@ router.post(
       }
     }
 
+    let certificateDiscount = 0;
+    const normalizedCertificateCode = typeof payload.certificateCode === 'string' ? payload.certificateCode.trim().toUpperCase() : '';
+    if (normalizedCertificateCode) {
+      const certificate = await CertificateModel.findOne({ organizationId, code: normalizedCertificateCode, isActive: true });
+      if (!certificate) {
+        res.status(404).json({ data: null, error: 'Сертификат не найден' });
+        return;
+      }
+      if (certificate.remaining <= 0) {
+        res.status(400).json({ data: null, error: 'Баланс сертификата исчерпан' });
+        return;
+      }
+      const allowedCategoryIds = new Set((certificate.categoryIds ?? []).map((id) => id.toString()));
+      const eligibleSubtotal = items.reduce((acc, item) => {
+        if (!allowedCategoryIds.size || (item.categoryId && allowedCategoryIds.has(item.categoryId.toString()))) {
+          return acc + (typeof item.total === 'number' ? item.total : 0);
+        }
+        return acc;
+      }, 0);
+      const beforeCertificateTotal = roundCurrency(calculation.total);
+      const eligibleTotal = roundCurrency(Math.min(beforeCertificateTotal, eligibleSubtotal));
+      certificateDiscount = roundCurrency(Math.min(certificate.remaining, eligibleTotal));
+      if (certificateDiscount > 0) {
+        calculation.appliedDiscounts.push({
+          name: 'Подарочный сертификат',
+          type: 'fixed',
+          scope: 'order',
+          value: certificateDiscount,
+          amount: certificateDiscount,
+          application: 'manual',
+          targetName: normalizedCertificateCode,
+        });
+      }
+    }
+
     order.items = items;
     order.subtotal = calculation.subtotal;
-    order.discount = calculation.totalDiscount;
+    order.discount = roundCurrency(calculation.totalDiscount + certificateDiscount);
     order.manualDiscount = calculation.manualDiscount;
     order.appliedDiscounts = calculation.appliedDiscounts;
-    order.total = calculation.total;
+    order.total = roundCurrency(Math.max(0, calculation.total - certificateDiscount));
 
     await order.save();
     void pushOrderToEvotorSafe(order);
@@ -930,6 +967,23 @@ router.post(
       const message = error instanceof Error ? error.message : 'Сначала откройте смену на кассе';
       res.status(409).json({ data: null, error: message });
       return;
+    }
+
+
+    const certificateDiscountEntry = Array.isArray(order.appliedDiscounts)
+      ? order.appliedDiscounts.find((entry) => entry.name === 'Подарочный сертификат')
+      : null;
+    if (certificateDiscountEntry && certificateDiscountEntry.targetName) {
+      const certificate = await CertificateModel.findOne({ organizationId, code: certificateDiscountEntry.targetName });
+      if (certificate) {
+        const spent = roundCurrency(Math.min(certificate.remaining, certificateDiscountEntry.amount));
+        certificate.remaining = roundCurrency(Math.max(0, certificate.remaining - spent));
+        if (!certificate.multiUse || certificate.remaining <= 0) {
+          certificate.isActive = false;
+          certificate.usedAt = new Date();
+        }
+        await certificate.save();
+      }
     }
 
     if (order.manualDiscount > 0) {
@@ -1130,7 +1184,24 @@ router.post(
     }
 
     if (order.customerId) {
-      if (order.manualDiscount > 0) {
+  
+    const certificateDiscountEntry = Array.isArray(order.appliedDiscounts)
+      ? order.appliedDiscounts.find((entry) => entry.name === 'Подарочный сертификат')
+      : null;
+    if (certificateDiscountEntry && certificateDiscountEntry.targetName) {
+      const certificate = await CertificateModel.findOne({ organizationId, code: certificateDiscountEntry.targetName });
+      if (certificate) {
+        const spent = roundCurrency(Math.min(certificate.remaining, certificateDiscountEntry.amount));
+        certificate.remaining = roundCurrency(Math.max(0, certificate.remaining - spent));
+        if (!certificate.multiUse || certificate.remaining <= 0) {
+          certificate.isActive = false;
+          certificate.usedAt = new Date();
+        }
+        await certificate.save();
+      }
+    }
+
+    if (order.manualDiscount > 0) {
         try {
           await restoreLoyaltyPoints(order.customerId.toString(), order.manualDiscount);
         } catch (error) {
