@@ -33,6 +33,9 @@ type OrderPanelProps = {
   appliedDiscounts?: AppliedDiscount[];
   selectedDiscountIds?: string[];
   onToggleDiscount?: (discountId: string) => Promise<void> | void;
+  certificateCode?: string;
+  onApplyCertificate?: (code: string) => Promise<void> | void;
+  onClearCertificate?: () => Promise<void> | void;
   isCompleting?: boolean;
   orderTagsEnabled?: boolean;
   orderTag?: OrderTag | null;
@@ -70,6 +73,9 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   appliedDiscounts = [],
   selectedDiscountIds = [],
   onToggleDiscount,
+  certificateCode = '',
+  onApplyCertificate,
+  onClearCertificate,
   isCompleting = false,
   orderTagsEnabled = false,
   orderTag = null,
@@ -111,6 +117,9 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   };
 
   const [isDiscountPickerOpen, setDiscountPickerOpen] = useState(false);
+
+  const [certificateInput, setCertificateInput] = useState(certificateCode);
+
 
   const selectedManualDiscounts = useMemo(
     () => selectableDiscounts.filter((discountOption) => selectedDiscountIds.includes(discountOption._id)),
@@ -213,6 +222,38 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           </div>
         </div>
       ) : null}
+
+      <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+        <p className="text-xs font-semibold uppercase text-indigo-700">Сертификат</p>
+        <div className="mt-2 flex gap-2">
+          <input
+            value={certificateInput}
+            onChange={(event) => setCertificateInput(event.target.value.toUpperCase())}
+            placeholder="Код сертификата"
+            className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => onApplyCertificate?.(certificateInput)}
+            className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white"
+          >
+            Применить
+          </button>
+          {certificateCode ? (
+            <button
+              type="button"
+              onClick={() => {
+                setCertificateInput('');
+                onClearCertificate?.();
+              }}
+              className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700"
+            >
+              Сброс
+            </button>
+          ) : null}
+        </div>
+      </div>
+
       {selectableDiscounts.length > 0 ? (
         <div className="mx-4 mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
           <div className="flex items-center justify-between gap-2">

@@ -380,6 +380,16 @@ type AdminDiscount = {
   isActive: boolean;
 };
 
+type AdminCertificate = {
+  _id: string;
+  code: string;
+  nominal: number;
+  remaining: number;
+  categoryIds?: string[];
+  multiUse: boolean;
+  isActive: boolean;
+};
+
 type DiscountAnalyticsStats = {
   totalDiscountAmount: number;
   discountPercent: number;
@@ -842,6 +852,9 @@ const AdminPage: React.FC = () => {
   const [discountsReady, setDiscountsReady] = useState(false);
   const [discountsError, setDiscountsError] = useState<string | null>(null);
   const [discountActionId, setDiscountActionId] = useState<string | null>(null);
+  const [certificates, setCertificates] = useState<AdminCertificate[]>([]);
+  const [certificatesLoading, setCertificatesLoading] = useState(false);
+  const [certificateForm, setCertificateForm] = useState({ code: '', nominal: '', quantity: '1', multiUse: false, categoryIds: [] as string[] });
   const [creatingDiscount, setCreatingDiscount] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState<AdminDiscount | null>(null);
   const restaurantName = useRestaurantStore((state) => state.name);
@@ -1952,6 +1965,47 @@ const AdminPage: React.FC = () => {
     }
   }, [notify]);
 
+
+
+  const loadCertificates = useCallback(async () => {
+    try {
+      setCertificatesLoading(true);
+      const response = await api.get('/api/admin/certificates');
+      const payload = getResponseData<AdminCertificate[]>(response);
+      setCertificates(payload ?? []);
+    } catch (error) {
+      console.error('Не удалось загрузить сертификаты', error);
+      notify({ title: 'Не удалось загрузить сертификаты', type: 'error' });
+    } finally {
+      setCertificatesLoading(false);
+    }
+  }, [notify]);
+
+  const handleSubmitCertificate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nominal = Number(certificateForm.nominal);
+    const quantity = Math.max(1, Number(certificateForm.quantity || '1'));
+    if (!Number.isFinite(nominal) || nominal <= 0) {
+      notify({ title: 'Укажите корректный номинал', type: 'info' });
+      return;
+    }
+    try {
+      await api.post('/api/admin/certificates', {
+        code: certificateForm.code.trim() || undefined,
+        nominal,
+        quantity,
+        multiUse: certificateForm.multiUse,
+        categoryIds: certificateForm.categoryIds,
+      });
+      setCertificateForm({ code: '', nominal: '', quantity: '1', multiUse: false, categoryIds: [] });
+      notify({ title: 'Сертификаты созданы', type: 'success' });
+      await loadCertificates();
+    } catch (error) {
+      console.error('Не удалось создать сертификаты', error);
+      notify({ title: 'Не удалось создать сертификаты', type: 'error' });
+    }
+  };
+
   const handleReloadDiscounts = () => {
     setDiscountsReady(false);
     setDiscountsError(null);
@@ -2348,6 +2402,9 @@ const AdminPage: React.FC = () => {
       if (!discountsLoading && !discountsReady) {
         void loadDiscounts();
       }
+      if (!certificatesLoading && certificates.length === 0) {
+        void loadCertificates();
+      }
     }
 
     if (activeTab === 'menu') {
@@ -2402,6 +2459,9 @@ const AdminPage: React.FC = () => {
       if (!discountsLoading && !discountsReady) {
         void loadDiscounts();
       }
+      if (!certificatesLoading && certificates.length === 0) {
+        void loadCertificates();
+      }
     }
 
     if (activeTab === 'staff') {
@@ -2430,6 +2490,9 @@ const AdminPage: React.FC = () => {
     stockReceiptsLoading,
     loadStockReceipts,
     discountsLoading,
+    certificatesLoading,
+    certificates.length,
+    loadCertificates,
     discountsReady,
     loadDiscounts,
     salesStatsLoading,
@@ -9459,6 +9522,20 @@ const AdminPage: React.FC = () => {
           </Card>
         </div>
       ) : null}
+
+
+          <Card title="Подарочные сертификаты">
+            <form onSubmit={handleSubmitCertificate} className="mb-4 grid gap-3 text-sm md:grid-cols-2">
+              <input value={certificateForm.code} onChange={(e) => setCertificateForm((p) => ({ ...p, code: e.target.value }))} placeholder="Код (опционально)" className="rounded border border-slate-200 px-3 py-2" />
+              <input value={certificateForm.nominal} onChange={(e) => setCertificateForm((p) => ({ ...p, nominal: e.target.value }))} placeholder="Номинал" type="number" min={0} step={0.01} className="rounded border border-slate-200 px-3 py-2" />
+              <input value={certificateForm.quantity} onChange={(e) => setCertificateForm((p) => ({ ...p, quantity: e.target.value }))} placeholder="Количество" type="number" min={1} className="rounded border border-slate-200 px-3 py-2" />
+              <label className="flex items-center gap-2"><input type="checkbox" checked={certificateForm.multiUse} onChange={(e) => setCertificateForm((p) => ({ ...p, multiUse: e.target.checked }))} /> Многоразовый</label>
+              <button type="submit" className="rounded bg-emerald-600 px-3 py-2 font-semibold text-white md:col-span-2">Создать сертификаты</button>
+            </form>
+            {certificatesLoading ? <p className="text-sm text-slate-500">Загрузка…</p> : (
+              <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead><tr><th className="px-2 py-1 text-left">Код</th><th className="px-2 py-1 text-left">Номинал</th><th className="px-2 py-1 text-left">Остаток</th><th className="px-2 py-1 text-left">Статус</th></tr></thead><tbody>{certificates.map((c) => <tr key={c._id}><td className="px-2 py-1">{c.code}</td><td className="px-2 py-1">{c.nominal.toFixed(2)} ₽</td><td className="px-2 py-1">{c.remaining.toFixed(2)} ₽</td><td className="px-2 py-1">{c.isActive ? 'Активен' : 'Неактивен'}</td></tr>)}</tbody></table></div>
+            )}
+          </Card>
 
       {activeTab === 'cash-register' ? (
         <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">

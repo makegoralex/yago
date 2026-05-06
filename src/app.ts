@@ -87,7 +87,6 @@ app.use(
   compression({
     threshold: 1024,
     filter: compressionFilter,
-    brotli: { enabled: true },
   })
 );
 
