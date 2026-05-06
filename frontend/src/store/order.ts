@@ -704,7 +704,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         ...prev,
         ...nextState,
         selectedDiscountIds,
-        certificateCode: options.certificateCode !== undefined ? options.certificateCode ?? '' : get().certificateCode,
+        certificateCode: get().certificateCode,
       }));
 
       const evotorCommand = mapPayOrderEvotorCommand(orderPayload?.evotorCommand);
