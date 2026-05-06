@@ -33,6 +33,9 @@ type OrderPanelProps = {
   appliedDiscounts?: AppliedDiscount[];
   selectedDiscountIds?: string[];
   onToggleDiscount?: (discountId: string) => Promise<void> | void;
+  certificateCode?: string;
+  onApplyCertificate?: (code: string) => Promise<void> | void;
+  onClearCertificate?: () => Promise<void> | void;
   isCompleting?: boolean;
   orderTagsEnabled?: boolean;
   orderTag?: OrderTag | null;
@@ -70,6 +73,9 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   appliedDiscounts = [],
   selectedDiscountIds = [],
   onToggleDiscount,
+  certificateCode = '',
+  onApplyCertificate,
+  onClearCertificate,
   isCompleting = false,
   orderTagsEnabled = false,
   orderTag = null,
@@ -111,6 +117,9 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   };
 
   const [isDiscountPickerOpen, setDiscountPickerOpen] = useState(false);
+
+  const [certificateInput, setCertificateInput] = useState(certificateCode);
+
 
   const selectedManualDiscounts = useMemo(
     () => selectableDiscounts.filter((discountOption) => selectedDiscountIds.includes(discountOption._id)),
@@ -213,6 +222,8 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           </div>
         </div>
       ) : null}
+
+
       {selectableDiscounts.length > 0 ? (
         <div className="mx-4 mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
           <div className="flex items-center justify-between gap-2">
@@ -235,7 +246,41 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
           </div>
 
           {isDiscountPickerOpen ? (
-            <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-lg border border-amber-200 bg-white p-2">
+            <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-lg border border-amber-200 bg-white p-2">
+              <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 p-2">
+                <p className="mb-1 text-[10px] font-semibold uppercase text-indigo-700">Сертификат</p>
+                <div className="flex gap-1.5">
+                  <input
+                    value={certificateInput}
+                    onChange={(event) => setCertificateInput(event.target.value.toUpperCase())}
+                    placeholder="Код сертификата"
+                    className="w-full rounded-md border border-indigo-200 bg-white px-2 py-1.5 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await onApplyCertificate?.(certificateInput);
+                      setDiscountPickerOpen(false);
+                    }}
+                    className="rounded-md bg-indigo-600 px-2 py-1.5 text-[11px] font-semibold text-white"
+                  >
+                    ОК
+                  </button>
+                  {certificateCode ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setCertificateInput('');
+                        await onClearCertificate?.();
+                        setDiscountPickerOpen(false);
+                      }}
+                      className="rounded-md border border-indigo-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-indigo-700"
+                    >
+                      Сброс
+                    </button>
+                  ) : null}
+                </div>
+              </div>
               {selectableDiscounts.map((discountOption) => (
                 <button
                   key={discountOption._id}

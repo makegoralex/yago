@@ -155,6 +155,9 @@ const POSPage: React.FC = () => {
   const selectedDiscountIds = useOrderStore((state) => state.selectedDiscountIds);
   const fetchAvailableDiscounts = useOrderStore((state) => state.fetchAvailableDiscounts);
   const toggleDiscount = useOrderStore((state) => state.toggleDiscount);
+  const certificateCode = useOrderStore((state) => state.certificateCode);
+  const applyCertificate = useOrderStore((state) => state.applyCertificate);
+  const clearCertificate = useOrderStore((state) => state.clearCertificate);
   const shiftHistory = useOrderStore((state) => state.shiftHistory);
   const shiftHistoryLoading = useOrderStore((state) => state.shiftHistoryLoading);
   const fetchShiftHistory = useOrderStore((state) => state.fetchShiftHistory);
@@ -1011,6 +1014,9 @@ const POSPage: React.FC = () => {
               availableDiscounts={availableDiscounts}
               appliedDiscounts={appliedDiscounts}
               selectedDiscountIds={selectedDiscountIds}
+              certificateCode={certificateCode}
+              onApplyCertificate={async (code) => { await applyCertificate(code); }}
+              onClearCertificate={async () => { await clearCertificate(); }}
               onToggleDiscount={async (discountId) => {
                 try {
                   await toggleDiscount(discountId);
