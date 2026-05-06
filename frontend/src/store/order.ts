@@ -107,6 +107,7 @@ type OrderState = {
   appliedDiscounts: AppliedDiscount[];
   availableDiscounts: DiscountSummary[];
   selectedDiscountIds: string[];
+  certificateCode: string;
   shiftHistory: OrderHistoryEntry[];
   shiftHistoryLoading: boolean;
   createDraft: (options?: { forceNew?: boolean }) => Promise<void>;
@@ -121,7 +122,7 @@ type OrderState = {
   reset: () => void;
   syncItems: (
     items: OrderItem[],
-    options?: { manualDiscount?: number; customerId?: string | null; discountIds?: string[]; orderTag?: OrderTag | null }
+    options?: { manualDiscount?: number; customerId?: string | null; discountIds?: string[]; orderTag?: OrderTag | null; certificateCode?: string | null }
   ) => Promise<void>;
   setOrderTag: (tag: OrderTag | null) => Promise<void>;
   fetchActiveOrders: () => Promise<void>;
@@ -130,6 +131,8 @@ type OrderState = {
   clearDiscount: () => Promise<void>;
   fetchAvailableDiscounts: () => Promise<void>;
   toggleDiscount: (discountId: string) => Promise<void>;
+  applyCertificate: (code: string) => Promise<void>;
+  clearCertificate: () => Promise<void>;
   fetchShiftHistory: (options?: { registerId?: string }) => Promise<void>;
   resetShiftHistory: () => void;
 };
@@ -561,6 +564,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   appliedDiscounts: [],
   availableDiscounts: [],
   selectedDiscountIds: [],
+  certificateCode: '',
   shiftHistory: [],
   shiftHistoryLoading: false,
   async createDraft(options) {
@@ -588,6 +592,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         ...prev,
         ...nextState,
         selectedDiscountIds,
+        certificateCode: get().certificateCode,
       }));
 
       void get().fetchActiveOrders();
@@ -699,6 +704,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         ...prev,
         ...nextState,
         selectedDiscountIds,
+        certificateCode: options.certificateCode !== undefined ? options.certificateCode ?? '' : get().certificateCode,
       }));
 
       const evotorCommand = mapPayOrderEvotorCommand(orderPayload?.evotorCommand);
@@ -779,11 +785,12 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       loading: false,
       appliedDiscounts: [],
       selectedDiscountIds: [],
+      certificateCode: '',
     });
   },
   async syncItems(
     updatedItems: OrderItem[],
-    options: { manualDiscount?: number; customerId?: string | null; discountIds?: string[]; orderTag?: OrderTag | null } = {}
+    options: { manualDiscount?: number; customerId?: string | null; discountIds?: string[]; orderTag?: OrderTag | null; certificateCode?: string | null } = {}
   ) {
     const { orderId } = get();
     if (!orderId) return;
@@ -813,6 +820,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       discountIds,
       customerId,
       orderTag: normalizedOrderTag,
+      certificateCode: options.certificateCode !== undefined ? options.certificateCode : get().certificateCode || null,
     };
 
     set({ loading: true });
@@ -957,6 +965,16 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         console.error('Повторная загрузка скидок не удалась', retryError);
       }
     }
+  },
+
+  async applyCertificate(code) {
+    const normalized = (code ?? '').trim().toUpperCase();
+    set({ certificateCode: normalized });
+    await get().syncItems(get().items, { certificateCode: normalized || null });
+  },
+  async clearCertificate() {
+    set({ certificateCode: '' });
+    await get().syncItems(get().items, { certificateCode: null });
   },
   async toggleDiscount(discountId) {
     if (!discountId) {
