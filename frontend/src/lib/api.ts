@@ -1,11 +1,18 @@
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../store/auth';
-import { detectClientPlatform, getBuildMarker, logClientEvent } from './observability';
+import {
+  detectClientPlatform,
+  getBuildMarker,
+  logClientEvent,
+} from './observability';
 
 const resolvedBaseURL =
   import.meta.env.VITE_API_URL ||
-  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
-const resolvedRefreshPath = import.meta.env.VITE_AUTH_REFRESH_PATH || '/api/auth/refresh';
+  (typeof window !== 'undefined'
+    ? window.location.origin
+    : 'http://localhost:3000');
+const resolvedRefreshPath =
+  import.meta.env.VITE_AUTH_REFRESH_PATH || '/api/auth/refresh';
 
 const api = axios.create({
   baseURL: resolvedBaseURL,
@@ -20,6 +27,55 @@ type RefreshError = Error & {
 };
 
 let refreshRequest: Promise<RefreshTokens> | null = null;
+
+const getSuperAdminOrganizationId = (): string | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const authState = useAuthStore.getState();
+  if (
+    authState.session?.user?.role !== 'superAdmin' &&
+    authState.user?.role !== 'superAdmin'
+  ) {
+    return null;
+  }
+
+  const organizationId = new URLSearchParams(window.location.search)
+    .get('organizationId')
+    ?.trim();
+  return organizationId || null;
+};
+
+const appendOrganizationScope = (config: InternalAxiosRequestConfig): void => {
+  const organizationId = getSuperAdminOrganizationId();
+  if (!organizationId) {
+    return;
+  }
+
+  config.headers = config.headers ?? {};
+  config.headers['x-organization-id'] = organizationId;
+
+  const requestUrl = String(config.url ?? '');
+  if (!requestUrl.startsWith('/api/')) {
+    return;
+  }
+
+  const params = config.params;
+  if (params instanceof URLSearchParams) {
+    if (!params.has('organizationId')) {
+      params.set('organizationId', organizationId);
+    }
+    return;
+  }
+
+  if (params && typeof params === 'object' && !Array.isArray(params)) {
+    config.params = { organizationId, ...params };
+    return;
+  }
+
+  config.params = { organizationId };
+};
 
 const isTimeoutError = (error: unknown): boolean => {
   const axiosError = error as AxiosError;
@@ -76,13 +132,19 @@ const refreshSession = async (): Promise<RefreshTokens> => {
     refreshRequest = (async () => {
       const maxAttempts = 3;
       let lastError: RefreshError | null = null;
-      logClientEvent('auth_refresh_start', { maxAttempts, kpi: 'refresh_success_rate' });
+      logClientEvent('auth_refresh_start', {
+        maxAttempts,
+        kpi: 'refresh_success_rate',
+      });
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         try {
-          const response = await axios.post(`${resolvedBaseURL}${resolvedRefreshPath}`, {
-            refreshToken: session.refreshToken,
-          });
+          const response = await axios.post(
+            `${resolvedBaseURL}${resolvedRefreshPath}`,
+            {
+              refreshToken: session.refreshToken,
+            },
+          );
 
           const nextTokens = response.data.data as RefreshTokens;
           useAuthStore.getState().setSession({
@@ -92,7 +154,10 @@ const refreshSession = async (): Promise<RefreshTokens> => {
             remember: session.remember,
           });
 
-          logClientEvent('auth_refresh_success', { attempt, kpi: 'refresh_success_rate' });
+          logClientEvent('auth_refresh_success', {
+            attempt,
+            kpi: 'refresh_success_rate',
+          });
           return nextTokens;
         } catch (error) {
           const reason = classifyRefreshError(error);
@@ -100,7 +165,11 @@ const refreshSession = async (): Promise<RefreshTokens> => {
           refreshError.reason = reason;
           lastError = refreshError;
 
-          logClientEvent('auth_refresh_fail', { attempt, reason, kpi: 'unexpected_logout_rate' });
+          logClientEvent('auth_refresh_fail', {
+            attempt,
+            reason,
+            kpi: 'unexpected_logout_rate',
+          });
 
           if (reason === 'auth-invalid') {
             throw refreshError;
@@ -116,7 +185,12 @@ const refreshSession = async (): Promise<RefreshTokens> => {
         }
       }
 
-      throw lastError ?? Object.assign(new Error('Refresh failed'), { reason: 'unknown' as const });
+      throw (
+        lastError ??
+        Object.assign(new Error('Refresh failed'), {
+          reason: 'unknown' as const,
+        })
+      );
     })().finally(() => {
       refreshRequest = null;
     });
@@ -127,7 +201,8 @@ const refreshSession = async (): Promise<RefreshTokens> => {
 
 api.interceptors.request.use((config) => {
   const authState = useAuthStore.getState();
-  const accessToken = authState.session?.accessToken ?? authState.accessToken ?? undefined;
+  const accessToken =
+    authState.session?.accessToken ?? authState.accessToken ?? undefined;
 
   config.headers = config.headers ?? {};
   config.headers['x-client-platform'] = detectClientPlatform();
@@ -137,6 +212,8 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${accessToken}`;
   }
 
+  appendOrganizationScope(config);
+
   return config;
 });
 
@@ -145,7 +222,8 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const method = String(originalRequest?.method ?? 'get').toLowerCase();
-    const canRetryRequest = method === 'get' || method === 'head' || method === 'options';
+    const canRetryRequest =
+      method === 'get' || method === 'head' || method === 'options';
     const timeoutError = isTimeoutError(error);
     const networkError = isNetworkError(error);
 
@@ -159,7 +237,11 @@ api.interceptors.response.use(
       }
     }
 
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry
+    ) {
       originalRequest._retry = true;
 
       try {
@@ -178,7 +260,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;
