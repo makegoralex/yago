@@ -65,9 +65,9 @@ export const saveContent = async (nextContent: ContentCollection) => {
   }
 };
 
-export const fetchContent = async (): Promise<ContentCollection> => {
+export const fetchContent = async (options: { includeDrafts?: boolean } = {}): Promise<ContentCollection> => {
   try {
-    const response = await api.get('/api/content');
+    const response = await api.get(options.includeDrafts ? '/api/content/admin' : '/api/content');
     const payload = normalizeContent(response.data?.data ?? null);
     const storage = getStorage();
     if (storage) {

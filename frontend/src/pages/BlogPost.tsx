@@ -33,7 +33,12 @@ const BlogPostPage: React.FC = () => {
     applySeo({
       title: post.seoTitle || post.title,
       description: post.seoDescription || post.excerpt,
-      keywords: post.seoKeywords || 'Yago App, блог, кофейня, статьи, POS',
+      keywords: post.seoKeywords || post.focusKeyword || 'Yago App, блог, кофейня, статьи, POS',
+      canonicalUrl: post.canonicalUrl,
+      ogTitle: post.ogTitle || post.seoTitle || post.title,
+      ogDescription: post.ogDescription || post.seoDescription || post.excerpt,
+      ogImage: post.ogImage,
+      type: 'article',
     });
   }, [post]);
 

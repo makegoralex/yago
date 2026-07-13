@@ -151,6 +151,12 @@ const SuperAdminPage: React.FC = () => {
     seoTitle: '',
     seoDescription: '',
     seoKeywords: '',
+    focusKeyword: '',
+    canonicalUrl: '',
+    ogTitle: '',
+    ogDescription: '',
+    ogImage: '',
+    status: 'published' as 'draft' | 'published',
   });
   const [editingBlogSlug, setEditingBlogSlug] = useState<string | null>(null);
   const [screenshotDrafts, setScreenshotDrafts] = useState<ScreenshotItem[]>(initialContent.screenshotGallery);
@@ -286,6 +292,13 @@ const SuperAdminPage: React.FC = () => {
       seoTitle: blogForm.seoTitle.trim() || title,
       seoDescription: blogForm.seoDescription.trim() || excerpt,
       seoKeywords: blogForm.seoKeywords.trim(),
+      focusKeyword: blogForm.focusKeyword.trim(),
+      canonicalUrl: blogForm.canonicalUrl.trim(),
+      ogTitle: blogForm.ogTitle.trim(),
+      ogDescription: blogForm.ogDescription.trim(),
+      ogImage: blogForm.ogImage.trim(),
+      status: blogForm.status,
+      publishedAt: blogForm.status === 'published' ? new Date().toISOString() : null,
     };
     setBlogDrafts((posts) => {
       if (editingBlogSlug) {
@@ -303,6 +316,12 @@ const SuperAdminPage: React.FC = () => {
       seoTitle: '',
       seoDescription: '',
       seoKeywords: '',
+      focusKeyword: '',
+      canonicalUrl: '',
+      ogTitle: '',
+      ogDescription: '',
+      ogImage: '',
+      status: 'published',
     });
   };
 
@@ -365,6 +384,12 @@ const SuperAdminPage: React.FC = () => {
       seoTitle: post.seoTitle ?? '',
       seoDescription: post.seoDescription ?? '',
       seoKeywords: post.seoKeywords ?? '',
+      focusKeyword: post.focusKeyword ?? '',
+      canonicalUrl: post.canonicalUrl ?? '',
+      ogTitle: post.ogTitle ?? '',
+      ogDescription: post.ogDescription ?? '',
+      ogImage: post.ogImage ?? '',
+      status: post.status ?? 'published',
     });
   };
 
@@ -383,6 +408,12 @@ const SuperAdminPage: React.FC = () => {
         seoTitle: '',
         seoDescription: '',
         seoKeywords: '',
+        focusKeyword: '',
+        canonicalUrl: '',
+        ogTitle: '',
+        ogDescription: '',
+        ogImage: '',
+        status: 'published',
       });
     }
   };
@@ -485,7 +516,7 @@ const SuperAdminPage: React.FC = () => {
 
   useEffect(() => {
     let isActive = true;
-    fetchContent().then((nextContent) => {
+    fetchContent({ includeDrafts: true }).then((nextContent) => {
       if (!isActive) return;
       setNewsDrafts(nextContent.newsItems);
       setBlogDrafts(nextContent.blogPosts);
@@ -1671,6 +1702,75 @@ const SuperAdminPage: React.FC = () => {
                     placeholder="кофейня, учет, yago"
                   />
                 </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-slate-700">
+                    Фокусный ключ
+                    <input
+                      type="text"
+                      value={blogForm.focusKeyword}
+                      onChange={(event) => setBlogForm((form) => ({ ...form, focusKeyword: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="автоматизация кофейни"
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    Статус публикации
+                    <select
+                      value={blogForm.status}
+                      onChange={(event) =>
+                        setBlogForm((form) => ({ ...form, status: event.target.value as 'draft' | 'published' }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="published">Опубликовано</option>
+                      <option value="draft">Черновик</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-slate-700">
+                    Canonical URL
+                    <input
+                      type="text"
+                      value={blogForm.canonicalUrl}
+                      onChange={(event) => setBlogForm((form) => ({ ...form, canonicalUrl: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="https://yago-app.ru/blog/kak-uvelichit-vyruchku"
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    Open Graph картинка
+                    <input
+                      type="text"
+                      value={blogForm.ogImage}
+                      onChange={(event) => setBlogForm((form) => ({ ...form, ogImage: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="https://.../cover.jpg"
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-slate-700">
+                    Open Graph заголовок
+                    <input
+                      type="text"
+                      value={blogForm.ogTitle}
+                      onChange={(event) => setBlogForm((form) => ({ ...form, ogTitle: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="Заголовок для соцсетей"
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    Open Graph описание
+                    <input
+                      type="text"
+                      value={blogForm.ogDescription}
+                      onChange={(event) => setBlogForm((form) => ({ ...form, ogDescription: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      placeholder="Описание для шаринга"
+                    />
+                  </label>
+                </div>
                 <label className="text-sm text-slate-700">
                   Текст статьи (абзацы через новую строку)
                   <textarea
