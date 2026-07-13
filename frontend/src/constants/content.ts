@@ -67,6 +67,13 @@ export type BlogPost = {
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;
+  focusKeyword?: string;
+  canonicalUrl?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  status?: 'draft' | 'published';
+  publishedAt?: string | null;
 };
 
 export const blogPosts: BlogPost[] = [
