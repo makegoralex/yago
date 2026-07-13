@@ -13,26 +13,71 @@ interface TokenPayload {
 
 const TOKEN_COOKIE_NAMES = ['accessToken', 'token'];
 
-const parseCookieHeader = (cookieHeader: string | undefined): Record<string, string> => {
+const parseCookieHeader = (
+  cookieHeader: string | undefined,
+): Record<string, string> => {
   if (!cookieHeader) {
     return {};
   }
 
-  return cookieHeader.split(';').reduce<Record<string, string>>((acc, segment) => {
-    const [rawName, ...rest] = segment.split('=');
-    if (!rawName) {
-      return acc;
-    }
+  return cookieHeader
+    .split(';')
+    .reduce<Record<string, string>>((acc, segment) => {
+      const [rawName, ...rest] = segment.split('=');
+      if (!rawName) {
+        return acc;
+      }
 
-    const name = rawName.trim();
-    const value = rest.join('=').trim();
-    if (!name) {
-      return acc;
-    }
+      const name = rawName.trim();
+      const value = rest.join('=').trim();
+      if (!name) {
+        return acc;
+      }
 
-    acc[name] = value;
-    return acc;
-  }, {});
+      acc[name] = value;
+      return acc;
+    }, {});
+};
+
+const getStringHeader = (req: Request, name: string): string | undefined => {
+  const value = req.headers[name.toLowerCase()];
+  if (typeof value === 'string') {
+    return value.trim() || undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return value.find((item) => item.trim())?.trim();
+  }
+
+  return undefined;
+};
+
+const getStringQuery = (req: Request, name: string): string | undefined => {
+  const value = req.query[name];
+  if (typeof value === 'string') {
+    return value.trim() || undefined;
+  }
+
+  if (Array.isArray(value)) {
+    const firstString = value.find(
+      (item): item is string =>
+        typeof item === 'string' && item.trim().length > 0,
+    );
+    return firstString?.trim();
+  }
+
+  return undefined;
+};
+
+const resolveSuperAdminOrganizationId = (req: Request): string | undefined => {
+  if (req.user?.role !== 'superAdmin') {
+    return undefined;
+  }
+
+  return (
+    getStringQuery(req, 'organizationId') ??
+    getStringHeader(req, 'x-organization-id')
+  );
 };
 
 const safelyDecodeURIComponent = (value: string): string => {
@@ -43,7 +88,9 @@ const safelyDecodeURIComponent = (value: string): string => {
   }
 };
 
-const resolveAuthorizationHeaderToken = (headerValue: string | undefined): string | null => {
+const resolveAuthorizationHeaderToken = (
+  headerValue: string | undefined,
+): string | null => {
   if (!headerValue) {
     return null;
   }
@@ -133,29 +180,40 @@ export const resolveAccessToken = (req: Request): string | null => {
 export const authMiddleware = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const token = resolveAccessToken(req);
 
     if (!token) {
-      res.status(401).json({ data: null, error: 'Authorization token is required' });
+      res
+        .status(401)
+        .json({ data: null, error: 'Authorization token is required' });
       return;
     }
 
-    const payload = jwt.verify(token, appConfig.jwtAccessSecret) as TokenPayload;
+    const payload = jwt.verify(
+      token,
+      appConfig.jwtAccessSecret,
+    ) as TokenPayload;
 
-    const user = await UserModel.findById(payload.sub).select('name email role organizationId');
+    const user = await UserModel.findById(payload.sub).select(
+      'name email role organizationId',
+    );
 
     if (!user) {
       res.status(401).json({ data: null, error: 'User not found' });
       return;
     }
 
-    const organizationId = user.organizationId ? String(user.organizationId) : undefined;
+    const organizationId = user.organizationId
+      ? String(user.organizationId)
+      : undefined;
 
     if (user.role !== 'superAdmin' && !organizationId) {
-      res.status(403).json({ data: null, error: 'Organization context is required' });
+      res
+        .status(403)
+        .json({ data: null, error: 'Organization context is required' });
       return;
     }
 
@@ -167,8 +225,11 @@ export const authMiddleware = async (
       organizationId,
     };
 
-    if (req.user.organizationId) {
-      req.organization = { id: req.user.organizationId };
+    const scopedOrganizationId =
+      req.user.organizationId ?? resolveSuperAdminOrganizationId(req);
+
+    if (scopedOrganizationId) {
+      req.organization = { id: scopedOrganizationId };
     }
 
     next();
