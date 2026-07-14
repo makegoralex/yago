@@ -1796,6 +1796,12 @@ const SuperAdminPage: React.FC = () => {
                           seoTitle: '',
                           seoDescription: '',
                           seoKeywords: '',
+                          focusKeyword: '',
+                          canonicalUrl: '',
+                          ogTitle: '',
+                          ogDescription: '',
+                          ogImage: '',
+                          status: 'published',
                         });
                       }}
                       className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
