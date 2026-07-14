@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Megaphone } from 'lucide-react';
 import LandingHeader from '../components/ui/LandingHeader';
 import { fetchContent, loadContent, subscribeContentUpdates } from '../lib/contentStore';
 import { applySeo } from '../lib/seo';
@@ -59,7 +58,6 @@ const NewsPage: React.FC = () => {
                     <span>→</span>
                   </Link>
                 </div>
-                <Megaphone size={20} className="text-secondary" />
               </article>
             ))}
           </div>

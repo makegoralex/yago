@@ -53,7 +53,11 @@ const BlogPage: React.FC = () => {
               <article key={post.slug} className="flex flex-col justify-between rounded-xl border border-border bg-white p-5 shadow-soft">
                 <div className="space-y-2">
                   <div className="text-xs font-semibold uppercase tracking-wide text-secondary">{post.date}</div>
-                  <h2 className="text-xl font-semibold text-text">{post.title}</h2>
+                  <h2 className="text-xl font-semibold text-text">
+                    <Link to={`/blog/${post.slug}`} className="transition hover:text-secondary">
+                      {post.title}
+                    </Link>
+                  </h2>
                   <p className="text-sm text-slate-600">{post.excerpt}</p>
                 </div>
                 <div className="mt-4 flex items-center justify-between text-sm font-semibold text-secondary">

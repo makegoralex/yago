@@ -319,7 +319,9 @@ const LandingPage: React.FC = () => {
                 className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-5 shadow-sm"
               >
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{item.date}</div>
-                <h3 className="mt-2 text-lg font-semibold text-slate-900">{item.title}</h3>
+                <Link to={`/news/${item.slug}`} className="mt-2 block text-lg font-semibold text-slate-900 transition hover:text-primary">
+                  {item.title}
+                </Link>
                 <p className="mt-2 text-sm text-slate-600">{item.description}</p>
                 <Link to={`/news/${item.slug}`} className="mt-4 inline-flex text-sm font-semibold text-primary">
                   Открыть новость

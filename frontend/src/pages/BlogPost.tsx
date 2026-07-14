@@ -4,6 +4,47 @@ import LandingHeader from '../components/ui/LandingHeader';
 import { fetchContent, loadContent, subscribeContentUpdates } from '../lib/contentStore';
 import { applySeo } from '../lib/seo';
 
+const imagePattern = /^!\[([^\]]*)\]\(([^)]+)\)$/;
+
+const renderBlogBlock = (block: string, index: number) => {
+  const imageMatch = block.match(imagePattern);
+  if (imageMatch) {
+    const [, alt, src] = imageMatch;
+    return (
+      <figure key={index} className="overflow-hidden rounded-2xl border border-border bg-white shadow-soft">
+        <img src={src} alt={alt || 'Иллюстрация статьи'} className="max-h-[520px] w-full object-cover" loading="lazy" />
+        {alt ? <figcaption className="px-4 py-2 text-sm text-slate-500">{alt}</figcaption> : null}
+      </figure>
+    );
+  }
+
+  if (block.startsWith('## ')) {
+    return (
+      <h2 key={index} className="pt-3 text-2xl font-semibold leading-snug text-text">
+        {block.slice(3)}
+      </h2>
+    );
+  }
+
+  if (block.startsWith('> ')) {
+    return (
+      <blockquote key={index} className="rounded-xl border-l-4 border-secondary bg-secondary/5 px-4 py-3 text-slate-700">
+        {block.slice(2)}
+      </blockquote>
+    );
+  }
+
+  if (block.startsWith('- ')) {
+    return (
+      <ul key={index} className="list-disc space-y-2 pl-6">
+        <li>{block.slice(2)}</li>
+      </ul>
+    );
+  }
+
+  return <p key={index}>{block}</p>;
+};
+
 const BlogPostPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const [content, setContent] = useState(loadContent());
@@ -86,9 +127,7 @@ const BlogPostPage: React.FC = () => {
           </div>
 
           <div className="mt-6 space-y-4 text-base leading-relaxed text-slate-700">
-            {post.content.map((paragraph, index) => (
-              <p key={index}>{paragraph}</p>
-            ))}
+            {post.content.map((block, index) => renderBlogBlock(block, index))}
           </div>
         </article>
       </div>
