@@ -195,6 +195,36 @@ const SuperAdminPage: React.FC = () => {
       .map((line) => line.trim())
       .filter(Boolean);
 
+  const appendBlogContentBlock = (block: string) => {
+    setBlogForm((form) => ({
+      ...form,
+      content: [form.content.trimEnd(), block].filter(Boolean).join('\n'),
+    }));
+  };
+
+  const insertBlogImageByUrl = () => {
+    const src = window.prompt('Вставьте URL изображения для статьи');
+    if (!src?.trim()) return;
+    const alt = window.prompt('Alt-текст изображения', blogForm.title || 'Иллюстрация статьи') ?? '';
+    appendBlogContentBlock(`![${alt.trim() || 'Иллюстрация статьи'}](${src.trim()})`);
+  };
+
+  const handleBlogImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      window.alert('Выберите файл изображения.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return;
+      appendBlogContentBlock(`![${file.name.replace(/\.[^.]+$/, '') || 'Иллюстрация статьи'}](${reader.result})`);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const extractErrorMessage = (error: unknown, fallback: string) => {
     if (isAxiosError(error)) {
       return error.response?.data?.error ?? error.message;
@@ -1771,16 +1801,55 @@ const SuperAdminPage: React.FC = () => {
                     />
                   </label>
                 </div>
-                <label className="text-sm text-slate-700">
-                  Текст статьи (абзацы через новую строку)
-                  <textarea
-                    value={blogForm.content}
-                    onChange={(event) => setBlogForm((form) => ({ ...form, content: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                    rows={4}
-                    placeholder="Контент для /blog/:slug"
-                  />
-                </label>
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
+                    <button
+                      type="button"
+                      onClick={() => appendBlogContentBlock('## Новый подзаголовок')}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary/40 hover:text-primary"
+                    >
+                      H2
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => appendBlogContentBlock('- Пункт списка')}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary/40 hover:text-primary"
+                    >
+                      Список
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => appendBlogContentBlock('> Важная цитата или вывод')}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary/40 hover:text-primary"
+                    >
+                      Цитата
+                    </button>
+                    <button
+                      type="button"
+                      onClick={insertBlogImageByUrl}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary/40 hover:text-primary"
+                    >
+                      Картинка по URL
+                    </button>
+                    <label className="cursor-pointer rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary/40 hover:text-primary">
+                      Загрузить картинку
+                      <input type="file" accept="image/*" className="hidden" onChange={handleBlogImageUpload} />
+                    </label>
+                  </div>
+                  <label className="mt-3 block text-sm text-slate-700">
+                    Текст статьи
+                    <textarea
+                      value={blogForm.content}
+                      onChange={(event) => setBlogForm((form) => ({ ...form, content: event.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                      rows={8}
+                      placeholder="Абзацы с новой строки. Поддерживаются ## подзаголовки, - списки, > цитаты и ![alt](url) для изображений."
+                    />
+                  </label>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Изображения сохраняются в тексте статьи как Markdown: можно вставить URL или загрузить файл, который будет добавлен как data URL.
+                  </p>
+                </div>
                 <div className="flex flex-wrap items-center justify-end gap-3">
                   {editingBlogSlug && (
                     <button
