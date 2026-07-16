@@ -23,7 +23,7 @@ describe('SEO marketing pages', () => {
     const recipeHtml = renderSeoDocument(indexHtml, '/tools/recipe-card-generator');
     const analysisHtml = renderSeoDocument(indexHtml, '/tools/abc-xyz-analysis');
 
-    expect(recipeHtml).toContain('<title>Генератор технологических карт онлайн — скачать PDF бесплатно</title>');
+    expect(recipeHtml).toContain('<title>Генератор технологических карт с размерами — PDF бесплатно</title>');
     expect(recipeHtml).toContain('<h1>Генератор технологических карт для кофейни</h1>');
     expect(recipeHtml).toContain('rel="canonical" href="https://yago-app.ru/tools/recipe-card-generator"');
     expect(analysisHtml).toContain('<title>ABC/XYZ-анализ ассортимента и меню онлайн — бесплатно</title>');
