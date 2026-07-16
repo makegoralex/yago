@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import LandingHeader from '../ui/LandingHeader';
 import { tools, type ToolDefinition, type ToolTheme } from '../../features/tools/toolRegistry';
 import ToolSignupCta from './ToolSignupCta';
+import ToolsFooter from './ToolsFooter';
 
 const themeClasses: Record<ToolTheme, { badge: string; panel: string; glow: string }> = {
   amber: {
@@ -19,6 +20,16 @@ const themeClasses: Record<ToolTheme, { badge: string; panel: string; glow: stri
     badge: 'bg-emerald-100 text-emerald-900 ring-emerald-200',
     panel: 'from-emerald-50 via-teal-50 to-white border-emerald-200',
     glow: 'bg-emerald-500',
+  },
+  rose: {
+    badge: 'bg-rose-100 text-rose-900 ring-rose-200',
+    panel: 'from-rose-50 via-orange-50 to-white border-rose-200',
+    glow: 'bg-rose-500',
+  },
+  cyan: {
+    badge: 'bg-cyan-100 text-cyan-900 ring-cyan-200',
+    panel: 'from-cyan-50 via-sky-50 to-white border-cyan-200',
+    glow: 'bg-cyan-500',
   },
 };
 
@@ -78,7 +89,7 @@ const ToolShell: React.FC<ToolShellProps> = ({ tool, intro, children, methodolog
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wide text-primary">Ещё полезное</p>
-              <h2 className="mt-1 heading-font text-2xl font-semibold text-slate-950">Другие бесплатные калькуляторы</h2>
+              <h2 className="mt-1 heading-font text-2xl font-semibold text-slate-950">Другие бесплатные инструменты</h2>
             </div>
             <Link to="/tools" className="hidden text-sm font-semibold text-primary hover:text-primary-dark sm:inline">Все инструменты →</Link>
           </div>
@@ -94,16 +105,7 @@ const ToolShell: React.FC<ToolShellProps> = ({ tool, intro, children, methodolog
         </section>
       </main>
 
-      <footer className="border-t border-slate-200 bg-white py-8 text-sm text-slate-600">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div><span className="font-semibold text-slate-900">Yago App</span> · инструменты для владельцев кофеен</div>
-          <div className="flex flex-wrap gap-4">
-            <Link to="/tools" className="hover:text-primary">Инструменты</Link>
-            <Link to="/blog" className="hover:text-primary">Блог</Link>
-            <Link to="/" className="hover:text-primary">POS-система</Link>
-          </div>
-        </div>
-      </footer>
+      <ToolsFooter />
     </div>
   );
 };

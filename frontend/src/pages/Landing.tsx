@@ -251,8 +251,8 @@ const LandingPage: React.FC = () => {
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="max-w-3xl">
               <p className="text-sm font-semibold uppercase tracking-wide text-primary">Бесплатно и без регистрации</p>
-              <h2 className="mt-2 heading-font text-3xl font-semibold text-slate-900">Калькуляторы для владельца кофейни</h2>
-              <p className="mt-3 text-base leading-7 text-slate-600">Посчитайте себестоимость напитка, точку безубыточности и бюджет открытия прямо в браузере.</p>
+              <h2 className="mt-2 heading-font text-3xl font-semibold text-slate-900">Инструменты для владельца кофейни</h2>
+              <p className="mt-3 text-base leading-7 text-slate-600">Считайте экономику, оформляйте технологические карты и анализируйте меню прямо в браузере.</p>
             </div>
             <Link to="/tools" className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800">
               Все инструменты →

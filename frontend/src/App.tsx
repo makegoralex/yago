@@ -25,6 +25,8 @@ const ToolsHubPage = lazy(() => import('./pages/tools/ToolsHub'));
 const DrinkCostCalculatorPage = lazy(() => import('./pages/tools/DrinkCostCalculator'));
 const BreakEvenCalculatorPage = lazy(() => import('./pages/tools/BreakEvenCalculator'));
 const CoffeeShopOpeningCalculatorPage = lazy(() => import('./pages/tools/CoffeeShopOpeningCalculator'));
+const RecipeCardGeneratorPage = lazy(() => import('./pages/tools/RecipeCardGenerator'));
+const AbcXyzAnalysisPage = lazy(() => import('./pages/tools/AbcXyzAnalysis'));
 
 const OWNER_ROLES: UserRole[] = ['owner'];
 
@@ -111,6 +113,8 @@ const App: React.FC = () => {
           <Route path="/tools/drink-cost-calculator" element={<DrinkCostCalculatorPage />} />
           <Route path="/tools/break-even-calculator" element={<BreakEvenCalculatorPage />} />
           <Route path="/tools/coffee-shop-opening-calculator" element={<CoffeeShopOpeningCalculatorPage />} />
+          <Route path="/tools/recipe-card-generator" element={<RecipeCardGeneratorPage />} />
+          <Route path="/tools/abc-xyz-analysis" element={<AbcXyzAnalysisPage />} />
           <Route element={<ProtectedRoute allowed={['cashier', 'owner', 'kitchen']} />}>
             <Route path="/pos" element={<POSPage />} />
             <Route path="/kds" element={<KDSPage />} />

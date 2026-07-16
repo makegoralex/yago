@@ -12,6 +12,7 @@
 
 - `frontend/src/features/tools/toolRegistry.ts` — карточки, URL, SEO-тексты и темы.
 - `frontend/src/features/tools/calculations.ts` — чистые функции расчётов.
+- `frontend/src/features/tools/recipeCardPdf.ts` — локальная генерация PDF без передачи данных на сервер.
 - `frontend/src/components/tools/` — общая оболочка, поля и CTA.
 - `frontend/src/pages/tools/` — каталог и страницы калькуляторов.
 - `src/landing/seoPages.ts` — серверные метатеги и семантический HTML для поисковых роботов.

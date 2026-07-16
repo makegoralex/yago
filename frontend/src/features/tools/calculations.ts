@@ -122,3 +122,58 @@ export const calculateOpeningPlan = ({
     paybackMonths: monthly.operatingProfit > 0 ? totalFunding / monthly.operatingProfit : null,
   };
 };
+
+export type AbcXyzInput = {
+  id: number;
+  name: string;
+  periods: number[];
+};
+
+export type AbcClass = 'A' | 'B' | 'C';
+export type XyzClass = 'X' | 'Y' | 'Z';
+
+export type AbcXyzResult = AbcXyzInput & {
+  total: number;
+  average: number;
+  sharePercent: number;
+  cumulativeSharePercent: number;
+  coefficientOfVariation: number;
+  abc: AbcClass;
+  xyz: XyzClass;
+  segment: `${AbcClass}${XyzClass}`;
+};
+
+export const calculateAbcXyz = (items: AbcXyzInput[]): AbcXyzResult[] => {
+  const prepared = items.map((item) => {
+    const periods = item.periods.map((value) => safeNumber(value));
+    const total = periods.reduce((sum, value) => sum + value, 0);
+    const average = periods.length ? total / periods.length : 0;
+    const variance = periods.length
+      ? periods.reduce((sum, value) => sum + (value - average) ** 2, 0) / periods.length
+      : 0;
+    const coefficientOfVariation = average ? (Math.sqrt(variance) / average) * 100 : 0;
+
+    return { ...item, periods, total, average, coefficientOfVariation };
+  });
+
+  const assortmentTotal = prepared.reduce((sum, item) => sum + item.total, 0);
+  let cumulativeSharePercent = 0;
+
+  return prepared
+    .sort((left, right) => right.total - left.total)
+    .map((item) => {
+      const sharePercent = assortmentTotal ? (item.total / assortmentTotal) * 100 : 0;
+      const abc: AbcClass = cumulativeSharePercent < 80 ? 'A' : cumulativeSharePercent < 95 ? 'B' : 'C';
+      cumulativeSharePercent += sharePercent;
+      const xyz: XyzClass = item.coefficientOfVariation <= 10 ? 'X' : item.coefficientOfVariation <= 25 ? 'Y' : 'Z';
+
+      return {
+        ...item,
+        sharePercent,
+        cumulativeSharePercent,
+        abc,
+        xyz,
+        segment: `${abc}${xyz}`,
+      };
+    });
+};
