@@ -7,6 +7,7 @@ import { useToast } from '../providers/ToastProvider';
 import LandingHeader from '../components/ui/LandingHeader';
 import { fetchContent, loadContent, subscribeContentUpdates } from '../lib/contentStore';
 import { applySeo } from '../lib/seo';
+import { SITE_URL, tools } from '../features/tools/toolRegistry';
 
 const featureItems = [
   'Управление продажами и заказами',
@@ -121,10 +122,37 @@ const LandingPage: React.FC = () => {
 
   useEffect(() => {
     applySeo({
-      title: 'Yago App — облачная POS-система для кафе и малого бизнеса',
+      title: 'Yago — облачная POS-система и учёт для кофейни',
       description:
-        'Продажи, склад, аналитика и лояльность в одном сервисе. Работает с кассами пользователя, включая устройства Эвотор.',
-      keywords: 'Yago App, POS, кафе, малый бизнес, касса, эвотор, склад, аналитика, лояльность',
+        'POS-система для кофейни: касса, меню, техкарты, склад, себестоимость, аналитика и лояльность. Работает с Эвотором и АТОЛ. 14 дней бесплатно.',
+      keywords: 'POS система для кофейни, программа для кофейни, касса для кафе, учет в кофейне, Эвотор, АТОЛ, техкарты',
+      canonicalUrl: `${SITE_URL}/`,
+      structuredData: [
+        {
+          '@context': 'https://schema.org',
+          '@type': 'SoftwareApplication',
+          name: 'Yago App',
+          applicationCategory: 'BusinessApplication',
+          operatingSystem: 'Web, Android, iOS',
+          description: 'Облачная POS-система, складской учёт и лояльность для кофеен и небольших кафе.',
+          url: `${SITE_URL}/`,
+          inLanguage: 'ru-RU',
+          offers: [
+            { '@type': 'Offer', price: monthlyPrice, priceCurrency: 'RUB', category: 'Месячная подписка' },
+            { '@type': 'Offer', price: yearlyPrice, priceCurrency: 'RUB', category: 'Годовая подписка' },
+          ],
+          provider: { '@type': 'Organization', name: 'ООО «Джемьюн»', url: `${SITE_URL}/` },
+        },
+        {
+          '@context': 'https://schema.org',
+          '@type': 'Organization',
+          name: 'Yago App',
+          legalName: 'ООО «Джемьюн»',
+          url: `${SITE_URL}/`,
+          email: 'makegoralex@yandex.ru',
+          telephone: '+7 900 317-35-57',
+        },
+      ],
     });
   }, []);
 
@@ -151,13 +179,13 @@ const LandingPage: React.FC = () => {
         <section className="grid gap-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-primary p-6 text-white shadow-xl md:grid-cols-[1.05fr_0.95fr] md:p-8 lg:p-10">
           <div className="space-y-5">
             <p className="inline-flex rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide">
-              SaaS для кафе и малого бизнеса
+              POS и учёт для независимых кофеен
             </p>
             <h1 className="heading-font text-3xl font-semibold leading-tight sm:text-4xl lg:text-5xl">
-              Облачная POS-система для кафе и малого бизнеса
+              POS-система для кофейни: продажи, склад и лояльность
             </h1>
             <p className="max-w-2xl text-base text-white/85 sm:text-lg">
-              Продажи, склад, аналитика и лояльность в одном сервисе. Работает с кассами пользователя.
+              Запустите кассу, техкарты, учёт себестоимости и программу лояльности в одном сервисе. Работает с Эвотором и АТОЛ.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <button
@@ -217,6 +245,28 @@ const LandingPage: React.FC = () => {
           <p className="mt-2 text-sm text-slate-500">
             Экран кухни и экран готовности заказа для клиентов доступны опционально и включаются в настройках.
           </p>
+        </section>
+
+        <section id="tools" className="overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-emerald-50 p-6 md:p-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-sm font-semibold uppercase tracking-wide text-primary">Бесплатно и без регистрации</p>
+              <h2 className="mt-2 heading-font text-3xl font-semibold text-slate-900">Калькуляторы для владельца кофейни</h2>
+              <p className="mt-3 text-base leading-7 text-slate-600">Посчитайте себестоимость напитка, точку безубыточности и бюджет открытия прямо в браузере.</p>
+            </div>
+            <Link to="/tools" className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800">
+              Все инструменты →
+            </Link>
+          </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {tools.map((tool) => (
+              <Link key={tool.slug} to={tool.path} className="group rounded-2xl border border-slate-200 bg-white p-5 hover:border-primary/40">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{tool.estimatedTime}</div>
+                <h3 className="mt-2 text-lg font-semibold text-slate-900 group-hover:text-primary">{tool.shortTitle}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{tool.description}</p>
+              </Link>
+            ))}
+          </div>
         </section>
 
         <section id="integrations" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:p-8">

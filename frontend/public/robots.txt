@@ -1,0 +1,26 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /pos
+Disallow: /kds
+Disallow: /oss
+Disallow: /settings
+Disallow: /super-admin
+Disallow: /login
+Disallow: /api/
+Disallow: /docs
+
+User-agent: Yandex
+Allow: /
+Disallow: /admin
+Disallow: /pos
+Disallow: /kds
+Disallow: /oss
+Disallow: /settings
+Disallow: /super-admin
+Disallow: /login
+Disallow: /api/
+Disallow: /docs
+
+Host: yago-app.ru
+Sitemap: https://yago-app.ru/sitemap.xml

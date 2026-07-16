@@ -32,6 +32,7 @@ import {
   recordResponseAbort,
   recordTtfb,
 } from './observability/clientCompatibility';
+import { isPrivateAppPath, isSeoMarketingPath, renderNoIndexDocument, renderSeoDocument } from './landing/seoPages';
 
 const app = express();
 
@@ -274,6 +275,10 @@ const serveFrontendStatic: express.RequestHandler = (req, res, next) => {
     return next();
   }
 
+  if (isSeoMarketingPath(req.path)) {
+    return next();
+  }
+
   if (!frontendStaticMiddleware) {
     refreshFrontendBundle();
   }
@@ -309,6 +314,28 @@ const serveSpaFallback = (req: Request, res: Response, next: NextFunction): void
 
   if (!distPath) {
     next();
+    return;
+  }
+
+  if (isSeoMarketingPath(req.path)) {
+    try {
+      const indexHtml = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
+      res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
+      res.type('html').send(renderSeoDocument(indexHtml, req.path));
+    } catch (error) {
+      next(error);
+    }
+    return;
+  }
+
+  if (isPrivateAppPath(req.path)) {
+    try {
+      const indexHtml = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.type('html').send(renderNoIndexDocument(indexHtml));
+    } catch (error) {
+      next(error);
+    }
     return;
   }
 
