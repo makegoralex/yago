@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
-import { ArrowRight, Calculator, Coffee, LineChart, Sparkles } from 'lucide-react';
+import { ArrowRight, Calculator, Coffee, FileText, LineChart, Sparkles, TableProperties } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import LandingHeader from '../../components/ui/LandingHeader';
 import ToolSignupCta from '../../components/tools/ToolSignupCta';
+import ToolsFooter from '../../components/tools/ToolsFooter';
 import { applySeo } from '../../lib/seo';
 import { SITE_URL, tools } from '../../features/tools/toolRegistry';
 
@@ -10,35 +11,41 @@ const iconBySlug = {
   'drink-cost-calculator': Coffee,
   'break-even-calculator': LineChart,
   'coffee-shop-opening-calculator': Calculator,
+  'recipe-card-generator': FileText,
+  'abc-xyz-analysis': TableProperties,
 };
 
 const cardClasses = {
   amber: 'border-amber-200 bg-gradient-to-br from-amber-50 to-white hover:border-amber-300',
   indigo: 'border-indigo-200 bg-gradient-to-br from-indigo-50 to-white hover:border-indigo-300',
   emerald: 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-white hover:border-emerald-300',
+  rose: 'border-rose-200 bg-gradient-to-br from-rose-50 to-white hover:border-rose-300',
+  cyan: 'border-cyan-200 bg-gradient-to-br from-cyan-50 to-white hover:border-cyan-300',
 };
 
 const iconClasses = {
   amber: 'bg-amber-100 text-amber-800',
   indigo: 'bg-indigo-100 text-indigo-800',
   emerald: 'bg-emerald-100 text-emerald-800',
+  rose: 'bg-rose-100 text-rose-800',
+  cyan: 'bg-cyan-100 text-cyan-800',
 };
 
 const ToolsHubPage: React.FC = () => {
   useEffect(() => {
     applySeo({
-      title: 'Бесплатные калькуляторы для кофейни и кафе — Yago',
+      title: 'Бесплатные инструменты для кофейни и кафе — Yago',
       description:
-        'Бесплатные онлайн-калькуляторы для владельцев кофеен: себестоимость напитков, прибыль, точка безубыточности и бюджет открытия. Без регистрации.',
+        'Бесплатные онлайн-инструменты для владельцев кофеен: калькуляторы, генератор техкарт в PDF и ABC/XYZ-анализ меню. Без регистрации.',
       keywords:
-        'калькуляторы для кофейни, калькулятор кафе, себестоимость кофе, точка безубыточности кофейни, открытие кофейни',
+        'инструменты для кофейни, калькуляторы для кафе, генератор технологических карт, ABC XYZ анализ меню, себестоимость кофе',
       canonicalUrl: `${SITE_URL}/tools`,
       structuredData: [
         {
           '@context': 'https://schema.org',
           '@type': 'CollectionPage',
           name: 'Бесплатные инструменты для владельцев кофеен',
-          description: 'Калькуляторы экономики, себестоимости и открытия кофейни от Yago App.',
+          description: 'Калькуляторы, документы и аналитика ассортимента для кофейни от Yago App.',
           url: `${SITE_URL}/tools`,
           inLanguage: 'ru-RU',
           mainEntity: {
@@ -57,13 +64,13 @@ const ToolsHubPage: React.FC = () => {
           mainEntity: [
             {
               '@type': 'Question',
-              name: 'Нужно ли регистрироваться для расчёта?',
-              acceptedAnswer: { '@type': 'Answer', text: 'Нет. Все калькуляторы работают бесплатно и без регистрации.' },
+              name: 'Нужно ли регистрироваться для работы?',
+              acceptedAnswer: { '@type': 'Answer', text: 'Нет. Все инструменты работают бесплатно и без регистрации.' },
             },
             {
               '@type': 'Question',
               name: 'Сохраняет ли Yago введённые данные?',
-              acceptedAnswer: { '@type': 'Answer', text: 'Нет. Расчёты выполняются в браузере и введённые значения не отправляются на сервер.' },
+              acceptedAnswer: { '@type': 'Answer', text: 'Нет. Расчёты и подготовка документов выполняются в браузере, введённые значения не отправляются на сервер.' },
             },
           ],
         },
@@ -83,14 +90,14 @@ const ToolsHubPage: React.FC = () => {
               <Sparkles size={14} /> Инструменты Yago
             </div>
             <h1 className="mt-5 heading-font text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
-              Бесплатные калькуляторы для кофейни
+              Бесплатные инструменты для кофейни
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-7 text-slate-300 sm:text-lg">
-              Проверяйте себестоимость напитков, прибыль, точку безубыточности и бюджет запуска. Без регистрации, сложных таблиц и передачи данных.
+              Считайте экономику, оформляйте технологические карты и анализируйте меню. Без регистрации, сложных таблиц и передачи данных.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <a href="#calculators" className="inline-flex h-12 items-center gap-2 rounded-xl bg-white px-5 text-sm font-semibold text-slate-950 hover:bg-slate-100">
-                Выбрать калькулятор <ArrowRight size={17} />
+                Выбрать инструмент <ArrowRight size={17} />
               </a>
               <Link to="/" className="inline-flex h-12 items-center rounded-xl border border-white/20 px-5 text-sm font-semibold text-white hover:bg-white/10">
                 Узнать о Yago
@@ -102,11 +109,11 @@ const ToolsHubPage: React.FC = () => {
         <section id="calculators" className="scroll-mt-24 py-10 sm:py-14">
           <div className="max-w-3xl">
             <p className="text-sm font-semibold uppercase tracking-[0.14em] text-primary">Считать прямо сейчас</p>
-            <h2 className="mt-2 heading-font text-3xl font-semibold text-slate-950 sm:text-4xl">Три инструмента для ежедневных решений</h2>
-            <p className="mt-3 text-base leading-7 text-slate-600">Каждый калькулятор имеет собственную форму и объясняет методику результата.</p>
+            <h2 className="mt-2 heading-font text-3xl font-semibold text-slate-950 sm:text-4xl">Пять инструментов для ежедневных решений</h2>
+            <p className="mt-3 text-base leading-7 text-slate-600">Каждый инструмент имеет собственную форму, понятную методику и работает прямо в браузере.</p>
           </div>
 
-          <div className="mt-7 grid gap-5 lg:grid-cols-3">
+          <div className="mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {tools.map((tool) => {
               const Icon = iconBySlug[tool.slug as keyof typeof iconBySlug];
               return (
@@ -115,10 +122,14 @@ const ToolsHubPage: React.FC = () => {
                     <Icon size={23} aria-hidden="true" />
                   </div>
                   <p className="mt-6 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{tool.eyebrow} · {tool.estimatedTime}</p>
-                  <h2 className="mt-2 heading-font text-2xl font-semibold text-slate-950">{tool.shortTitle}</h2>
+                  <h2 className="mt-2 heading-font text-2xl font-semibold text-slate-950">
+                    <Link to={tool.path} className="text-slate-950 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                      {tool.shortTitle}
+                    </Link>
+                  </h2>
                   <p className="mt-3 flex-1 text-sm leading-6 text-slate-600">{tool.description}</p>
                   <Link to={tool.path} className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-950 hover:text-primary">
-                    Открыть калькулятор <ArrowRight size={17} />
+                    Открыть инструмент <ArrowRight size={17} />
                   </Link>
                 </article>
               );
@@ -144,15 +155,16 @@ const ToolsHubPage: React.FC = () => {
         <section className="mt-10 rounded-3xl border border-slate-200 bg-white p-6 sm:p-8">
           <h2 className="heading-font text-2xl font-semibold text-slate-950">Частые вопросы</h2>
           <div className="mt-5 grid gap-5 md:grid-cols-2">
-            <article><h3 className="font-semibold text-slate-900">Нужно ли регистрироваться?</h3><p className="mt-2 text-sm leading-6 text-slate-600">Нет. Калькуляторы доступны бесплатно и не требуют контактных данных.</p></article>
+            <article><h3 className="font-semibold text-slate-900">Нужно ли регистрироваться?</h3><p className="mt-2 text-sm leading-6 text-slate-600">Нет. Инструменты доступны бесплатно и не требуют контактных данных.</p></article>
             <article><h3 className="font-semibold text-slate-900">Сохраняются ли расчёты?</h3><p className="mt-2 text-sm leading-6 text-slate-600">Нет. Значения обрабатываются локально в браузере. При обновлении страницы расчёт начинается заново.</p></article>
             <article><h3 className="font-semibold text-slate-900">Можно ли использовать результат для бизнес-плана?</h3><p className="mt-2 text-sm leading-6 text-slate-600">Да, как предварительную оценку. Перед вложениями проверьте аренду, поставщиков, налоги и локальный спрос.</p></article>
-            <article><h3 className="font-semibold text-slate-900">Что появится дальше?</h3><p className="mt-2 text-sm leading-6 text-slate-600">Планируются калькуляторы меню, фонда оплаты труда, инвентаризации, лояльности и оборудования.</p></article>
+            <article><h3 className="font-semibold text-slate-900">Что появится дальше?</h3><p className="mt-2 text-sm leading-6 text-slate-600">Планируются инструменты для фонда оплаты труда, инвентаризации, лояльности и подбора оборудования.</p></article>
           </div>
         </section>
 
         <ToolSignupCta />
       </main>
+      <ToolsFooter />
     </div>
   );
 };

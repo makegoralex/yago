@@ -14,7 +14,21 @@ describe('SEO marketing pages', () => {
   it('recognizes tool pages with or without a trailing slash', () => {
     expect(isSeoMarketingPath('/tools')).toBe(true);
     expect(isSeoMarketingPath('/tools/drink-cost-calculator/')).toBe(true);
+    expect(isSeoMarketingPath('/tools/recipe-card-generator')).toBe(true);
+    expect(isSeoMarketingPath('/tools/abc-xyz-analysis/')).toBe(true);
     expect(isSeoMarketingPath('/pos')).toBe(false);
+  });
+
+  it('renders server-visible SEO for the new tools', () => {
+    const recipeHtml = renderSeoDocument(indexHtml, '/tools/recipe-card-generator');
+    const analysisHtml = renderSeoDocument(indexHtml, '/tools/abc-xyz-analysis');
+
+    expect(recipeHtml).toContain('<title>Генератор технологических карт онлайн — скачать PDF бесплатно</title>');
+    expect(recipeHtml).toContain('<h1>Генератор технологических карт для кофейни</h1>');
+    expect(recipeHtml).toContain('rel="canonical" href="https://yago-app.ru/tools/recipe-card-generator"');
+    expect(analysisHtml).toContain('<title>ABC/XYZ-анализ ассортимента и меню онлайн — бесплатно</title>');
+    expect(analysisHtml).toContain('<h1>ABC/XYZ-анализ ассортимента кофейни</h1>');
+    expect(analysisHtml).toContain('rel="canonical" href="https://yago-app.ru/tools/abc-xyz-analysis"');
   });
 
   it('renders unique server-visible metadata and semantic fallback content', () => {

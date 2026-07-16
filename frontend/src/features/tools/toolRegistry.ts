@@ -1,4 +1,4 @@
-export type ToolTheme = 'amber' | 'indigo' | 'emerald';
+export type ToolTheme = 'amber' | 'indigo' | 'emerald' | 'rose' | 'cyan';
 
 export type ToolDefinition = {
   slug: string;
@@ -53,6 +53,32 @@ export const tools: ToolDefinition[] = [
     theme: 'emerald',
     keywords:
       'калькулятор открытия кофейни, сколько стоит открыть кофейню, бизнес план кофейни, бюджет кофейни, окупаемость кофейни',
+  },
+  {
+    slug: 'recipe-card-generator',
+    path: '/tools/recipe-card-generator',
+    title: 'Генератор технологических карт для кофейни',
+    shortTitle: 'Генератор техкарт',
+    description:
+      'Создайте технологическую карту напитка или блюда с ингредиентами, технологией, себестоимостью и фирменным оформлением, затем скачайте PDF.',
+    eyebrow: 'Документы кухни',
+    estimatedTime: '5 минут',
+    theme: 'rose',
+    keywords:
+      'генератор технологических карт, техкарта блюда онлайн, технологическая карта напитка, скачать техкарту pdf, техкарта для кофейни',
+  },
+  {
+    slug: 'abc-xyz-analysis',
+    path: '/tools/abc-xyz-analysis',
+    title: 'ABC/XYZ-анализ ассортимента кофейни',
+    shortTitle: 'ABC/XYZ-анализ меню',
+    description:
+      'Разделите позиции меню по вкладу в выручку и стабильности спроса, найдите лидеров, нестабильные товары и кандидатов на пересмотр.',
+    eyebrow: 'Аналитика меню',
+    estimatedTime: '7 минут',
+    theme: 'cyan',
+    keywords:
+      'ABC XYZ анализ ассортимента, ABC анализ меню, XYZ анализ продаж, анализ ассортимента кофейни, матрица ABC XYZ онлайн',
   },
 ];
 
