@@ -21,6 +21,10 @@ const BlogPostPage = lazy(() => import('./pages/BlogPost'));
 const DocsPage = lazy(() => import('./pages/Docs'));
 const NewsPage = lazy(() => import('./pages/News'));
 const NewsPostPage = lazy(() => import('./pages/NewsPost'));
+const ToolsHubPage = lazy(() => import('./pages/tools/ToolsHub'));
+const DrinkCostCalculatorPage = lazy(() => import('./pages/tools/DrinkCostCalculator'));
+const BreakEvenCalculatorPage = lazy(() => import('./pages/tools/BreakEvenCalculator'));
+const CoffeeShopOpeningCalculatorPage = lazy(() => import('./pages/tools/CoffeeShopOpeningCalculator'));
 
 const OWNER_ROLES: UserRole[] = ['owner'];
 
@@ -103,6 +107,10 @@ const App: React.FC = () => {
           <Route path="/help" element={<DocsPage />} />
           <Route path="/news" element={<NewsPage />} />
           <Route path="/news/:slug" element={<NewsPostPage />} />
+          <Route path="/tools" element={<ToolsHubPage />} />
+          <Route path="/tools/drink-cost-calculator" element={<DrinkCostCalculatorPage />} />
+          <Route path="/tools/break-even-calculator" element={<BreakEvenCalculatorPage />} />
+          <Route path="/tools/coffee-shop-opening-calculator" element={<CoffeeShopOpeningCalculatorPage />} />
           <Route element={<ProtectedRoute allowed={['cashier', 'owner', 'kitchen']} />}>
             <Route path="/pos" element={<POSPage />} />
             <Route path="/kds" element={<KDSPage />} />
