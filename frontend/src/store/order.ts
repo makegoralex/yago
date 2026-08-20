@@ -4,6 +4,7 @@ import api from '../lib/api';
 import type { Product } from './catalog';
 import { useAuthStore } from './auth';
 import { DEFAULT_POS_CONTEXT } from '../constants/posContext';
+import { getPricingQuantity, normalizeProductUnit, type ProductUnit } from '../lib/productUnit';
 
 export type CustomerSummary = {
   _id: string;
@@ -38,6 +39,8 @@ export type OrderItem = {
   categoryId?: string;
   categoryName?: string;
   qty: number;
+  unit: ProductUnit;
+  pricingQuantity: number;
   price: number;
   total: number;
   costPrice?: number;
@@ -111,7 +114,7 @@ type OrderState = {
   shiftHistory: OrderHistoryEntry[];
   shiftHistoryLoading: boolean;
   createDraft: (options?: { forceNew?: boolean }) => Promise<void>;
-  addProduct: (product: Product, modifiers?: SelectedModifier[]) => Promise<void>;
+  addProduct: (product: Product, modifiers?: SelectedModifier[], quantity?: number) => Promise<void>;
   updateItemQty: (lineId: string, qty: number) => Promise<void>;
   removeItem: (lineId: string) => Promise<void>;
   attachCustomer: (customer: CustomerSummary | null) => Promise<void>;
@@ -230,6 +233,8 @@ const mapOrderItems = (items: any[] | undefined): OrderItem[] => {
     price: item.price,
     costPrice: item.costPrice,
     qty: item.qty,
+    unit: normalizeProductUnit(item.unit),
+    pricingQuantity: typeof item.pricingQuantity === 'number' ? item.pricingQuantity : getPricingQuantity(item.unit),
     total: item.total,
     modifiersApplied: mapSelectedModifiers(item.modifiersApplied),
   }));
@@ -600,7 +605,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       set({ loading: false });
     }
   },
-  async addProduct(product, modifiers) {
+  async addProduct(product, modifiers, quantity = 1) {
     const state = get();
     if (!state.orderId) {
       await state.createDraft();
@@ -618,6 +623,8 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     const unitPrice = roundCurrency(product.price + (priceAdjustment ?? 0));
     const unitCost = roundCurrency((product.costPrice ?? 0) + (costAdjustment ?? 0));
     const lineId = buildLineId(product._id, modifiers);
+    const unit = normalizeProductUnit(product.unit);
+    const pricingQuantity = getPricingQuantity(unit);
 
     const currentItems = get().items;
     const existing = currentItems.find((item) => item.lineId === lineId);
@@ -626,8 +633,8 @@ export const useOrderStore = create<OrderState>((set, get) => ({
           item.lineId === lineId
             ? {
                 ...item,
-                qty: item.qty + 1,
-                total: roundCurrency((item.qty + 1) * unitPrice),
+                qty: item.qty + quantity,
+                total: roundCurrency(((item.qty + quantity) * unitPrice) / pricingQuantity),
               }
             : item
         )
@@ -639,8 +646,10 @@ export const useOrderStore = create<OrderState>((set, get) => ({
             name: product.name,
             price: unitPrice,
             costPrice: unitCost,
-            qty: 1,
-            total: roundCurrency(unitPrice),
+            qty: quantity,
+            unit,
+            pricingQuantity,
+            total: roundCurrency((unitPrice * quantity) / pricingQuantity),
             modifiersApplied: modifiers,
           },
         ];
@@ -650,7 +659,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   async updateItemQty(lineId, qty) {
     const updatedItems = get()
       .items.map((item) =>
-        item.lineId === lineId ? { ...item, qty, total: roundCurrency(qty * item.price) } : item
+        item.lineId === lineId ? { ...item, qty, total: roundCurrency((qty * item.price) / item.pricingQuantity) } : item
       )
       .filter((item) => item.qty > 0);
 

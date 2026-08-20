@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import api from '../lib/api';
+import type { ProductUnit } from '../lib/productUnit';
 
 export type Category = {
   _id: string;
@@ -37,6 +38,10 @@ export type Product = {
   modifierGroups?: ModifierGroup[];
   isActive?: boolean;
   ingredients?: Array<{ ingredientId: string; quantity: number; unit?: string }>;
+  unit?: ProductUnit;
+  manufacturer?: string;
+  sku?: string;
+  barcode?: string;
 };
 
 type CatalogState = {
@@ -55,6 +60,7 @@ const normalizeProducts = (products: Product[]): Product[] =>
     .map((product) => ({
       ...product,
       price: typeof product.basePrice === 'number' ? product.basePrice : product.price ?? 0,
+      unit: product.unit ?? 'шт',
     }));
 
 export const useCatalogStore = create<CatalogState>((set, get) => ({

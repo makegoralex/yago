@@ -13,6 +13,9 @@ const toCents = (value: number): number => Math.max(0, Math.round(value * 100));
 const isValidItem = (item: OrderItem): boolean =>
   typeof item.name === 'string' && item.name.trim().length > 0 && typeof item.qty === 'number' && item.qty > 0;
 
+const getFiscalQuantity = (item: OrderItem): number =>
+  item.pricingQuantity && item.pricingQuantity > 1 ? item.qty / item.pricingQuantity : item.qty;
+
 const distributeEvenly = (lineTotalsCents: number[], discountCents: number, indexes: number[]): number[] => {
   if (!indexes.length || discountCents <= 0) {
     return new Array(lineTotalsCents.length).fill(0);
@@ -97,7 +100,7 @@ export const buildEvotorOrderItems = (
     const targetTotalCents = toCents(orderTotal);
     return validItems.map((item, index) => ({
       name: item.name,
-      qty: item.qty,
+      qty: getFiscalQuantity(item),
       total: index === 0 && targetTotalCents > 0 ? roundCurrency(targetTotalCents / 100) : 0,
     }));
   }
@@ -168,7 +171,7 @@ export const buildEvotorOrderItems = (
 
   return validItems.map((item, index) => ({
     name: item.name,
-    qty: item.qty,
+    qty: getFiscalQuantity(item),
     total: roundCurrency(finalTotalsCents[index] / 100),
   }));
 };

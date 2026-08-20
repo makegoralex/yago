@@ -6,6 +6,7 @@ import { evotorRequestDebug } from '../../middleware/evotorRequestDebug';
 import { enforceActiveSubscription } from '../../middleware/subscription';
 import { validateRequest } from '../../middleware/validation';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
+import { getPricingQuantity, normalizeProductUnit } from '../catalog/productUnit';
 import { CustomerModel } from '../customers/customer.model';
 import { CertificateModel } from '../certificates/certificate.model';
 import {
@@ -456,7 +457,7 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
   }
 
   const products = await ProductModel.find({ _id: { $in: [...uniqueIds] } })
-    .select('name price isActive categoryId costPrice modifierGroups')
+    .select('name price isActive categoryId costPrice modifierGroups unit')
     .populate('modifierGroups')
     .lean();
 
@@ -606,7 +607,9 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
       const unitPrice = Math.max(0, roundCurrency(basePrice + priceAdjustment));
       const baseCost = typeof product.costPrice === 'number' ? product.costPrice : 0;
       const unitCost = Math.max(0, roundCurrency(baseCost + costAdjustment));
-      const total = roundCurrency(unitPrice * item.qty);
+      const unit = normalizeProductUnit(product.unit);
+      const pricingQuantity = getPricingQuantity(unit);
+      const total = roundCurrency((unitPrice * item.qty) / pricingQuantity);
 
       const modifiers = selectedModifiers.length ? selectedModifiers : undefined;
       const categoryId = product.categoryId ?? undefined;
@@ -620,6 +623,8 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
         categoryId: categoryId ?? undefined,
         categoryName,
         qty: item.qty,
+        unit,
+        pricingQuantity,
         price: unitPrice,
         costPrice: unitCost,
         modifiersApplied: modifiers,

@@ -8,6 +8,7 @@ import type {
   PaymentMethod,
   OrderTag,
 } from '../../store/order';
+import { formatQuantity, getPricingUnit } from '../../lib/productUnit';
 
 type OrderPanelProps = {
   items: OrderItem[];
@@ -337,7 +338,9 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{item.name}</p>
-                    <p className="text-xs text-slate-500">{item.price.toFixed(2)} ₽</p>
+                    <p className="text-xs text-slate-500">
+                      {item.price.toFixed(2)} ₽ / {getPricingUnit(item.unit)}
+                    </p>
                     {item.modifiersApplied?.length ? (
                       <ul className="mt-1 space-y-0.5 text-[11px] text-slate-500">
                         {item.modifiersApplied.map((modifier) => (
@@ -357,7 +360,9 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
                     >
                       −
                     </button>
-                    <span className="w-7 text-center text-sm font-semibold text-slate-900">{item.qty}</span>
+                    <span className="min-w-14 text-center text-sm font-semibold text-slate-900">
+                      {formatQuantity(item.qty, item.unit)}
+                    </span>
                     <button
                       type="button"
                       onClick={() => onIncrement(item.lineId)}

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Product } from '../../store/catalog';
+import { getPricingUnit } from '../../lib/productUnit';
 
 type ProductCardProps = {
   product: Product;
@@ -36,7 +37,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) => {
         </div>
       </div>
       <div className="mt-0 flex items-baseline gap-2">
-        <p className="text-sm font-normal text-slate-900 sm:text-base">{product.price.toFixed(2)} ₽</p>
+        <p className="text-sm font-normal text-slate-900 sm:text-base">
+          {product.price.toFixed(2)} ₽ / {getPricingUnit(product.unit)}
+        </p>
         {hasDiscount ? (
           <span className="text-xs font-medium text-slate-400 line-through">
             {product.basePrice?.toFixed(2)} ₽

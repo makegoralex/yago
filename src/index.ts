@@ -5,6 +5,7 @@ import { appConfig, validateConfig } from './config/env';
 import { ensureDefaultOwnerExists } from './startup/createAdmin';
 import { ensureDemoCatalogSeeded } from './startup/seedCatalog';
 import { migrateUserIndexes } from './startup/migrateUserIndexes';
+import { migrateProductUnits } from './startup/migrateProductUnits';
 
 const startServer = async (): Promise<void> => {
   try {
@@ -14,6 +15,7 @@ const startServer = async (): Promise<void> => {
     console.log('Connected to MongoDB');
 
     await migrateUserIndexes();
+    await migrateProductUnits();
 
     await ensureDefaultOwnerExists();
     await ensureDemoCatalogSeeded();

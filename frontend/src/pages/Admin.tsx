@@ -26,6 +26,8 @@ import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
 import AdminDrawer from '../components/admin/AdminDrawer';
 import MenuImportDrawer from '../components/admin/MenuImportDrawer';
+import { downloadEan13Svg } from '../lib/ean13';
+import { getPricingUnit, PRODUCT_UNITS, type ProductUnit } from '../lib/productUnit';
 
 const getResponseData = <T,>(response: { data?: unknown }): T | undefined => {
   if (!response || typeof response !== 'object') {
@@ -709,6 +711,12 @@ const AdminPage: React.FC = () => {
     discountType: '' as '' | 'percentage' | 'fixed',
     discountValue: '',
     imageUrl: '',
+    unit: 'шт' as ProductUnit,
+    manufacturer: '',
+    sku: '',
+    barcode: '',
+    generateSku: false,
+    generateBarcode: false,
   });
   const [newProductModifierIds, setNewProductModifierIds] = useState<string[]>([]);
   const [newProductError, setNewProductError] = useState<string | null>(null);
@@ -739,11 +747,21 @@ const AdminPage: React.FC = () => {
     discountType: '' as '' | 'percentage' | 'fixed',
     discountValue: '',
     isActive: true,
+    unit: 'шт' as ProductUnit,
+    manufacturer: '',
+    sku: '',
+    barcode: '',
+    generateSku: false,
+    generateBarcode: false,
   });
   const [productEditModifiers, setProductEditModifiers] = useState<string[]>([]);
   const [productEditIngredients, setProductEditIngredients] = useState<
     Array<{ ingredientId: string; quantity: string; unit?: string }>
   >([]);
+  const manufacturerSuggestions = useMemo(
+    () => Array.from(new Set(products.map((product) => product.manufacturer?.trim()).filter(Boolean) as string[])).sort(),
+    [products]
+  );
   const [selectedModifierGroup, setSelectedModifierGroup] = useState<ModifierGroup | null>(null);
   const [modifierGroupForm, setModifierGroupForm] = useState({
     name: '',
@@ -1606,7 +1624,11 @@ const AdminPage: React.FC = () => {
           return false;
         }
 
-        if (searchQuery && !product.name.toLowerCase().includes(searchQuery)) {
+        if (
+          searchQuery &&
+          ![product.name, product.sku, product.barcode, product.manufacturer]
+            .some((value) => value?.toLowerCase().includes(searchQuery))
+        ) {
           return false;
         }
 
@@ -2932,6 +2954,8 @@ const AdminPage: React.FC = () => {
     if (newProduct.discountType) return true;
     if (newProduct.discountValue) return true;
     if (newProduct.imageUrl.trim()) return true;
+    if (newProduct.unit !== 'шт' || newProduct.manufacturer.trim() || newProduct.sku.trim() || newProduct.barcode.trim()) return true;
+    if (newProduct.generateSku || newProduct.generateBarcode) return true;
     if (newProductModifierIds.length) return true;
     return productIngredients.some((item) => item.ingredientId || item.quantity || item.unit);
   }, [newProduct, newProductModifierIds.length, productIngredients]);
@@ -3050,6 +3074,12 @@ const AdminPage: React.FC = () => {
       discountType: '',
       discountValue: '',
       imageUrl: '',
+      unit: 'шт',
+      manufacturer: '',
+      sku: '',
+      barcode: '',
+      generateSku: false,
+      generateBarcode: false,
     });
     setNewProductModifierIds([]);
     setProductIngredients([{ ingredientId: '', quantity: '' }]);
@@ -3132,6 +3162,12 @@ const AdminPage: React.FC = () => {
             ? product.discountValue.toString()
             : '',
         imageUrl: product.imageUrl ?? '',
+        unit: product.unit ?? 'шт',
+        manufacturer: product.manufacturer ?? '',
+        sku: '',
+        barcode: '',
+        generateSku: true,
+        generateBarcode: true,
       });
       setNewProductModifierIds(
         Array.isArray(product.modifierGroups)
@@ -3190,6 +3226,12 @@ const AdminPage: React.FC = () => {
           ? product.discountValue.toString()
           : '',
       isActive: product.isActive !== false,
+      unit: product.unit ?? 'шт',
+      manufacturer: product.manufacturer ?? '',
+      sku: product.sku ?? '',
+      barcode: product.barcode ?? '',
+      generateSku: false,
+      generateBarcode: false,
     });
     setProductEditIngredients(
       Array.isArray(product.ingredients)
@@ -3447,6 +3489,12 @@ const AdminPage: React.FC = () => {
       imageUrl: productEditForm.imageUrl.trim() || undefined,
       categoryId: productEditForm.categoryId,
       isActive: productEditForm.isActive,
+      unit: productEditForm.unit,
+      manufacturer: productEditForm.manufacturer.trim() || undefined,
+      sku: productEditForm.sku.trim() || undefined,
+      barcode: productEditForm.barcode.trim() || undefined,
+      generateSku: productEditForm.generateSku,
+      generateBarcode: productEditForm.generateBarcode,
     };
 
     if (productEditForm.basePrice) {
@@ -3480,13 +3528,13 @@ const AdminPage: React.FC = () => {
     payload.modifierGroups = productEditModifiers;
 
     try {
-      await api.put(`/api/catalog/products/${selectedProduct._id}`, payload);
+      const response = await api.put(`/api/catalog/products/${selectedProduct._id}`, payload);
+      const updatedProduct = getResponseData<Product>(response);
       notify({ title: 'Позиция обновлена', type: 'success' });
       setProductEditDirty(false);
       await loadMenuData();
-      const refreshed = products.find((product) => product._id === selectedProduct._id);
-      if (refreshed) {
-        handleSelectProduct(refreshed);
+      if (updatedProduct) {
+        handleSelectProduct(updatedProduct);
       }
     } catch (error) {
       notify({ title: 'Не удалось обновить позицию', type: 'error' });
@@ -3592,6 +3640,12 @@ const AdminPage: React.FC = () => {
         imageUrl: newProduct.imageUrl.trim() || undefined,
         discountType: newProduct.discountType || undefined,
         discountValue: newProduct.discountValue ? Number(newProduct.discountValue) : undefined,
+        unit: newProduct.unit,
+        manufacturer: newProduct.manufacturer.trim() || undefined,
+        sku: newProduct.sku.trim() || undefined,
+        barcode: newProduct.barcode.trim() || undefined,
+        generateSku: newProduct.generateSku,
+        generateBarcode: newProduct.generateBarcode,
       };
 
       const normalizedIngredients = productIngredients
@@ -3620,6 +3674,12 @@ const AdminPage: React.FC = () => {
         discountType: '',
         discountValue: '',
         imageUrl: '',
+        unit: 'шт',
+        manufacturer: '',
+        sku: '',
+        barcode: '',
+        generateSku: false,
+        generateBarcode: false,
       });
       setNewProductModifierIds([]);
       setProductIngredients([{ ingredientId: '', quantity: '' }]);
@@ -6171,7 +6231,7 @@ const AdminPage: React.FC = () => {
                                 </div>
                                 <div className="mt-4 grid gap-2 text-sm">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-xs text-slate-400">Цена</span>
+                                    <span className="text-xs text-slate-400">Цена / {getPricingUnit(product.unit)}</span>
                                     <input
                                       type="number"
                                       step="0.01"
@@ -6324,6 +6384,25 @@ const AdminPage: React.FC = () => {
                               />
                             </div>
                             <div className="space-y-2">
+                              <label className="text-xs font-semibold uppercase text-slate-400">Единица продажи</label>
+                              <select
+                                value={isCreatingProduct ? newProduct.unit : productEditForm.unit}
+                                onChange={(event) =>
+                                  isCreatingProduct
+                                    ? setNewProduct((prev) => ({ ...prev, unit: event.target.value as ProductUnit }))
+                                    : handleProductEditFieldChange('unit', event.target.value)
+                                }
+                                className="w-full rounded-2xl border border-slate-200 px-3 py-2"
+                              >
+                                {PRODUCT_UNITS.map((unit) => (
+                                  <option key={unit} value={unit}>{unit}</option>
+                                ))}
+                              </select>
+                              <p className="text-xs text-slate-400">
+                                Для гр цена задаётся за кг, для мл — за литр.
+                              </p>
+                            </div>
+                            <div className="space-y-2">
                               <label className="text-xs font-semibold uppercase text-slate-400">Фото (URL)</label>
                               <input
                                 type="url"
@@ -6337,7 +6416,9 @@ const AdminPage: React.FC = () => {
                               />
                             </div>
                             <div className="space-y-2">
-                              <label className="text-xs font-semibold uppercase text-slate-400">Цена ₽</label>
+                              <label className="text-xs font-semibold uppercase text-slate-400">
+                                Цена ₽ / {getPricingUnit(isCreatingProduct ? newProduct.unit : productEditForm.unit)}
+                              </label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -6361,6 +6442,105 @@ const AdminPage: React.FC = () => {
                                     : 'border-slate-200'
                                 }`}
                               />
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 p-3">
+                              <p className="mb-3 text-xs font-semibold uppercase text-slate-400">Розничные реквизиты</p>
+                              <div className="space-y-3">
+                                <label className="block space-y-1">
+                                  <span className="text-[11px] uppercase text-slate-400">Производитель</span>
+                                  <input
+                                    list="product-manufacturers"
+                                    value={isCreatingProduct ? newProduct.manufacturer : productEditForm.manufacturer}
+                                    onChange={(event) =>
+                                      isCreatingProduct
+                                        ? setNewProduct((prev) => ({ ...prev, manufacturer: event.target.value }))
+                                        : handleProductEditFieldChange('manufacturer', event.target.value)
+                                    }
+                                    placeholder="Необязательно"
+                                    className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                                  />
+                                  <datalist id="product-manufacturers">
+                                    {manufacturerSuggestions.map((manufacturer) => (
+                                      <option key={manufacturer} value={manufacturer} />
+                                    ))}
+                                  </datalist>
+                                </label>
+                                <label className="block space-y-1">
+                                  <span className="text-[11px] uppercase text-slate-400">Артикул</span>
+                                  <div className="flex gap-2">
+                                    <input
+                                      value={isCreatingProduct ? newProduct.sku : productEditForm.sku}
+                                      onChange={(event) =>
+                                        isCreatingProduct
+                                          ? setNewProduct((prev) => ({ ...prev, sku: event.target.value, generateSku: false }))
+                                          : (() => {
+                                              handleProductEditFieldChange('sku', event.target.value);
+                                              handleProductEditFieldChange('generateSku', false);
+                                            })()
+                                      }
+                                      placeholder={(isCreatingProduct ? newProduct.generateSku : productEditForm.generateSku) ? 'Будет создан автоматически' : 'Необязательно'}
+                                      className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        isCreatingProduct
+                                          ? setNewProduct((prev) => ({ ...prev, sku: '', generateSku: true }))
+                                          : (() => {
+                                              handleProductEditFieldChange('sku', '');
+                                              handleProductEditFieldChange('generateSku', true);
+                                            })()
+                                      }
+                                      className="rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-600"
+                                    >
+                                      Авто
+                                    </button>
+                                  </div>
+                                </label>
+                                <label className="block space-y-1">
+                                  <span className="text-[11px] uppercase text-slate-400">Штрихкод EAN-13</span>
+                                  <div className="flex gap-2">
+                                    <input
+                                      inputMode="numeric"
+                                      value={isCreatingProduct ? newProduct.barcode : productEditForm.barcode}
+                                      onChange={(event) => {
+                                        const value = event.target.value.replace(/\D/g, '').slice(0, 13);
+                                        if (isCreatingProduct) {
+                                          setNewProduct((prev) => ({ ...prev, barcode: value, generateBarcode: false }));
+                                        } else {
+                                          handleProductEditFieldChange('barcode', value);
+                                          handleProductEditFieldChange('generateBarcode', false);
+                                        }
+                                      }}
+                                      placeholder={(isCreatingProduct ? newProduct.generateBarcode : productEditForm.generateBarcode) ? 'Будет создан автоматически' : '8 или 13 цифр'}
+                                      className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        isCreatingProduct
+                                          ? setNewProduct((prev) => ({ ...prev, barcode: '', generateBarcode: true }))
+                                          : (() => {
+                                              handleProductEditFieldChange('barcode', '');
+                                              handleProductEditFieldChange('generateBarcode', true);
+                                            })()
+                                      }
+                                      className="rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-600"
+                                    >
+                                      Авто
+                                    </button>
+                                  </div>
+                                </label>
+                                {!isCreatingProduct && productEditForm.barcode?.length === 13 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadEan13Svg(productEditForm.barcode, productEditForm.name)}
+                                    className="w-full rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white"
+                                  >
+                                    Скачать штрихкод SVG
+                                  </button>
+                                ) : null}
+                              </div>
                             </div>
                             {isCreatingProduct && newProductError ? (
                               <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{newProductError}</p>

@@ -1,6 +1,7 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
 import type { ModifierGroupDocument } from './modifierGroup.model';
+import { DEFAULT_PRODUCT_UNIT, PRODUCT_UNITS, type ProductUnit } from './productUnit';
 
 export interface ProductIngredient {
   ingredientId: Types.ObjectId;
@@ -51,6 +52,10 @@ export interface Product {
   price: number;
   basePrice?: number;
   costPrice?: number;
+  unit: ProductUnit;
+  manufacturer?: string;
+  sku?: string;
+  barcode?: string;
   discountType?: 'percentage' | 'fixed';
   discountValue?: number;
   imageUrl?: string;
@@ -100,6 +105,28 @@ const productSchema = new Schema<ProductDocument>(
       type: Number,
       required: false,
       min: 0,
+    },
+    unit: {
+      type: String,
+      enum: PRODUCT_UNITS,
+      required: false,
+      default: DEFAULT_PRODUCT_UNIT,
+    },
+    manufacturer: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+    sku: {
+      type: String,
+      required: false,
+      trim: true,
+      uppercase: true,
+    },
+    barcode: {
+      type: String,
+      required: false,
+      trim: true,
     },
     discountType: {
       type: String,
@@ -158,5 +185,7 @@ const productSchema = new Schema<ProductDocument>(
 
 productSchema.index({ categoryId: 1 });
 productSchema.index({ organizationId: 1, isActive: 1, categoryId: 1 });
+productSchema.index({ organizationId: 1, sku: 1 }, { unique: true, sparse: true });
+productSchema.index({ organizationId: 1, barcode: 1 }, { unique: true, sparse: true });
 
 export const ProductModel = model<ProductDocument>('Product', productSchema);
