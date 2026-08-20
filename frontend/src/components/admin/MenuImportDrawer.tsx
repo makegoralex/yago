@@ -1,12 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FileSpreadsheet, Upload } from 'lucide-react';
+import { Download, FileSpreadsheet, Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 import api from '../../lib/api';
 import type { Category, Product } from '../../store/catalog';
 import AdminDrawer from './AdminDrawer';
+import { normalizeProductUnit, PRODUCT_UNITS, type ProductUnit } from '../../lib/productUnit';
 
-type ImportField = 'ignore' | 'name' | 'category' | 'basePrice' | 'description' | 'imageUrl' | 'isActive';
+type ImportField =
+  | 'ignore'
+  | 'name'
+  | 'category'
+  | 'basePrice'
+  | 'unit'
+  | 'manufacturer'
+  | 'sku'
+  | 'barcode'
+  | 'discountType'
+  | 'discountValue'
+  | 'description'
+  | 'imageUrl'
+  | 'isActive';
 
 type SourceColumn = {
   id: string;
@@ -28,6 +42,12 @@ type ImportItem = {
   description?: string;
   imageUrl?: string;
   isActive: boolean;
+  unit: ProductUnit;
+  manufacturer?: string;
+  sku?: string;
+  barcode?: string;
+  discountType?: 'percentage' | 'fixed';
+  discountValue?: number;
 };
 
 type AnalyzedRow = {
@@ -59,6 +79,12 @@ const FIELD_OPTIONS: Array<{ value: ImportField; label: string }> = [
   { value: 'name', label: 'Название *' },
   { value: 'category', label: 'Категория' },
   { value: 'basePrice', label: 'Цена *' },
+  { value: 'unit', label: 'Единица продажи' },
+  { value: 'manufacturer', label: 'Производитель' },
+  { value: 'sku', label: 'Артикул' },
+  { value: 'barcode', label: 'Штрихкод' },
+  { value: 'discountType', label: 'Тип скидки' },
+  { value: 'discountValue', label: 'Значение скидки' },
   { value: 'description', label: 'Описание' },
   { value: 'imageUrl', label: 'Ссылка на изображение' },
   { value: 'isActive', label: 'Статус продажи' },
@@ -68,6 +94,12 @@ const HEADER_ALIASES: Record<Exclude<ImportField, 'ignore'>, string[]> = {
   name: ['название', 'наименование', 'товар', 'позиция', 'блюдо', 'name', 'product'],
   category: ['категория', 'раздел', 'группа', 'category'],
   basePrice: ['цена', 'стоимость', 'цена продажи', 'розничная цена', 'price', 'base price'],
+  unit: ['единица', 'единица продажи', 'ед измерения', 'unit'],
+  manufacturer: ['производитель', 'бренд', 'изготовитель', 'manufacturer', 'vendor'],
+  sku: ['артикул', 'sku', 'код товара'],
+  barcode: ['штрихкод', 'штрих код', 'ean', 'barcode', 'gtin'],
+  discountType: ['тип скидки', 'скидка тип', 'discount type'],
+  discountValue: ['значение скидки', 'скидка', 'discount value'],
   description: ['описание', 'состав', 'description'],
   imageUrl: ['изображение', 'фото', 'ссылка на фото', 'image', 'image url'],
   isActive: ['статус', 'в продаже', 'активен', 'active', 'status'],
@@ -104,6 +136,29 @@ const parseActive = (value: string): boolean => {
   return !['нет', 'неактивен', 'скрыт', 'скрыто', 'архив', '0', 'false', 'off', 'inactive'].includes(normalized);
 };
 
+const parseDiscountType = (value: string): 'percentage' | 'fixed' | undefined => {
+  if (value.trim() === '%') return 'percentage';
+  const normalized = normalizeKey(value);
+  if (!normalized) return undefined;
+  if (['процент', 'процентная', 'percentage'].includes(normalized)) return 'percentage';
+  if (['фиксированная', 'фикс', 'fixed', 'руб'].includes(normalized)) return 'fixed';
+  return undefined;
+};
+
+const normalizeImportedUnit = (value: string): ProductUnit | null => {
+  const normalized = normalizeKey(value);
+  if (!normalized) return 'шт';
+  const aliases: Record<string, ProductUnit> = {
+    'шт': 'шт', 'штука': 'шт', 'штуки': 'шт',
+    'г': 'гр', 'гр': 'гр', 'грамм': 'гр', 'граммы': 'гр',
+    'кг': 'кг', 'килограмм': 'кг',
+    'мл': 'мл', 'миллилитр': 'мл',
+    'л': 'л', 'литр': 'л',
+    'упак': 'упак', 'упаковка': 'упак',
+  };
+  return aliases[normalized] ?? null;
+};
+
 const detectField = (header: string): ImportField => {
   const normalized = normalizeKey(header);
   const match = (Object.entries(HEADER_ALIASES) as Array<[Exclude<ImportField, 'ignore'>, string[]]>).find(
@@ -120,7 +175,6 @@ const MenuImportDrawer = ({ isOpen, categories, products, onClose, onImported }:
   const [rows, setRows] = useState<SourceRow[]>([]);
   const [mapping, setMapping] = useState<Record<string, ImportField>>({});
   const [defaultCategoryId, setDefaultCategoryId] = useState('');
-  const [createMissingCategories, setCreateMissingCategories] = useState(true);
   const [fileError, setFileError] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -135,7 +189,6 @@ const MenuImportDrawer = ({ isOpen, categories, products, onClose, onImported }:
       setRows([]);
       setMapping({});
       setDefaultCategoryId('');
-      setCreateMissingCategories(true);
       setFileError(null);
       setImportError(null);
       setIsImporting(false);
@@ -180,6 +233,35 @@ const MenuImportDrawer = ({ isOpen, categories, products, onClose, onImported }:
         return { rowNumber: row.rowNumber, name, category, price: rawPrice, status: 'error', reason: 'Не указана категория' };
       }
 
+      const unitColumn = mappedColumn.get('unit');
+      const unit = normalizeImportedUnit(unitColumn ? normalizeText(row.values[unitColumn]) : '');
+      if (!unit) {
+        return {
+          rowNumber: row.rowNumber,
+          name,
+          category,
+          price: rawPrice,
+          status: 'error',
+          reason: `Неизвестная единица. Допустимо: ${PRODUCT_UNITS.join(', ')}`,
+        };
+      }
+
+      const discountTypeColumn = mappedColumn.get('discountType');
+      const discountValueColumn = mappedColumn.get('discountValue');
+      const rawDiscountType = discountTypeColumn ? normalizeText(row.values[discountTypeColumn]) : '';
+      const discountType = parseDiscountType(rawDiscountType);
+      const rawDiscountValue = discountValueColumn ? normalizeText(row.values[discountValueColumn]) : '';
+      const discountValue = rawDiscountValue ? parsePrice(rawDiscountValue) : null;
+      if (rawDiscountType && !discountType) {
+        return { rowNumber: row.rowNumber, name, category, price: rawPrice, status: 'error', reason: 'Тип скидки: «Процент» или «Фиксированная»' };
+      }
+      if (discountType && discountValue === null) {
+        return { rowNumber: row.rowNumber, name, category, price: rawPrice, status: 'error', reason: 'Укажите значение скидки' };
+      }
+      if (discountType === 'percentage' && (discountValue ?? 0) > 100) {
+        return { rowNumber: row.rowNumber, name, category, price: rawPrice, status: 'error', reason: 'Процент скидки не может быть больше 100' };
+      }
+
       const nameKey = normalizeKey(name);
       if (existingNames.has(nameKey)) {
         return { rowNumber: row.rowNumber, name, category, price: rawPrice, status: 'skipped', reason: 'Уже есть в меню' };
@@ -194,16 +276,33 @@ const MenuImportDrawer = ({ isOpen, categories, products, onClose, onImported }:
         name,
         basePrice: Number(price.toFixed(2)),
         isActive: mappedColumn.get('isActive') ? parseActive(row.values[mappedColumn.get('isActive')!] ?? '') : true,
+        unit,
       };
       if (categoryName) item.categoryName = categoryName;
       else item.categoryId = defaultCategoryId;
 
       const descriptionColumn = mappedColumn.get('description');
       const imageColumn = mappedColumn.get('imageUrl');
+      const manufacturerColumn = mappedColumn.get('manufacturer');
+      const skuColumn = mappedColumn.get('sku');
+      const barcodeColumn = mappedColumn.get('barcode');
       const description = descriptionColumn ? normalizeText(row.values[descriptionColumn]).slice(0, 2000) : '';
       const imageUrl = imageColumn ? normalizeText(row.values[imageColumn]).slice(0, 2000) : '';
+      const manufacturer = manufacturerColumn ? normalizeText(row.values[manufacturerColumn]).slice(0, 200) : '';
+      const sku = skuColumn ? normalizeText(row.values[skuColumn]).slice(0, 64) : '';
+      const barcode = barcodeColumn ? normalizeText(row.values[barcodeColumn]).replace(/\D/g, '') : '';
+      if (barcode && barcode.length !== 8 && barcode.length !== 13) {
+        return { rowNumber: row.rowNumber, name, category, price: rawPrice, status: 'error', reason: 'Штрихкод должен содержать 8 или 13 цифр' };
+      }
       if (description) item.description = description;
       if (imageUrl) item.imageUrl = imageUrl;
+      if (manufacturer) item.manufacturer = manufacturer;
+      if (sku) item.sku = sku;
+      if (barcode) item.barcode = barcode;
+      if (discountType) {
+        item.discountType = discountType;
+        item.discountValue = Number((discountValue ?? 0).toFixed(2));
+      }
 
       return { rowNumber: row.rowNumber, name, category, price: price.toFixed(2), status: 'ready', item };
     });
@@ -296,14 +395,48 @@ const MenuImportDrawer = ({ isOpen, categories, products, onClose, onImported }:
   };
 
   const handleDownloadTemplate = () => {
-    const worksheet = XLSX.utils.aoa_to_sheet([
-      ['Название', 'Категория', 'Цена', 'Описание', 'Ссылка на изображение', 'Статус'],
-      ['Капучино', 'Кофе', 250, 'Кофе с молочной пеной', '', 'В продаже'],
+    const link = document.createElement('a');
+    link.href = '/templates/yago-menu-import-template.xlsx';
+    link.download = 'yago-menu-import-template.xlsx';
+    link.click();
+  };
+
+  const handleExportProducts = () => {
+    const categoryMap = new Map(categories.map((category) => [category._id, category.name]));
+    const rows = products.map((product) => [
+      product.name,
+      categoryMap.get(product.categoryId) ?? '',
+      product.basePrice ?? product.price ?? 0,
+      normalizeProductUnit(product.unit),
+      product.manufacturer ?? '',
+      product.sku ?? '',
+      product.barcode ?? '',
+      product.discountType === 'percentage' ? 'Процент' : product.discountType === 'fixed' ? 'Фиксированная' : '',
+      product.discountValue ?? '',
+      product.description ?? '',
+      product.imageUrl ?? '',
+      product.isActive === false ? 'Скрыта' : 'В продаже',
     ]);
-    worksheet['!cols'] = [{ wch: 28 }, { wch: 20 }, { wch: 12 }, { wch: 36 }, { wch: 34 }, { wch: 16 }];
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ['Название', 'Категория', 'Цена', 'Единица продажи', 'Производитель', 'Артикул', 'Штрихкод', 'Тип скидки', 'Значение скидки', 'Описание', 'Ссылка на изображение', 'Статус'],
+      ...rows,
+    ]);
+    worksheet['!cols'] = [
+      { wch: 28 }, { wch: 20 }, { wch: 12 }, { wch: 18 }, { wch: 24 }, { wch: 18 },
+      { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 36 }, { wch: 34 }, { wch: 16 },
+    ];
+    for (let row = 1; row <= rows.length; row += 1) {
+      for (const column of ['F', 'G']) {
+        const cell = worksheet[`${column}${row + 1}`];
+        if (cell) {
+          cell.t = 's';
+          cell.z = '@';
+        }
+      }
+    }
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Меню');
-    XLSX.writeFile(workbook, 'yago-menu-template.xlsx', { bookType: 'xlsx' });
+    XLSX.writeFile(workbook, `yago-menu-${new Date().toISOString().slice(0, 10)}.xlsx`, { bookType: 'xlsx' });
   };
 
   const handleImport = async () => {
@@ -320,7 +453,6 @@ const MenuImportDrawer = ({ isOpen, categories, products, onClose, onImported }:
         const chunk = readyItems.slice(offset, offset + 200);
         const response = await api.post('/api/catalog/products/import', {
           items: chunk,
-          createMissingCategories,
           skipExisting: true,
         });
         const payload = (response.data?.data ?? response.data) as ImportResponse;
@@ -391,14 +523,19 @@ const MenuImportDrawer = ({ isOpen, categories, products, onClose, onImported }:
         ) : (
           <>
             <section>
-              <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="font-semibold text-slate-900">1. Выберите файл</h3>
                   <p className="mt-1 text-xs text-slate-500">Excel или CSV до 10 МБ, максимум 2000 строк. Заголовки должны быть в первой заполненной строке.</p>
                 </div>
-                <button type="button" onClick={handleDownloadTemplate} className="shrink-0 text-xs font-semibold text-violet-600 hover:text-violet-700">
-                  Скачать шаблон
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={handleDownloadTemplate} className="inline-flex items-center gap-1 rounded-full border border-violet-200 px-3 py-1.5 text-xs font-semibold text-violet-600 hover:bg-violet-50">
+                    <Download size={14} /> Шаблон Excel
+                  </button>
+                  <button type="button" onClick={handleExportProducts} disabled={products.length === 0} className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+                    <Download size={14} /> Экспорт текущих
+                  </button>
+                </div>
               </div>
               <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="sr-only" />
               <button
@@ -443,10 +580,10 @@ const MenuImportDrawer = ({ isOpen, categories, products, onClose, onImported }:
                     </select>
                   </label>
                 ) : (
-                  <label className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-3 text-slate-600">
-                    <input type="checkbox" checked={createMissingCategories} onChange={(event) => setCreateMissingCategories(event.target.checked)} disabled={isImporting} className="mt-0.5" />
-                    <span><span className="block font-semibold text-slate-700">Создавать отсутствующие категории</span><span className="text-xs">Например, значение «Напитки» создаст одноимённую категорию, если её ещё нет.</span></span>
-                  </label>
+                  <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-3 text-emerald-800">
+                    <span className="block font-semibold">Новые категории создадим автоматически</span>
+                    <span className="text-xs">Например, значение «Напитки» создаст одноимённую категорию, если её ещё нет.</span>
+                  </div>
                 )}
               </section>
             ) : null}

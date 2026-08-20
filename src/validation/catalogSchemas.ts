@@ -75,9 +75,18 @@ export const catalogSchemas = {
               description: z.string().trim().max(2000).optional(),
               imageUrl: z.string().trim().max(2000).optional(),
               isActive: optionalBoolean,
+              unit: z.enum(PRODUCT_UNITS).default('шт'),
+              manufacturer: z.string().trim().max(200).optional(),
+              sku: z.string().trim().max(64).optional(),
+              barcode: z.string().trim().regex(/^\d{8}$|^\d{13}$/, 'Barcode must contain 8 or 13 digits').optional(),
+              discountType: z.enum(['percentage', 'fixed']).optional(),
+              discountValue: z.number().nonnegative().optional(),
             })
             .refine((item) => Boolean(item.categoryId || item.categoryName), {
               message: 'categoryId or categoryName is required',
+            })
+            .refine((item) => !item.discountType || item.discountValue !== undefined, {
+              message: 'discountValue is required when discountType is set',
             })
         )
         .min(1)

@@ -36,6 +36,47 @@ describe('catalogSchemas.productImport', () => {
     });
 
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.items[0].unit).toBe('шт');
+      expect(result.data.createMissingCategories).toBe(true);
+    }
+  });
+
+  it('accepts retail fields used by the Excel template', () => {
+    const result = catalogSchemas.productImport.body.safeParse({
+      items: [
+        {
+          rowNumber: 2,
+          name: 'Конфеты на вес',
+          categoryName: 'Сладости',
+          basePrice: 1_490,
+          unit: 'гр',
+          manufacturer: 'Фабрика',
+          sku: 'SWEET-001',
+          barcode: '4601234567893',
+          discountType: 'percentage',
+          discountValue: 10,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('requires a discount value when a discount type is specified', () => {
+    const result = catalogSchemas.productImport.body.safeParse({
+      items: [
+        {
+          rowNumber: 2,
+          name: 'Конфеты',
+          categoryName: 'Сладости',
+          basePrice: 1_490,
+          discountType: 'percentage',
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it('rejects rows without a category reference', () => {

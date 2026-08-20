@@ -726,6 +726,8 @@ const AdminPage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [categoryEditName, setCategoryEditName] = useState('');
   const [categorySortOrder, setCategorySortOrder] = useState('');
+  const [categoryReplacementId, setCategoryReplacementId] = useState('');
+  const [categoryDeleting, setCategoryDeleting] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const [isMenuImportOpen, setIsMenuImportOpen] = useState(false);
@@ -3050,13 +3052,50 @@ const AdminPage: React.FC = () => {
         ? String(category.sortOrder)
         : ''
     );
+    setCategoryReplacementId('');
   };
 
   const handleCloseCategoryEditor = useCallback(() => {
     setSelectedCategory(null);
     setCategoryEditName('');
     setCategorySortOrder('');
+    setCategoryReplacementId('');
   }, []);
+
+  const handleDeleteCategory = async () => {
+    if (!selectedCategory || categoryDeleting) return;
+    const productCount = products.filter((product) => product.categoryId === selectedCategory._id).length;
+
+    if (productCount > 0 && !categoryReplacementId) {
+      notify({ title: 'Выберите категорию для переноса позиций', type: 'info' });
+      return;
+    }
+
+    const message = productCount > 0
+      ? `Перенести ${productCount} позиций и удалить категорию «${selectedCategory.name}»?`
+      : `Удалить пустую категорию «${selectedCategory.name}»?`;
+    if (!window.confirm(message)) return;
+
+    setCategoryDeleting(true);
+    try {
+      await api.delete(`/api/catalog/categories/${selectedCategory._id}`, {
+        params: categoryReplacementId ? { replacementCategoryId: categoryReplacementId } : undefined,
+      });
+      notify({
+        title: productCount > 0 ? `Категория удалена, перенесено позиций: ${productCount}` : 'Категория удалена',
+        type: 'success',
+      });
+      if (menuCategoryFilterId === selectedCategory._id) {
+        setMenuCategoryFilterId(categoryReplacementId || '');
+      }
+      handleCloseCategoryEditor();
+      await loadMenuData();
+    } catch (error) {
+      notify({ title: extractErrorMessage(error, 'Не удалось удалить категорию'), type: 'error' });
+    } finally {
+      setCategoryDeleting(false);
+    }
+  };
 
   const canDiscardProductChanges = useCallback(() => {
     if (productEditDirty || (isCreatingProduct && hasNewProductChanges)) {
@@ -5777,7 +5816,18 @@ const AdminPage: React.FC = () => {
                     onClose={handleCloseCategoryEditor}
                     widthClassName="max-w-[400px]"
                     footer={
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteCategory()}
+                          disabled={
+                            categoryDeleting ||
+                            (products.some((product) => product.categoryId === selectedCategory._id) && !categoryReplacementId)
+                          }
+                          className="mr-auto rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {categoryDeleting ? 'Удаляем…' : 'Удалить'}
+                        </button>
                         <button
                           type="button"
                           onClick={handleCloseCategoryEditor}
@@ -5814,6 +5864,32 @@ const AdminPage: React.FC = () => {
                           className="rounded-2xl border border-slate-200 px-3 py-2"
                         />
                       </div>
+                      {products.some((product) => product.categoryId === selectedCategory._id) ? (
+                        <div className="grid gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                          <label className="text-xs font-semibold uppercase text-amber-700">
+                            Куда перенести {products.filter((product) => product.categoryId === selectedCategory._id).length} позиций перед удалением
+                          </label>
+                          <select
+                            value={categoryReplacementId}
+                            onChange={(event) => setCategoryReplacementId(event.target.value)}
+                            className="rounded-xl border border-amber-200 bg-white px-3 py-2"
+                          >
+                            <option value="">Выберите категорию</option>
+                            {categories
+                              .filter((category) => category._id !== selectedCategory._id)
+                              .map((category) => (
+                                <option key={category._id} value={category._id}>{category.name}</option>
+                              ))}
+                          </select>
+                          {categories.length < 2 ? (
+                            <p className="text-xs text-amber-700">Сначала создайте другую категорию — товары нельзя оставить без категории.</p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                          Категория пустая — её можно удалить без переноса позиций.
+                        </p>
+                      )}
                     </form>
                   </AdminDrawer>
                 ) : (

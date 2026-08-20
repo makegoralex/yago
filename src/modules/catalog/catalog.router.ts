@@ -588,6 +588,9 @@ router.delete(
     }
 
     const organizationId = req.organization!.id;
+    const replacementCategoryId = typeof req.query.replacementCategoryId === 'string'
+      ? req.query.replacementCategoryId
+      : undefined;
 
     const category = await CategoryModel.findOne({ _id: id, organizationId });
 
@@ -596,9 +599,32 @@ router.delete(
       return;
     }
 
+    const productCount = await ProductModel.countDocuments({ categoryId: category._id, organizationId });
+
+    if (productCount > 0) {
+      if (!replacementCategoryId || !isValidObjectId(replacementCategoryId) || replacementCategoryId === id) {
+        res.status(409).json({
+          data: { productCount, requiresReplacement: true },
+          error: `В категории ${productCount} позиций. Сначала выберите категорию для переноса`,
+        });
+        return;
+      }
+
+      const replacementCategory = await CategoryModel.exists({ _id: replacementCategoryId, organizationId });
+      if (!replacementCategory) {
+        res.status(400).json({ data: null, error: 'Категория для переноса не найдена' });
+        return;
+      }
+
+      await ProductModel.updateMany(
+        { categoryId: category._id, organizationId },
+        { $set: { categoryId: new Types.ObjectId(replacementCategoryId) } }
+      );
+    }
+
     await category.deleteOne();
 
-    res.json({ data: { id: category.id }, error: null });
+    res.json({ data: { id: category.id, movedProducts: productCount }, error: null });
   })
 );
 
@@ -733,14 +759,14 @@ router.post(
   requireRole(['owner', 'superAdmin']),
   validateRequest(catalogSchemas.productImport),
   asyncHandler(async (req, res) => {
-    const { items, createMissingCategories, skipExisting } = req.body as z.infer<
+    const { items, skipExisting } = req.body as z.infer<
       typeof catalogSchemas.productImport.body
     >;
     const organizationId = req.organization!.id;
 
     const [existingCategories, existingProducts] = await Promise.all([
       CategoryModel.find({ organizationId }).select('_id name').lean(),
-      skipExisting ? ProductModel.find({ organizationId }).select('name').lean() : Promise.resolve([]),
+      skipExisting ? ProductModel.find({ organizationId }).select('name sku barcode').lean() : Promise.resolve([]),
     ]);
 
     const normalizeKey = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
@@ -751,7 +777,11 @@ router.post(
       existingCategories.map((category) => [normalizeKey(category.name), { _id: category._id, name: category.name }])
     );
     const knownProductNames = new Set(existingProducts.map((product) => normalizeKey(product.name)));
+    const knownSkus = new Set(existingProducts.map((product) => product.sku).filter(Boolean));
+    const knownBarcodes = new Set(existingProducts.map((product) => product.barcode).filter(Boolean));
     const batchProductNames = new Set<string>();
+    const batchSkus = new Set<string>();
+    const batchBarcodes = new Set<string>();
     const missingCategoryNames = new Map<string, string>();
     const skipped: Array<{ rowNumber: number; reason: string }> = [];
 
@@ -759,6 +789,21 @@ router.post(
       const productKey = normalizeKey(item.name);
       if (skipExisting && (knownProductNames.has(productKey) || batchProductNames.has(productKey))) {
         skipped.push({ rowNumber: item.rowNumber, reason: 'Позиция с таким названием уже существует' });
+        continue;
+      }
+
+      const sku = item.sku?.trim().toUpperCase();
+      if (sku && (knownSkus.has(sku) || batchSkus.has(sku))) {
+        skipped.push({ rowNumber: item.rowNumber, reason: 'Позиция с таким артикулом уже существует' });
+        continue;
+      }
+
+      const barcode = item.barcode?.trim();
+      if (barcode && (!isValidEan(barcode) || knownBarcodes.has(barcode) || batchBarcodes.has(barcode))) {
+        skipped.push({
+          rowNumber: item.rowNumber,
+          reason: !isValidEan(barcode) ? 'Некорректный штрихкод EAN-8/EAN-13' : 'Позиция с таким штрихкодом уже существует',
+        });
         continue;
       }
 
@@ -776,15 +821,13 @@ router.post(
 
         const categoryKey = normalizeKey(categoryName);
         if (!categoryByName.has(categoryKey)) {
-          if (!createMissingCategories) {
-            skipped.push({ rowNumber: item.rowNumber, reason: `Категория «${categoryName}» не найдена` });
-            continue;
-          }
           missingCategoryNames.set(categoryKey, categoryName);
         }
       }
 
       batchProductNames.add(productKey);
+      if (sku) batchSkus.add(sku);
+      if (barcode) batchBarcodes.add(barcode);
     }
 
     if (missingCategoryNames.size > 0) {
@@ -813,7 +856,7 @@ router.post(
         return [];
       }
 
-      const basePrice = Number(item.basePrice.toFixed(2));
+      const pricing = computeProductPricing(item.basePrice, undefined, item.discountType, item.discountValue);
       return [
         {
           organizationId,
@@ -821,10 +864,15 @@ router.post(
           name: item.name.trim(),
           description: item.description?.trim() || undefined,
           imageUrl: item.imageUrl?.trim() || undefined,
-          basePrice,
-          price: basePrice,
+          basePrice: pricing.basePrice,
+          price: pricing.price,
+          discountType: pricing.discountType,
+          discountValue: pricing.discountValue,
           isActive: item.isActive ?? true,
-          unit: 'шт',
+          unit: normalizeProductUnit(item.unit),
+          manufacturer: item.manufacturer?.trim() || undefined,
+          sku: item.sku?.trim().toUpperCase() || undefined,
+          barcode: item.barcode?.trim() || undefined,
         },
       ];
     });
