@@ -25,6 +25,7 @@ import type { Category, ModifierGroup, Product } from '../store/catalog';
 import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
 import AdminDrawer from '../components/admin/AdminDrawer';
+import MenuImportDrawer from '../components/admin/MenuImportDrawer';
 
 const getResponseData = <T,>(response: { data?: unknown }): T | undefined => {
   if (!response || typeof response !== 'object') {
@@ -719,6 +720,7 @@ const AdminPage: React.FC = () => {
   const [categorySortOrder, setCategorySortOrder] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
+  const [isMenuImportOpen, setIsMenuImportOpen] = useState(false);
   const [menuCategoryFilterId, setMenuCategoryFilterId] = useState('');
   const [menuCategorySearch, setMenuCategorySearch] = useState('');
   const [menuSearch, setMenuSearch] = useState('');
@@ -5887,8 +5889,15 @@ const AdminPage: React.FC = () => {
                         </select>
                         <button
                           type="button"
+                          onClick={() => setIsMenuImportOpen(true)}
+                          className="ml-auto rounded-full border border-violet-200 bg-white px-4 py-2 text-xs font-semibold text-violet-700 shadow-sm hover:bg-violet-50"
+                        >
+                          Импорт из Excel
+                        </button>
+                        <button
+                          type="button"
                           onClick={handleStartCreateProduct}
-                          className="ml-auto rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-700"
+                          className="rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-700"
                         >
                           + Новая позиция
                         </button>
@@ -9731,6 +9740,25 @@ const AdminPage: React.FC = () => {
           </Card>
         </div>
       ) : null}
+      <MenuImportDrawer
+        isOpen={isMenuImportOpen}
+        categories={categories}
+        products={products}
+        onClose={() => setIsMenuImportOpen(false)}
+        onImported={async ({ imported, skipped, createdCategories }) => {
+          await loadMenuData();
+          notify({
+            title: `Импортировано позиций: ${imported}`,
+            description: [
+              createdCategories ? `Новых категорий: ${createdCategories}` : '',
+              skipped ? `Пропущено: ${skipped}` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ') || undefined,
+            type: 'success',
+          });
+        }}
+      />
       </main>
     </div>
   );
