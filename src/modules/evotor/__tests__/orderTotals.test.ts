@@ -64,3 +64,12 @@ test('buildEvotorOrderItems handles low totals and invalid lines safely', () => 
 
   assert.deepStrictEqual(invalidItems, [{ name: 'Valid', qty: 1, total: 50 }]);
 });
+
+test('buildEvotorOrderItems converts grams to kilograms for the fiscal position', () => {
+  const result = buildEvotorOrderItems(
+    [{ name: 'Кофе в зернах', qty: 350, pricingQuantity: 1000, total: 525 }] as OrderItem[],
+    525
+  );
+
+  assert.deepStrictEqual(result, [{ name: 'Кофе в зернах', qty: 0.35, total: 525 }]);
+});

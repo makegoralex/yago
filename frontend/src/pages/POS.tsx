@@ -24,6 +24,7 @@ import { useRestaurantStore } from '../store/restaurant';
 import { useBillingInfo } from '../hooks/useBillingInfo';
 import { useToast } from '../providers/ToastProvider';
 import { initDebug } from '../lib/initDebug';
+import { getPricingUnit, isMeasuredProduct, normalizeProductUnit } from '../lib/productUnit';
 
 const PRODUCT_GRID_OVERSCAN_ROWS = 2;
 const PRODUCT_ROW_BASE_HEIGHT = 180;
@@ -198,6 +199,9 @@ const POSPage: React.FC = () => {
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isShiftPanelOpen, setShiftPanelOpen] = useState(false);
   const [modifierProduct, setModifierProduct] = useState<Product | null>(null);
+  const [quantityProduct, setQuantityProduct] = useState<Product | null>(null);
+  const [quantityInput, setQuantityInput] = useState('');
+  const [pendingQuantity, setPendingQuantity] = useState(1);
   const orderTagsEnabled = useRestaurantStore((state) => state.enableOrderTags);
   const loyaltyRedeemAllCategories = useRestaurantStore((state) => state.loyaltyRedeemAllCategories);
   const loyaltyRedeemCategoryIds = useRestaurantStore((state) => state.loyaltyRedeemCategoryIds);
@@ -470,7 +474,8 @@ const POSPage: React.FC = () => {
     }
 
     return products
-      .filter((product) => product.name.toLowerCase().includes(normalizedQuery))
+      .filter((product) => [product.name, product.sku, product.barcode, product.manufacturer]
+        .some((value) => value?.toLowerCase().includes(normalizedQuery)))
       .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
       .slice(0, 8);
   }, [products, searchQuery]);
@@ -683,7 +688,14 @@ const POSPage: React.FC = () => {
       return;
     }
 
+    if (isMeasuredProduct(product.unit)) {
+      setQuantityProduct(product);
+      setQuantityInput('');
+      return;
+    }
+
     if (product.modifierGroups?.length) {
+      setPendingQuantity(1);
       setModifierProduct(product);
       return;
     }
@@ -698,11 +710,31 @@ const POSPage: React.FC = () => {
 
     if (!modifierProduct) return;
 
-    void addProduct(modifierProduct, modifiers).catch(() => undefined);
+    void addProduct(modifierProduct, modifiers, pendingQuantity).catch(() => undefined);
     setModifierProduct(null);
+    setPendingQuantity(1);
   };
 
   const handleModifierClose = () => setModifierProduct(null);
+
+  const handleQuantityConfirm = () => {
+    if (!quantityProduct) return;
+    const quantity = Number(quantityInput.replace(',', '.'));
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      notify({ title: 'Введите количество больше нуля', type: 'info' });
+      return;
+    }
+
+    const product = quantityProduct;
+    setQuantityProduct(null);
+    setPendingQuantity(quantity);
+    if (product.modifierGroups?.length) {
+      setModifierProduct(product);
+      return;
+    }
+    void addProduct(product, undefined, quantity).catch(() => undefined);
+    setPendingQuantity(1);
+  };
 
   const handleProductSearchSelect = (product: Product) => {
     handleAddProduct(product);
@@ -986,12 +1018,16 @@ const POSPage: React.FC = () => {
               total={total}
               status={status}
               isCompleting={isCompleting}
-              onIncrement={(lineId) =>
-                void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) + 1)
-              }
-              onDecrement={(lineId) =>
-                void updateItemQty(lineId, (items.find((item) => item.lineId === lineId)?.qty || 0) - 1)
-              }
+              onIncrement={(lineId) => {
+                const item = items.find((entry) => entry.lineId === lineId);
+                const step = item?.unit === 'гр' || item?.unit === 'мл' ? 10 : item?.unit === 'кг' || item?.unit === 'л' ? 0.1 : 1;
+                void updateItemQty(lineId, (item?.qty || 0) + step);
+              }}
+              onDecrement={(lineId) => {
+                const item = items.find((entry) => entry.lineId === lineId);
+                const step = item?.unit === 'гр' || item?.unit === 'мл' ? 10 : item?.unit === 'кг' || item?.unit === 'л' ? 0.1 : 1;
+                void updateItemQty(lineId, Math.max(0, (item?.qty || 0) - step));
+              }}
               onRemove={(lineId) => void removeItem(lineId)}
               onPay={(method) => openPaymentModal(method)}
               onAddCustomer={() => setLoyaltyOpen(true)}
@@ -1045,6 +1081,42 @@ const POSPage: React.FC = () => {
           onClose={handleModifierClose}
           onConfirm={handleModifierConfirm}
         />
+      ) : null}
+      {quantityProduct ? (
+        <FloatingPanelOverlay open onClose={() => setQuantityProduct(null)}>
+          <form
+            className="space-y-4 px-2 pb-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleQuantityConfirm();
+            }}
+          >
+            <div>
+              <p className="text-lg font-semibold text-slate-900">{quantityProduct.name}</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {quantityProduct.price.toFixed(2)} ₽ / {getPricingUnit(quantityProduct.unit)}
+              </p>
+            </div>
+            <label className="block space-y-2">
+              <span className="text-xs font-semibold uppercase text-slate-400">
+                Количество, {normalizeProductUnit(quantityProduct.unit)}
+              </span>
+              <input
+                autoFocus
+                inputMode="decimal"
+                type="number"
+                min="0"
+                step={quantityProduct.unit === 'гр' || quantityProduct.unit === 'мл' ? '1' : '0.001'}
+                value={quantityInput}
+                onChange={(event) => setQuantityInput(event.target.value)}
+                className="h-14 w-full rounded-2xl border border-slate-200 px-4 text-xl font-semibold focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </label>
+            <button type="submit" className="h-12 w-full rounded-xl bg-primary font-semibold text-white">
+              Добавить
+            </button>
+          </form>
+        </FloatingPanelOverlay>
       ) : null}
       <LoyaltyModalComponent
         open={isLoyaltyOpen}
@@ -1187,7 +1259,9 @@ const ProductSearchBar: React.FC<ProductSearchBarProps> = ({ query, onQueryChang
                     className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                   >
                     <span className="truncate pr-3">{product.name}</span>
-                    <span className="text-sm font-semibold text-slate-900">{product.price.toFixed(2)} ₽</span>
+                    <span className="text-sm font-semibold text-slate-900">
+                      {product.price.toFixed(2)} ₽ / {getPricingUnit(product.unit)}
+                    </span>
                   </button>
                 </li>
               ))}

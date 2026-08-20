@@ -1,4 +1,5 @@
 import { Schema, model, Types, Document } from 'mongoose';
+import { DEFAULT_PRODUCT_UNIT, PRODUCT_UNITS, type ProductUnit } from '../catalog/productUnit';
 
 export type OrderStatus = 'draft' | 'paid' | 'completed' | 'cancelled';
 
@@ -30,6 +31,8 @@ export interface OrderItem {
   categoryId?: Types.ObjectId;
   categoryName?: string;
   qty: number;
+  unit: ProductUnit;
+  pricingQuantity: number;
   price: number;
   costPrice?: number;
   modifiersApplied?: SelectedModifier[];
@@ -96,6 +99,8 @@ const orderItemSchema = new Schema<OrderItem>(
     categoryId: { type: Schema.Types.ObjectId, ref: 'Category', required: false },
     categoryName: { type: String, required: false, trim: true },
     qty: { type: Number, required: true, min: 0 },
+    unit: { type: String, enum: PRODUCT_UNITS, required: false, default: DEFAULT_PRODUCT_UNIT },
+    pricingQuantity: { type: Number, required: false, min: 1, default: 1 },
     price: { type: Number, required: true, min: 0 },
     costPrice: { type: Number, required: false, min: 0 },
     modifiersApplied: [

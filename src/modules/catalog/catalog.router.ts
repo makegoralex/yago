@@ -11,6 +11,8 @@ import { ModifierGroupModel, type ModifierOption } from './modifierGroup.model';
 import { recalculateProductCost, recalculateProductsForIngredient } from './productCost.service';
 import { canConvertUnit } from './unitConversion';
 import { catalogSchemas } from '../../validation/catalogSchemas';
+import { generateProductBarcode, generateProductSku, isValidEan } from './productIdentifiers';
+import { normalizeProductUnit, PRODUCT_UNITS } from './productUnit';
 
 const router = Router();
 
@@ -276,7 +278,7 @@ router.get(
       .lean();
 
     const productsQuery = ProductModel.find({ organizationId, isActive: { $ne: false } })
-      .select('_id name categoryId basePrice isActive imageUrl modifierGroups')
+      .select('_id name categoryId basePrice isActive imageUrl modifierGroups unit manufacturer sku barcode')
       .populate({
         path: 'modifierGroups',
         select: '_id name selectionType required options',
@@ -310,6 +312,10 @@ router.get(
       basePrice: product.basePrice,
       isActive: product.isActive !== false,
       imageUrl: product.imageUrl,
+      unit: product.unit ?? 'шт',
+      manufacturer: product.manufacturer,
+      sku: product.sku,
+      barcode: product.barcode,
       modifierGroups: Array.isArray(product.modifierGroups)
         ? product.modifierGroups.map((group) => {
             const normalizedGroup = group as {
@@ -643,6 +649,12 @@ router.post(
       description,
       imageUrl,
       ingredients,
+      unit,
+      manufacturer,
+      sku,
+      barcode,
+      generateSku,
+      generateBarcode,
     } = req.body as z.infer<typeof catalogSchemas.productCreate.body>;
 
     const organizationId = req.organization!.id;
@@ -681,7 +693,15 @@ router.post(
       return;
     }
 
+    const productId = new Types.ObjectId();
+    const normalizedBarcode = barcode?.trim() || (generateBarcode ? generateProductBarcode(productId) : undefined);
+    if (normalizedBarcode && !isValidEan(normalizedBarcode)) {
+      res.status(400).json({ data: null, error: 'Штрихкод должен быть корректным EAN-8 или EAN-13' });
+      return;
+    }
+
     const product = new ProductModel({
+      _id: productId,
       name: name.trim(),
       categoryId,
       organizationId,
@@ -694,6 +714,10 @@ router.post(
       modifierGroups: normalizedModifierGroups,
       ingredients: normalizedIngredients,
       isActive,
+      unit: normalizeProductUnit(unit),
+      manufacturer: manufacturer?.trim() || undefined,
+      sku: sku?.trim() || (generateSku ? generateProductSku(productId) : undefined),
+      barcode: normalizedBarcode,
     });
 
     await product.save();
@@ -800,6 +824,7 @@ router.post(
           basePrice,
           price: basePrice,
           isActive: item.isActive ?? true,
+          unit: 'шт',
         },
       ];
     });
@@ -833,12 +858,24 @@ router.put(
       description,
       imageUrl,
       ingredients,
+      unit,
+      manufacturer,
+      sku,
+      barcode,
+      generateSku,
+      generateBarcode,
     } = req.body;
     const { id } = req.params;
     const organizationId = req.organization!.id;
 
     if (!isValidObjectId(id)) {
       res.status(400).json({ data: null, error: 'Invalid product id' });
+      return;
+    }
+
+    const existingProduct = await ProductModel.findOne({ _id: id, organizationId });
+    if (!existingProduct) {
+      res.status(404).json({ data: null, error: 'Product not found' });
       return;
     }
 
@@ -894,6 +931,33 @@ router.put(
       update.imageUrl = imageUrl?.trim() || undefined;
     }
 
+    if (unit !== undefined) {
+      if (!PRODUCT_UNITS.includes(unit)) {
+        res.status(400).json({ data: null, error: 'Invalid product unit' });
+        return;
+      }
+      update.unit = normalizeProductUnit(unit);
+    }
+
+    if (manufacturer !== undefined) {
+      update.manufacturer = String(manufacturer).trim() || undefined;
+    }
+
+    if (sku !== undefined || generateSku) {
+      const normalizedSku = String(sku ?? '').trim();
+      update.sku = normalizedSku || (generateSku ? generateProductSku(existingProduct._id as Types.ObjectId) : undefined);
+    }
+
+    if (barcode !== undefined || generateBarcode) {
+      const normalizedBarcode = String(barcode ?? '').trim() ||
+        (generateBarcode ? generateProductBarcode(existingProduct._id as Types.ObjectId) : undefined);
+      if (normalizedBarcode && !isValidEan(normalizedBarcode)) {
+        res.status(400).json({ data: null, error: 'Штрихкод должен быть корректным EAN-8 или EAN-13' });
+        return;
+      }
+      update.barcode = normalizedBarcode || undefined;
+    }
+
     if (ingredients !== undefined) {
       try {
         update.ingredients = await normalizeIngredients(ingredients, organizationId);
@@ -911,10 +975,10 @@ router.put(
     ) {
       try {
         const pricing = computeProductPricing(
-          basePrice ?? (update.basePrice as number | undefined),
-          price ?? (update.price as number | undefined),
-          discountType ?? (update.discountType as string | undefined),
-          discountValue ?? (update.discountValue as number | undefined)
+          basePrice ?? existingProduct.basePrice ?? existingProduct.price,
+          price ?? existingProduct.price,
+          discountType ?? existingProduct.discountType,
+          discountValue ?? existingProduct.discountValue
         );
         update.basePrice = pricing.basePrice;
         update.price = pricing.price;

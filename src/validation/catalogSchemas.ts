@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { objectIdSchema, nonEmptyString, optionalBoolean } from './common';
+import { PRODUCT_UNITS } from '../modules/catalog/productUnit';
 
 const modifierOptionSchema = z.object({
   name: nonEmptyString,
@@ -43,6 +44,12 @@ export const catalogSchemas = {
       isActive: optionalBoolean,
       description: z.string().trim().optional(),
       imageUrl: z.string().trim().optional(),
+      unit: z.enum(PRODUCT_UNITS).default('шт'),
+      manufacturer: z.string().trim().max(200).optional(),
+      sku: z.string().trim().max(64).optional(),
+      barcode: z.string().trim().regex(/^\d{8}$|^\d{13}$/, 'Barcode must contain 8 or 13 digits').optional(),
+      generateSku: z.boolean().optional(),
+      generateBarcode: z.boolean().optional(),
       ingredients: z
         .array(
           z.object({
