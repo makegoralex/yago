@@ -54,4 +54,29 @@ export const catalogSchemas = {
         .optional(),
     }),
   },
+  productImport: {
+    body: z.object({
+      items: z
+        .array(
+          z
+            .object({
+              rowNumber: z.number().int().positive(),
+              name: nonEmptyString,
+              categoryId: objectIdSchema.optional(),
+              categoryName: z.string().trim().optional(),
+              basePrice: z.number().nonnegative(),
+              description: z.string().trim().max(2000).optional(),
+              imageUrl: z.string().trim().max(2000).optional(),
+              isActive: optionalBoolean,
+            })
+            .refine((item) => Boolean(item.categoryId || item.categoryName), {
+              message: 'categoryId or categoryName is required',
+            })
+        )
+        .min(1)
+        .max(200),
+      createMissingCategories: z.boolean().default(true),
+      skipExisting: z.boolean().default(true),
+    }),
+  },
 };

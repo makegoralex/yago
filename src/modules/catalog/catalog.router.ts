@@ -704,6 +704,119 @@ router.post(
   })
 );
 
+router.post(
+  '/products/import',
+  requireRole(['owner', 'superAdmin']),
+  validateRequest(catalogSchemas.productImport),
+  asyncHandler(async (req, res) => {
+    const { items, createMissingCategories, skipExisting } = req.body as z.infer<
+      typeof catalogSchemas.productImport.body
+    >;
+    const organizationId = req.organization!.id;
+
+    const [existingCategories, existingProducts] = await Promise.all([
+      CategoryModel.find({ organizationId }).select('_id name').lean(),
+      skipExisting ? ProductModel.find({ organizationId }).select('name').lean() : Promise.resolve([]),
+    ]);
+
+    const normalizeKey = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
+    const categoryById = new Map<string, { _id: Types.ObjectId; name: string }>(
+      existingCategories.map((category) => [String(category._id), { _id: category._id, name: category.name }])
+    );
+    const categoryByName = new Map<string, { _id: Types.ObjectId; name: string }>(
+      existingCategories.map((category) => [normalizeKey(category.name), { _id: category._id, name: category.name }])
+    );
+    const knownProductNames = new Set(existingProducts.map((product) => normalizeKey(product.name)));
+    const batchProductNames = new Set<string>();
+    const missingCategoryNames = new Map<string, string>();
+    const skipped: Array<{ rowNumber: number; reason: string }> = [];
+
+    for (const item of items) {
+      const productKey = normalizeKey(item.name);
+      if (skipExisting && (knownProductNames.has(productKey) || batchProductNames.has(productKey))) {
+        skipped.push({ rowNumber: item.rowNumber, reason: 'Позиция с таким названием уже существует' });
+        continue;
+      }
+
+      if (item.categoryId) {
+        if (!categoryById.has(item.categoryId)) {
+          skipped.push({ rowNumber: item.rowNumber, reason: 'Категория не найдена' });
+          continue;
+        }
+      } else {
+        const categoryName = item.categoryName?.trim();
+        if (!categoryName) {
+          skipped.push({ rowNumber: item.rowNumber, reason: 'Не указана категория' });
+          continue;
+        }
+
+        const categoryKey = normalizeKey(categoryName);
+        if (!categoryByName.has(categoryKey)) {
+          if (!createMissingCategories) {
+            skipped.push({ rowNumber: item.rowNumber, reason: `Категория «${categoryName}» не найдена` });
+            continue;
+          }
+          missingCategoryNames.set(categoryKey, categoryName);
+        }
+      }
+
+      batchProductNames.add(productKey);
+    }
+
+    if (missingCategoryNames.size > 0) {
+      const createdCategories = await CategoryModel.insertMany(
+        Array.from(missingCategoryNames.values(), (name) => ({ name, organizationId }))
+      );
+      for (const category of createdCategories) {
+        const categoryEntry = { _id: category._id as Types.ObjectId, name: category.name };
+        categoryById.set(String(category._id), categoryEntry);
+        categoryByName.set(normalizeKey(category.name), categoryEntry);
+      }
+    }
+
+    const skippedRows = new Set(skipped.map((item) => item.rowNumber));
+    const documents = items.flatMap((item) => {
+      if (skippedRows.has(item.rowNumber)) {
+        return [];
+      }
+
+      const category = item.categoryId
+        ? categoryById.get(item.categoryId)
+        : categoryByName.get(normalizeKey(item.categoryName ?? ''));
+
+      if (!category) {
+        skipped.push({ rowNumber: item.rowNumber, reason: 'Категория не найдена' });
+        return [];
+      }
+
+      const basePrice = Number(item.basePrice.toFixed(2));
+      return [
+        {
+          organizationId,
+          categoryId: category._id,
+          name: item.name.trim(),
+          description: item.description?.trim() || undefined,
+          imageUrl: item.imageUrl?.trim() || undefined,
+          basePrice,
+          price: basePrice,
+          isActive: item.isActive ?? true,
+        },
+      ];
+    });
+
+    const createdProducts = documents.length > 0 ? await ProductModel.insertMany(documents) : [];
+
+    res.status(201).json({
+      data: {
+        imported: createdProducts.length,
+        skipped,
+        createdCategories: Array.from(missingCategoryNames.values()),
+      },
+      error: null,
+    });
+  })
+);
+
 router.put(
   '/products/:id',
   requireRole(['owner', 'superAdmin']),
