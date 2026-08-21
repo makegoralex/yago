@@ -15,7 +15,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) => {
       type="button"
       onClick={() => onSelect(product)}
       title={product.name}
-      className="group flex h-[170px] min-h-0 flex-col overflow-hidden rounded-xl bg-white p-2 text-left shadow-soft transition hover:-translate-y-1 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:h-[190px] sm:p-2.5 lg:h-[210px]"
+      className="group flex min-h-[110px] flex-col overflow-hidden rounded-xl bg-white p-2 text-left shadow-soft transition hover:-translate-y-1 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:min-h-[130px] sm:p-2.5 lg:min-h-[150px]"
     >
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
         {product.imageUrl ? (
