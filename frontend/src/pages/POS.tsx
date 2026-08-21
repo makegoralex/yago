@@ -1020,14 +1020,13 @@ const POSPage: React.FC = () => {
               isCompleting={isCompleting}
               onIncrement={(lineId) => {
                 const item = items.find((entry) => entry.lineId === lineId);
-                const step = item?.unit === 'гр' || item?.unit === 'мл' ? 10 : item?.unit === 'кг' || item?.unit === 'л' ? 0.1 : 1;
-                void updateItemQty(lineId, (item?.qty || 0) + step);
+                void updateItemQty(lineId, (item?.qty || 0) + 1);
               }}
               onDecrement={(lineId) => {
                 const item = items.find((entry) => entry.lineId === lineId);
-                const step = item?.unit === 'гр' || item?.unit === 'мл' ? 10 : item?.unit === 'кг' || item?.unit === 'л' ? 0.1 : 1;
-                void updateItemQty(lineId, Math.max(0, (item?.qty || 0) - step));
+                void updateItemQty(lineId, Math.max(0, (item?.qty || 0) - 1));
               }}
+              onQuantityChange={(lineId, quantity) => updateItemQty(lineId, quantity)}
               onRemove={(lineId) => void removeItem(lineId)}
               onPay={(method) => openPaymentModal(method)}
               onAddCustomer={() => setLoyaltyOpen(true)}

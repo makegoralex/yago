@@ -8,7 +8,7 @@ import type {
   PaymentMethod,
   OrderTag,
 } from '../../store/order';
-import { formatQuantity, getPricingUnit } from '../../lib/productUnit';
+import { formatQuantity, getPricingUnit, isMeasuredProduct, normalizeProductUnit } from '../../lib/productUnit';
 
 type OrderPanelProps = {
   items: OrderItem[];
@@ -18,6 +18,7 @@ type OrderPanelProps = {
   status: 'draft' | 'paid' | 'completed' | 'cancelled' | null;
   onIncrement: (lineId: string) => void;
   onDecrement: (lineId: string) => void;
+  onQuantityChange: (lineId: string, quantity: number) => Promise<void> | void;
   onRemove: (lineId: string) => void;
   onPay: (method: PaymentMethod) => void;
   onAddCustomer: () => void;
@@ -50,6 +51,57 @@ const statusLabels: Record<NonNullable<OrderPanelProps['status']>, string> = {
   cancelled: 'Отменён',
 };
 
+type MeasuredQuantityEditorProps = {
+  item: OrderItem;
+  onQuantityChange: (lineId: string, quantity: number) => Promise<void> | void;
+};
+
+const MeasuredQuantityEditor: React.FC<MeasuredQuantityEditorProps> = ({ item, onQuantityChange }) => {
+  const [draft, setDraft] = useState(String(item.qty).replace('.', ','));
+
+  React.useEffect(() => {
+    setDraft(String(item.qty).replace('.', ','));
+  }, [item.qty]);
+
+  const commit = () => {
+    const quantity = Number(draft.trim().replace(',', '.'));
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setDraft(String(item.qty).replace('.', ','));
+      return;
+    }
+
+    if (quantity !== item.qty) {
+      void onQuantityChange(item.lineId, quantity);
+    }
+    setDraft(String(quantity).replace('.', ','));
+  };
+
+  return (
+    <label className="flex h-10 min-w-0 max-w-[170px] flex-1 items-center overflow-hidden rounded-lg border border-violet-200 bg-violet-50/60 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100">
+      <span className="sr-only">Количество для {item.name}</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value.replace(/[^0-9.,]/g, ''))}
+        onFocus={(event) => event.currentTarget.select()}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+          if (event.key === 'Escape') {
+            setDraft(String(item.qty).replace('.', ','));
+            event.currentTarget.blur();
+          }
+        }}
+        className="h-full min-w-0 flex-1 bg-transparent px-2 text-right text-sm font-semibold tabular-nums text-slate-900 outline-none"
+      />
+      <span className="shrink-0 border-l border-violet-200 px-2 text-xs font-semibold text-violet-700">
+        {normalizeProductUnit(item.unit)}
+      </span>
+    </label>
+  );
+};
+
 const OrderPanel: React.FC<OrderPanelProps> = ({
   items,
   subtotal,
@@ -58,6 +110,7 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
   status,
   onIncrement,
   onDecrement,
+  onQuantityChange,
   onRemove,
   onPay,
   onAddCustomer,
@@ -334,10 +387,10 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
         ) : (
           <ul className="space-y-2.5">
             {items.map((item) => (
-              <li key={item.lineId} className="rounded-xl border border-slate-100 p-2.5 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{item.name}</p>
+              <li key={item.lineId} className="min-w-0 rounded-xl border border-slate-100 p-2.5 shadow-sm">
+                <div className="min-w-0">
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-semibold leading-snug text-slate-900">{item.name}</p>
                     <p className="text-xs text-slate-500">
                       {item.price.toFixed(2)} ₽ / {getPricingUnit(item.unit)}
                     </p>
@@ -352,24 +405,33 @@ const OrderPanel: React.FC<OrderPanelProps> = ({
                       </ul>
                     ) : null}
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => onDecrement(item.lineId)}
-                      className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-base font-semibold text-slate-700 transition hover:border-slate-300"
-                    >
-                      −
-                    </button>
-                    <span className="min-w-14 text-center text-sm font-semibold text-slate-900">
-                      {formatQuantity(item.qty, item.unit)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onIncrement(item.lineId)}
-                      className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-base font-semibold text-slate-700 transition hover:border-slate-300"
-                    >
-                      +
-                    </button>
+                  <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
+                    <span className="shrink-0 text-[11px] font-medium text-slate-400">Количество</span>
+                    {isMeasuredProduct(item.unit) ? (
+                      <MeasuredQuantityEditor item={item} onQuantityChange={onQuantityChange} />
+                    ) : (
+                      <div className="flex min-w-0 items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onDecrement(item.lineId)}
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-base font-semibold text-slate-700 transition hover:border-slate-300"
+                          aria-label={`Уменьшить количество ${item.name}`}
+                        >
+                          −
+                        </button>
+                        <span className="min-w-0 px-1 text-center text-sm font-semibold tabular-nums text-slate-900">
+                          {formatQuantity(item.qty, item.unit)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onIncrement(item.lineId)}
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-base font-semibold text-slate-700 transition hover:border-slate-300"
+                          aria-label={`Увеличить количество ${item.name}`}
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
