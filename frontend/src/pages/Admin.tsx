@@ -831,8 +831,14 @@ const AdminPage: React.FC = () => {
   const [inventoryAuditForm, setInventoryAuditForm] = useState({
     warehouseId: '',
     performedAt: nowInputValue,
-    items: [] as Array<{ itemType: 'ingredient' | 'product'; itemId: string; countedQuantity: string }>,
+    items: [] as Array<{
+      itemType: 'ingredient' | 'product';
+      itemId: string;
+      search: string;
+      countedQuantity: string;
+    }>,
   });
+  const [activeAuditSearchIndex, setActiveAuditSearchIndex] = useState<number | null>(null);
   const [auditSubmitting, setAuditSubmitting] = useState(false);
   const [lastAuditResult, setLastAuditResult] = useState<InventoryAudit | null>(null);
   const [inventoryAudits, setInventoryAudits] = useState<InventoryAudit[]>([]);
@@ -956,6 +962,9 @@ const AdminPage: React.FC = () => {
       .map((item) => ({
         itemType: item.itemType,
         itemId: item.itemId,
+        search: item.itemType === 'ingredient'
+          ? item.ingredient?.name ?? ''
+          : item.product?.name ?? '',
         countedQuantity: item.quantity.toString(),
       }));
 
@@ -968,6 +977,7 @@ const AdminPage: React.FC = () => {
               {
                 itemType: 'ingredient',
                 itemId: '',
+                search: '',
                 countedQuantity: '',
               },
             ],
@@ -1913,6 +1923,29 @@ const AdminPage: React.FC = () => {
 
     return map;
   }, [inventoryItems]);
+
+  const inventoryValueTotals = useMemo(() => {
+    let purchase = 0;
+    let retail = 0;
+    let withoutPurchaseCost = 0;
+
+    for (const item of inventoryItems) {
+      if (item.unitCost === undefined) {
+        withoutPurchaseCost += 1;
+      } else {
+        purchase += item.unitCost * item.quantity;
+      }
+
+      if (item.itemType === 'product') {
+        const product = item.product ?? productMap.get(item.itemId);
+        if (product) {
+          retail += getProductPrice(product) * item.quantity;
+        }
+      }
+    }
+
+    return { purchase, retail, withoutPurchaseCost };
+  }, [getProductPrice, inventoryItems, productMap]);
 
   const auditDiscrepancyItems = useMemo(
     () => lastAuditResult?.items.filter((item) => Math.abs(item.difference) > 0.000001) ?? [],
@@ -4448,20 +4481,41 @@ const AdminPage: React.FC = () => {
 
   const handleAuditItemChange = (
     index: number,
-    field: 'itemType' | 'itemId' | 'countedQuantity',
+    field: 'itemType' | 'itemId' | 'search' | 'countedQuantity',
     value: string
   ) => {
     setInventoryAuditForm((prev) => {
       const items = [...prev.items];
-      items[index] = { ...items[index], [field]: value };
+      items[index] = field === 'itemType'
+        ? {
+            ...items[index],
+            itemType: value as 'ingredient' | 'product',
+            itemId: '',
+            search: '',
+          }
+        : field === 'search'
+          ? { ...items[index], search: value, itemId: '' }
+          : { ...items[index], [field]: value };
       return { ...prev, items };
     });
+  };
+
+  const handleSelectAuditItem = (
+    index: number,
+    option: { id: string; name: string }
+  ) => {
+    setInventoryAuditForm((prev) => {
+      const items = [...prev.items];
+      items[index] = { ...items[index], itemId: option.id, search: option.name };
+      return { ...prev, items };
+    });
+    setActiveAuditSearchIndex(null);
   };
 
   const addAuditItemRow = () => {
     setInventoryAuditForm((prev) => ({
       ...prev,
-      items: [...prev.items, { itemType: 'ingredient', itemId: '', countedQuantity: '' }],
+      items: [...prev.items, { itemType: 'ingredient', itemId: '', search: '', countedQuantity: '' }],
     }));
   };
 
@@ -8068,6 +8122,15 @@ const AdminPage: React.FC = () => {
                         `${inventoryAuditForm.warehouseId}-${item.itemType}-${item.itemId}`
                       );
                       const unitLabel = getInventoryItemUnit(item.itemType, item.itemId);
+                      const auditItemOptions = item.itemType === 'ingredient'
+                        ? ingredients.map((ingredient) => ({ id: ingredient._id, name: ingredient.name }))
+                        : products.map((product) => ({ id: product._id, name: product.name }));
+                      const normalizedAuditSearch = item.search.trim().toLowerCase();
+                      const filteredAuditOptions = auditItemOptions
+                        .filter((option) =>
+                          !normalizedAuditSearch || option.name.toLowerCase().includes(normalizedAuditSearch)
+                        )
+                        .slice(0, 20);
 
                       return (
                         <div key={`${item.itemId}-${index}`} className="space-y-2 rounded-2xl bg-white p-3 shadow-soft">
@@ -8082,24 +8145,48 @@ const AdminPage: React.FC = () => {
                               <option value="ingredient">Ингредиент</option>
                               <option value="product">Продукт</option>
                             </select>
-                            <select
-                              value={item.itemId}
-                              onChange={(event) => handleAuditItemChange(index, 'itemId', event.target.value)}
-                              className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                            >
-                              <option value="">Выберите позицию</option>
-                              {item.itemType === 'ingredient'
-                                ? ingredients.map((ingredient) => (
-                                    <option key={ingredient._id} value={ingredient._id}>
-                                      {ingredient.name}
-                                    </option>
-                                  ))
-                                : products.map((product) => (
-                                    <option key={product._id} value={product._id}>
-                                      {product.name}
-                                    </option>
-                                  ))}
-                            </select>
+                            <div className="relative">
+                              <input
+                                type="search"
+                                value={item.search}
+                                onChange={(event) => handleAuditItemChange(index, 'search', event.target.value)}
+                                onFocus={(event) => {
+                                  setActiveAuditSearchIndex(index);
+                                  event.currentTarget.select();
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Escape') {
+                                    setActiveAuditSearchIndex(null);
+                                  }
+                                  if (event.key === 'Enter' && filteredAuditOptions[0]) {
+                                    event.preventDefault();
+                                    handleSelectAuditItem(index, filteredAuditOptions[0]);
+                                  }
+                                }}
+                                onBlur={() => setActiveAuditSearchIndex((current) => current === index ? null : current)}
+                                placeholder={item.itemType === 'ingredient' ? 'Найти ингредиент' : 'Найти товар'}
+                                className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                              />
+                              {activeAuditSearchIndex === index ? (
+                                <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                                  {filteredAuditOptions.length ? (
+                                    filteredAuditOptions.map((option) => (
+                                      <button
+                                        key={option.id}
+                                        type="button"
+                                        onMouseDown={(event) => event.preventDefault()}
+                                        onClick={() => handleSelectAuditItem(index, option)}
+                                        className="block w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-emerald-50"
+                                      >
+                                        {option.name}
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <p className="px-3 py-2 text-xs text-slate-400">Ничего не найдено</p>
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
                           <div className="grid gap-2 md:grid-cols-[repeat(3,_minmax(0,_1fr))_auto]">
                             <div>
@@ -8276,8 +8363,30 @@ const AdminPage: React.FC = () => {
               {inventoryLoading ? (
                 <div className="h-32 animate-pulse rounded-2xl bg-slate-200/60" />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-sm">
+                <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase text-slate-400">Общая закупочная стоимость</p>
+                      <p className="mt-1 text-xl font-semibold text-slate-800">
+                        {formatCurrency(inventoryValueTotals.purchase)} ₽
+                      </p>
+                      {inventoryValueTotals.withoutPurchaseCost > 0 ? (
+                        <p className="mt-1 text-xs text-amber-600">
+                          Без учёта {inventoryValueTotals.withoutPurchaseCost} поз. без закупочной цены
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="rounded-2xl bg-emerald-50 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase text-emerald-600/70">Общая розничная стоимость</p>
+                      <p className="mt-1 text-xl font-semibold text-emerald-700">
+                        {formatCurrency(inventoryValueTotals.retail)} ₽
+                      </p>
+                      <p className="mt-1 text-xs text-emerald-600/80">По товарам с розничной ценой</p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-left text-sm">
                     <thead>
                       <tr className="text-xs uppercase text-slate-400">
                         <th className="px-3 py-2">Склад</th>
@@ -8336,7 +8445,8 @@ const AdminPage: React.FC = () => {
                         );
                       })}
                     </tbody>
-                  </table>
+                    </table>
+                  </div>
                 </div>
               )}
             </Card>
