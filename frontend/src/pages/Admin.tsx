@@ -8283,13 +8283,23 @@ const AdminPage: React.FC = () => {
                         <th className="px-3 py-2">Склад</th>
                         <th className="px-3 py-2">Позиция</th>
                         <th className="px-3 py-2">Количество</th>
-                        <th className="px-3 py-2">Стоимость</th>
+                        <th className="px-3 py-2">Закупочная стоимость</th>
+                        <th className="px-3 py-2">Розничная стоимость</th>
                         <th className="px-3 py-2 text-right">Корректировка</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {inventoryItems.map((item) => {
                         const unitLabel = getInventoryItemUnit(item.itemType, item.itemId);
+                        const product = item.itemType === 'product'
+                          ? item.product ?? productMap.get(item.itemId) ?? null
+                          : null;
+                        const purchaseValue = item.unitCost === undefined
+                          ? null
+                          : item.unitCost * item.quantity;
+                        const retailValue = product
+                          ? getProductPrice(product) * item.quantity
+                          : null;
                         return (
                           <tr key={item._id}>
                             <td className="px-3 py-2 text-slate-500">{item.warehouse?.name ?? '—'}</td>
@@ -8302,7 +8312,10 @@ const AdminPage: React.FC = () => {
                               {formatInventoryQuantity(item.quantity)} {unitLabel}
                             </td>
                             <td className="px-3 py-2 text-slate-500">
-                              {item.unitCost ? `${(item.unitCost * item.quantity).toFixed(2)} ₽` : '—'}
+                              {purchaseValue === null ? '—' : `${formatCurrency(purchaseValue)} ₽`}
+                            </td>
+                            <td className="px-3 py-2 font-medium text-slate-700">
+                              {retailValue === null ? '—' : `${formatCurrency(retailValue)} ₽`}
                             </td>
                             <td className="px-3 py-2 text-right text-xs">
                               <div className="flex justify-end gap-2">
