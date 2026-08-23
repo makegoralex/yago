@@ -1932,6 +1932,32 @@ export const buildSwaggerDocument = (): OpenAPIV3.Document => ({
       },
     },
     '/api/inventory/inventory/audits': {
+      get: {
+        summary: 'List inventory audits with item discrepancies',
+        tags: ['Inventory'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'warehouseId', in: 'query', required: false, schema: { type: 'string' } },
+          { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 100 } },
+        ],
+        responses: {
+          '200': {
+            description: 'Audit history',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { type: 'array', items: { $ref: '#/components/schemas/InventoryAudit' } },
+                    error: { type: 'string', nullable: true },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid warehouse id' },
+        },
+      },
       post: {
         summary: 'Perform inventory audit and lock previous documents',
         tags: ['Inventory'],

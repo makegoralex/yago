@@ -16,6 +16,7 @@ import {
   fetchInventoryItemsWithReferences,
   getInventorySummary,
   InventoryReceiptError,
+  listInventoryAudits,
   listStockReceipts,
   performInventoryAudit,
   updateStockReceipt,
@@ -529,6 +530,32 @@ router.post(
         return;
       }
 
+      throw error;
+    }
+  })
+);
+
+router.get(
+  '/inventory/audits',
+  asyncHandler(async (req, res) => {
+    const organizationId = getOrganizationObjectId(req);
+
+    if (!organizationId) {
+      res.status(403).json({ data: null, error: 'Organization context is required' });
+      return;
+    }
+
+    const warehouseId = typeof req.query.warehouseId === 'string' ? req.query.warehouseId : undefined;
+    const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 20;
+
+    try {
+      const audits = await listInventoryAudits(organizationId, warehouseId, limit);
+      res.json({ data: audits, error: null });
+    } catch (error) {
+      if (error instanceof InventoryReceiptError) {
+        res.status(error.status).json({ data: null, error: error.message });
+        return;
+      }
       throw error;
     }
   })

@@ -835,6 +835,7 @@ const AdminPage: React.FC = () => {
   });
   const [auditSubmitting, setAuditSubmitting] = useState(false);
   const [lastAuditResult, setLastAuditResult] = useState<InventoryAudit | null>(null);
+  const [inventoryAudits, setInventoryAudits] = useState<InventoryAudit[]>([]);
 
   const [suppliersLoading, setSuppliersLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -1229,6 +1230,17 @@ const AdminPage: React.FC = () => {
       setInventoryLoading(false);
     }
   }, [notify]);
+
+  const loadInventoryAudits = useCallback(async () => {
+    try {
+      const response = await api.get('/api/inventory/inventory/audits', { params: { limit: 50 } });
+      const audits = getResponseData<InventoryAudit[]>(response) ?? [];
+      setInventoryAudits(audits);
+      setLastAuditResult((current) => current ?? audits[0] ?? null);
+    } catch (error) {
+      console.error('Не удалось загрузить историю инвентаризаций', error);
+    }
+  }, []);
 
   const normalizeReceiptPayload = (payload: unknown): StockReceipt[] => {
     const queue: unknown[] = [];
@@ -1902,6 +1914,15 @@ const AdminPage: React.FC = () => {
     return map;
   }, [inventoryItems]);
 
+  const auditDiscrepancyItems = useMemo(
+    () => lastAuditResult?.items.filter((item) => Math.abs(item.difference) > 0.000001) ?? [],
+    [lastAuditResult]
+  );
+
+  const auditNetValue = lastAuditResult
+    ? lastAuditResult.totalGainValue - lastAuditResult.totalLossValue
+    : 0;
+
   const applyReceiptDatePreset = useCallback(
     (preset: string) => {
       let from: Date | null = null;
@@ -2469,6 +2490,9 @@ const AdminPage: React.FC = () => {
       if (!stockReceiptsLoading && stockReceipts.length === 0) {
         void loadStockReceipts();
       }
+      if (inventoryAudits.length === 0) {
+        void loadInventoryAudits();
+      }
     }
 
     if (activeTab === 'suppliers') {
@@ -2526,6 +2550,8 @@ const AdminPage: React.FC = () => {
     stockReceipts.length,
     stockReceiptsLoading,
     loadStockReceipts,
+    inventoryAudits.length,
+    loadInventoryAudits,
     discountsLoading,
     certificatesLoading,
     certificates.length,
@@ -4413,6 +4439,7 @@ const AdminPage: React.FC = () => {
       }
       await loadInventoryData();
       await loadStockReceipts();
+      await loadInventoryAudits();
       await loadMenuData();
     } catch (error) {
       const message = extractErrorMessage(error, 'Не удалось удалить документ');
@@ -8132,36 +8159,112 @@ const AdminPage: React.FC = () => {
                 {lastAuditResult ? (
                   <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-semibold text-slate-800">Последняя инвентаризация</p>
-                      <p className="text-xs text-slate-500">
-                        {formatDateTime(lastAuditResult.performedAt)} · Склад:{' '}
-                        {warehouseMap.get(lastAuditResult.warehouseId)?.name ?? '—'}
-                      </p>
+                      <div>
+                        <p className="font-semibold text-slate-800">Результат инвентаризации</p>
+                        <p className="text-xs text-slate-500">
+                          {formatDateTime(lastAuditResult.performedAt)} · Склад:{' '}
+                          {warehouseMap.get(lastAuditResult.warehouseId)?.name ?? '—'}
+                        </p>
+                      </div>
+                      {inventoryAudits.length > 1 ? (
+                        <select
+                          value={lastAuditResult._id}
+                          onChange={(event) => {
+                            const audit = inventoryAudits.find((entry) => entry._id === event.target.value);
+                            if (audit) setLastAuditResult(audit);
+                          }}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                          aria-label="Выбрать инвентаризацию из истории"
+                        >
+                          {inventoryAudits.map((audit) => (
+                            <option key={audit._id} value={audit._id}>
+                              {formatDateTime(audit.performedAt)} · {warehouseMap.get(audit.warehouseId)?.name ?? 'Склад'}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
                     </div>
-                    <p className="text-xs text-slate-500">
-                      Потери: {lastAuditResult.totalLossValue.toFixed(2)} ₽ · Излишки:{' '}
-                      {lastAuditResult.totalGainValue.toFixed(2)} ₽
-                    </p>
-                    <div className="mt-3 max-h-48 space-y-2 overflow-y-auto text-xs text-slate-700">
-                      {lastAuditResult.items.map((item, index) => (
-                        <div key={`${item.itemId}-${index}`} className="rounded-xl bg-white px-3 py-2">
-                          <p className="font-semibold text-slate-800">
-                            {getInventoryItemName(item.itemType, item.itemId)}
-                          </p>
-                          <p>
-                            Было {formatInventoryQuantity(item.previousQuantity)} → Стало{' '}
-                            {formatInventoryQuantity(item.countedQuantity)} ({item.difference >= 0 ? '+' : ''}
-                            {formatInventoryQuantity(item.difference)}){' '}
-                            {getInventoryItemUnit(item.itemType, item.itemId)}
-                          </p>
-                          {item.unitCostSnapshot !== undefined ? (
-                            <p className="text-[11px] text-slate-500">
-                              Стоимость изменения: {(item.difference * (item.unitCostSnapshot ?? 0)).toFixed(2)} ₽
-                            </p>
-                          ) : null}
-                        </div>
-                      ))}
+
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <p className="text-[10px] uppercase text-slate-400">Расхождений</p>
+                        <p className="font-semibold text-slate-800">
+                          {auditDiscrepancyItems.length} из {lastAuditResult.items.length} позиций
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <p className="text-[10px] uppercase text-slate-400">Недостача</p>
+                        <p className="font-semibold text-red-600">
+                          −{formatCurrency(lastAuditResult.totalLossValue)} ₽
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <p className="text-[10px] uppercase text-slate-400">Излишек</p>
+                        <p className="font-semibold text-emerald-600">
+                          +{formatCurrency(lastAuditResult.totalGainValue)} ₽
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <p className="text-[10px] uppercase text-slate-400">Итого корректировка</p>
+                        <p className={`font-semibold ${auditNetValue < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                          {auditNetValue > 0 ? '+' : ''}{formatCurrency(auditNetValue)} ₽
+                        </p>
+                      </div>
                     </div>
+
+                    {auditDiscrepancyItems.length ? (
+                      <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                        <table className="min-w-full text-left text-xs">
+                          <thead className="bg-slate-50 text-[10px] uppercase text-slate-400">
+                            <tr>
+                              <th className="px-3 py-2">Позиция</th>
+                              <th className="px-3 py-2 text-right">По учёту</th>
+                              <th className="px-3 py-2 text-right">Фактически</th>
+                              <th className="px-3 py-2 text-right">Разница</th>
+                              <th className="px-3 py-2 text-right">Себестоимость</th>
+                              <th className="px-3 py-2 text-right">Расхождение, ₽</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {auditDiscrepancyItems.map((item, index) => {
+                              const unit = getInventoryItemUnit(item.itemType, item.itemId);
+                              const discrepancyValue =
+                                item.unitCostSnapshot === undefined ? null : item.difference * item.unitCostSnapshot;
+                              return (
+                                <tr key={`${item.itemId}-${index}`}>
+                                  <td className="px-3 py-2 font-semibold text-slate-700">
+                                    {getInventoryItemName(item.itemType, item.itemId)}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-slate-500">
+                                    {formatInventoryQuantity(item.previousQuantity)} {unit}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-slate-700">
+                                    {formatInventoryQuantity(item.countedQuantity)} {unit}
+                                  </td>
+                                  <td className={`px-3 py-2 text-right font-semibold ${item.difference < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                    {item.difference > 0 ? '+' : ''}{formatInventoryQuantity(item.difference)} {unit}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-slate-500">
+                                    {item.unitCostSnapshot === undefined
+                                      ? 'Не указана'
+                                      : `${formatCurrency(item.unitCostSnapshot)} ₽/${unit}`}
+                                  </td>
+                                  <td className={`px-3 py-2 text-right font-semibold ${discrepancyValue !== null && discrepancyValue < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                    {discrepancyValue === null
+                                      ? '—'
+                                      : `${discrepancyValue > 0 ? '+' : ''}${formatCurrency(discrepancyValue)} ₽`}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                        Расхождений нет: фактические остатки совпали с учётными.
+                      </div>
+                    )}
                   </div>
                 ) : null}
               </Card>

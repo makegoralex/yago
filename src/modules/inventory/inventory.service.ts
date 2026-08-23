@@ -511,9 +511,28 @@ export const performInventoryAudit = async ({
     warehouseId: warehouseObjectId,
     createdBy: new Types.ObjectId(performedBy),
     items: [],
+    organizationId,
   });
 
   return audit;
+};
+
+export const listInventoryAudits = async (
+  organizationId: Types.ObjectId,
+  warehouseId?: string,
+  limit = 20
+): Promise<InventoryAuditDocument[]> => {
+  const filter: FilterQuery<InventoryAuditDocument> = { organizationId };
+
+  if (warehouseId) {
+    if (!Types.ObjectId.isValid(warehouseId)) {
+      throw new InventoryReceiptError(400, 'Некорректный идентификатор склада');
+    }
+    filter.warehouseId = new Types.ObjectId(warehouseId);
+  }
+
+  const normalizedLimit = Math.min(Math.max(Math.floor(limit) || 20, 1), 100);
+  return InventoryAuditModel.find(filter).sort({ performedAt: -1, createdAt: -1 }).limit(normalizedLimit);
 };
 
 export const fetchInventoryItemsWithReferences = async (
