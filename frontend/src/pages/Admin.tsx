@@ -1351,6 +1351,13 @@ const AdminPage: React.FC = () => {
   const productMap = useMemo(() => new Map(products.map((product) => [product._id, product])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map((category) => [category._id, category])), [categories]);
   const markupThresholds = useMemo(() => ({ warning: 300, danger: 100 }), []);
+  const getInventoryItemUnit = useCallback(
+    (itemType: 'ingredient' | 'product', itemId: string): string =>
+      itemType === 'ingredient'
+        ? ingredientMap.get(itemId)?.unit ?? 'ед.'
+        : getPricingUnit(productMap.get(itemId)?.unit),
+    [ingredientMap, productMap]
+  );
 
   const getProductPrice = useCallback((product: Product) => {
     if (product.basePrice !== undefined && product.basePrice !== null) {
@@ -1473,6 +1480,13 @@ const AdminPage: React.FC = () => {
     },
     [roundReceiptCost]
   );
+
+  const formatInventoryQuantity = useCallback((value: number) => {
+    if (!Number.isFinite(value)) {
+      return '0';
+    }
+    return value.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
+  }, []);
 
   const calculateReceiptTotal = useCallback((receipt: StockReceipt) => {
     const sign = receipt.type === 'writeOff' ? -1 : 1;
@@ -2871,12 +2885,6 @@ const AdminPage: React.FC = () => {
       }, {}),
     [ingredients]
   );
-
-  const defaultProductUnit = useMemo(() => {
-    const normalizedUnits = measurementUnits.map((unit) => unit.trim()).filter((unit) => unit.length > 0);
-    const fallbackUnit = normalizedUnits[0] ?? 'шт';
-    return normalizedUnits.find((unit) => unit.toLowerCase() === 'шт') ?? fallbackUnit;
-  }, [measurementUnits]);
 
   const baseIngredientDeltas = useMemo(
     () =>
@@ -7563,10 +7571,7 @@ const AdminPage: React.FC = () => {
                                     <div className="space-y-1">
                                       {previewItems.map((item, index) => {
                                         const itemId = item.itemId ?? '';
-                                        const unitLabel =
-                                          item.itemType === 'ingredient'
-                                            ? ingredientUnitMap[itemId] || 'ед.'
-                                            : defaultProductUnit;
+                                        const unitLabel = getInventoryItemUnit(item.itemType, itemId);
                                         const totalValue = item.quantity * item.unitCost;
                                         return (
                                           <div key={`${itemId}-${index}`} className="flex flex-wrap items-center gap-2">
@@ -7574,7 +7579,8 @@ const AdminPage: React.FC = () => {
                                               {getInventoryItemName(item.itemType, itemId)}
                                             </span>
                                             <span>
-                                              — {item.quantity} {unitLabel} × {formatCurrency(item.unitCost)} ₽ ={' '}
+                                              — {formatInventoryQuantity(item.quantity)} {unitLabel} ×{' '}
+                                              {formatCurrency(item.unitCost)} ₽ ={' '}
                                               {formatCurrency(totalValue)} ₽
                                             </span>
                                           </div>
@@ -7858,9 +7864,7 @@ const AdminPage: React.FC = () => {
                                       </div>
                                     </td>
                                     <td className="px-3 py-2 text-[11px] text-slate-500">
-                                      {item.itemType === 'ingredient'
-                                        ? ingredientUnitMap[item.itemId] || 'ед.'
-                                        : defaultProductUnit}
+                                      {getInventoryItemUnit(item.itemType, item.itemId)}
                                     </td>
                                     <td className="px-3 py-2">
                                       <input
@@ -7946,17 +7950,15 @@ const AdminPage: React.FC = () => {
                         .slice(0, 5)
                         .map((item, index) => {
                         const itemId = item.itemId ?? '';
-                        const unitLabel =
-                          item.itemType === 'ingredient'
-                            ? ingredientUnitMap[itemId] || 'ед.'
-                            : defaultProductUnit;
+                        const unitLabel = getInventoryItemUnit(item.itemType, itemId);
                         const totalValue = item.quantity * item.unitCost;
                         return (
                           <div key={`${itemId}-${index}`}>
                             <span className="font-semibold text-slate-700">
                               {getInventoryItemName(item.itemType, itemId)}
                             </span>{' '}
-                            — {item.quantity} {unitLabel} × {formatCurrency(item.unitCost)} ₽ ={' '}
+                            — {formatInventoryQuantity(item.quantity)} {unitLabel} ×{' '}
+                            {formatCurrency(item.unitCost)} ₽ ={' '}
                             {formatCurrency(totalValue)} ₽
                           </div>
                         );
@@ -8038,6 +8040,7 @@ const AdminPage: React.FC = () => {
                       const previousQuantity = inventoryQuantityLookup.get(
                         `${inventoryAuditForm.warehouseId}-${item.itemType}-${item.itemId}`
                       );
+                      const unitLabel = getInventoryItemUnit(item.itemType, item.itemId);
 
                       return (
                         <div key={`${item.itemId}-${index}`} className="space-y-2 rounded-2xl bg-white p-3 shadow-soft">
@@ -8075,20 +8078,25 @@ const AdminPage: React.FC = () => {
                             <div>
                               <p className="text-[11px] uppercase text-slate-400">Было</p>
                               <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
-                                {previousQuantity ?? '—'}
+                                {previousQuantity === undefined
+                                  ? '—'
+                                  : `${formatInventoryQuantity(previousQuantity)} ${unitLabel}`}
                               </p>
                             </div>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.countedQuantity}
-                              onChange={(event) =>
-                                handleAuditItemChange(index, 'countedQuantity', event.target.value)
-                              }
-                              className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
-                              placeholder="Кол-во"
-                            />
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={item.countedQuantity}
+                                onChange={(event) =>
+                                  handleAuditItemChange(index, 'countedQuantity', event.target.value)
+                                }
+                                className="w-28 rounded-2xl border border-slate-200 px-3 py-2"
+                                placeholder="Кол-во"
+                              />
+                              <span className="text-xs font-semibold text-slate-500">{unitLabel}</span>
+                            </label>
                             {inventoryAuditForm.items.length > 1 ? (
                               <button
                                 type="button"
@@ -8141,8 +8149,10 @@ const AdminPage: React.FC = () => {
                             {getInventoryItemName(item.itemType, item.itemId)}
                           </p>
                           <p>
-                            Было {item.previousQuantity} → Стало {item.countedQuantity} ({item.difference >= 0 ? '+' : ''}
-                            {item.difference})
+                            Было {formatInventoryQuantity(item.previousQuantity)} → Стало{' '}
+                            {formatInventoryQuantity(item.countedQuantity)} ({item.difference >= 0 ? '+' : ''}
+                            {formatInventoryQuantity(item.difference)}){' '}
+                            {getInventoryItemUnit(item.itemType, item.itemId)}
                           </p>
                           {item.unitCostSnapshot !== undefined ? (
                             <p className="text-[11px] text-slate-500">
@@ -8175,34 +8185,40 @@ const AdminPage: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {inventoryItems.map((item) => (
-                        <tr key={item._id}>
-                          <td className="px-3 py-2 text-slate-500">{item.warehouse?.name ?? '—'}</td>
-                          <td className="px-3 py-2 font-medium text-slate-700">
-                            {item.itemType === 'ingredient'
-                              ? item.ingredient?.name
-                              : item.product?.name}
-                          </td>
-                          <td className="px-3 py-2 text-slate-500">{item.quantity}</td>
-                          <td className="px-3 py-2 text-slate-500">
-                            {item.unitCost ? `${(item.unitCost * item.quantity).toFixed(2)} ₽` : '—'}
-                          </td>
-                          <td className="px-3 py-2 text-right text-xs">
-                            <div className="flex justify-end gap-2">
-                              {[-10, -1, 1, 10].map((delta) => (
-                                <button
-                                  key={delta}
-                                  type="button"
-                                  onClick={() => handleAdjustExistingInventory(item._id, delta)}
-                                  className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-500 hover:bg-slate-200"
-                                >
-                                  {delta > 0 ? `+${delta}` : delta}
-                                </button>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                      {inventoryItems.map((item) => {
+                        const unitLabel = getInventoryItemUnit(item.itemType, item.itemId);
+                        return (
+                          <tr key={item._id}>
+                            <td className="px-3 py-2 text-slate-500">{item.warehouse?.name ?? '—'}</td>
+                            <td className="px-3 py-2 font-medium text-slate-700">
+                              {item.itemType === 'ingredient'
+                                ? item.ingredient?.name
+                                : item.product?.name}
+                            </td>
+                            <td className="px-3 py-2 text-slate-500">
+                              {formatInventoryQuantity(item.quantity)} {unitLabel}
+                            </td>
+                            <td className="px-3 py-2 text-slate-500">
+                              {item.unitCost ? `${(item.unitCost * item.quantity).toFixed(2)} ₽` : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-right text-xs">
+                              <div className="flex justify-end gap-2">
+                                {[-10, -1, 1, 10].map((delta) => (
+                                  <button
+                                    key={delta}
+                                    type="button"
+                                    onClick={() => handleAdjustExistingInventory(item._id, delta)}
+                                    title={`Изменить на ${delta > 0 ? '+' : ''}${delta} ${unitLabel}`}
+                                    className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-500 hover:bg-slate-200"
+                                  >
+                                    {delta > 0 ? `+${delta}` : delta}
+                                  </button>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

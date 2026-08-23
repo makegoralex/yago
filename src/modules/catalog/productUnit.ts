@@ -13,6 +13,13 @@ export const getPricingUnit = (unit?: string | null): ProductUnit => {
   return PRODUCT_UNITS.includes(unit as ProductUnit) ? (unit as ProductUnit) : DEFAULT_PRODUCT_UNIT;
 };
 
+/**
+ * Inventory keeps measured products in the unit used for pricing (kg/l), while
+ * POS quantities for gram/ml products are entered in their smaller sale unit.
+ */
+export const getInventoryQuantity = (quantity: number, unit?: string | null): number =>
+  quantity / getPricingQuantity(unit);
+
 export const normalizeProductUnit = (unit?: string | null): ProductUnit => {
   const normalized = unit?.trim().toLocaleLowerCase('ru-RU');
   if (normalized === 'г') return 'гр';

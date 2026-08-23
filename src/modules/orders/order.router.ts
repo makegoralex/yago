@@ -6,7 +6,7 @@ import { evotorRequestDebug } from '../../middleware/evotorRequestDebug';
 import { enforceActiveSubscription } from '../../middleware/subscription';
 import { validateRequest } from '../../middleware/validation';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
-import { getPricingQuantity, normalizeProductUnit } from '../catalog/productUnit';
+import { getInventoryQuantity, getPricingQuantity, normalizeProductUnit } from '../catalog/productUnit';
 import { CustomerModel } from '../customers/customer.model';
 import { CertificateModel } from '../certificates/certificate.model';
 import {
@@ -284,9 +284,11 @@ const deductInventoryForOrder = async (order: OrderDocument): Promise<void> => {
       continue;
     }
 
+    const inventoryQuantity = getInventoryQuantity(item.qty, item.unit);
+
     if (Array.isArray(product.ingredients) && product.ingredients.length > 0) {
       for (const ingredientEntry of product.ingredients) {
-        const consumeQty = ingredientEntry.quantity * item.qty;
+        const consumeQty = ingredientEntry.quantity * inventoryQuantity;
         if (consumeQty <= 0) {
           continue;
         }
@@ -300,11 +302,11 @@ const deductInventoryForOrder = async (order: OrderDocument): Promise<void> => {
         );
       }
     } else {
-      if (item.qty <= 0) {
+      if (inventoryQuantity <= 0) {
         continue;
       }
 
-      await adjustInventoryQuantity(warehouseId, 'product', item.productId, -item.qty, organizationId);
+      await adjustInventoryQuantity(warehouseId, 'product', item.productId, -inventoryQuantity, organizationId);
     }
   }
 };
@@ -345,9 +347,11 @@ const restoreInventoryForOrder = async (order: OrderDocument): Promise<void> => 
       continue;
     }
 
+    const inventoryQuantity = getInventoryQuantity(item.qty, item.unit);
+
     if (Array.isArray(product.ingredients) && product.ingredients.length > 0) {
       for (const ingredientEntry of product.ingredients) {
-        const restoreQty = ingredientEntry.quantity * item.qty;
+        const restoreQty = ingredientEntry.quantity * inventoryQuantity;
         if (restoreQty <= 0) {
           continue;
         }
@@ -361,11 +365,11 @@ const restoreInventoryForOrder = async (order: OrderDocument): Promise<void> => 
         );
       }
     } else {
-      if (item.qty <= 0) {
+      if (inventoryQuantity <= 0) {
         continue;
       }
 
-      await adjustInventoryQuantity(warehouseId, 'product', item.productId, item.qty, organizationId);
+      await adjustInventoryQuantity(warehouseId, 'product', item.productId, inventoryQuantity, organizationId);
     }
   }
 };
