@@ -830,7 +830,7 @@ const AdminPage: React.FC = () => {
   } | null>(null);
   const [inventoryAuditForm, setInventoryAuditForm] = useState({
     warehouseId: '',
-    performedAt: todayInputValue,
+    performedAt: nowInputValue,
     items: [] as Array<{ itemType: 'ingredient' | 'product'; itemId: string; countedQuantity: string }>,
   });
   const [auditSubmitting, setAuditSubmitting] = useState(false);
@@ -4439,7 +4439,6 @@ const AdminPage: React.FC = () => {
       }
       await loadInventoryData();
       await loadStockReceipts();
-      await loadInventoryAudits();
       await loadMenuData();
     } catch (error) {
       const message = extractErrorMessage(error, 'Не удалось удалить документ');
@@ -4486,15 +4485,15 @@ const AdminPage: React.FC = () => {
       return;
     }
 
-    const performedDate = parseDateInput(inventoryAuditForm.performedAt);
+    const performedDate = parseDateTimeInput(inventoryAuditForm.performedAt);
 
     if (Number.isNaN(performedDate.getTime())) {
       notify({ title: 'Некорректная дата инвентаризации', type: 'info' });
       return;
     }
 
-    if (performedDate.getTime() > endOfDay(new Date()).getTime()) {
-      notify({ title: 'Дата инвентаризации не может быть в будущем', type: 'info' });
+    if (performedDate.getTime() > Date.now()) {
+      notify({ title: 'Дата и время инвентаризации не могут быть в будущем', type: 'info' });
       return;
     }
 
@@ -4520,7 +4519,7 @@ const AdminPage: React.FC = () => {
       setAuditSubmitting(true);
       const response = await api.post('/api/inventory/inventory/audits', {
         warehouseId: inventoryAuditForm.warehouseId,
-        performedAt: inventoryAuditForm.performedAt,
+        performedAt: performedDate.toISOString(),
         items: payloadItems,
       });
 
@@ -4530,18 +4529,19 @@ const AdminPage: React.FC = () => {
       }
 
       notify({
-        title: 'Инвентаризация завершена. Документы до этой даты будут заблокированы.',
+        title: 'Инвентаризация завершена. Документы до этого момента будут заблокированы.',
         type: 'success',
       });
 
       setInventoryAuditForm((prev) => ({
         ...prev,
-        performedAt: formatInputDate(new Date()),
+        performedAt: formatInputDateTime(new Date()),
         items: [],
       }));
 
       await loadInventoryData();
       await loadStockReceipts();
+      await loadInventoryAudits();
     } catch (error) {
       const message = extractErrorMessage(error, 'Не удалось провести инвентаризацию');
       notify({ title: message, type: 'error' });
@@ -8027,7 +8027,7 @@ const AdminPage: React.FC = () => {
               <Card title="Инвентаризация">
                 <form onSubmit={handleSubmitInventoryAudit} className="space-y-3 text-sm">
                   <p className="text-[11px] text-amber-700">
-                    Документы до выбранной даты будут заблокированы для изменений после проведения инвентаризации.
+                    Документы до выбранных даты и времени будут заблокированы после проведения инвентаризации.
                   </p>
                   <select
                     value={inventoryAuditForm.warehouseId}
@@ -8044,9 +8044,9 @@ const AdminPage: React.FC = () => {
                     ))}
                   </select>
                   <input
-                    type="date"
+                    type="datetime-local"
                     value={inventoryAuditForm.performedAt}
-                    max={todayInputValue}
+                    max={formatInputDateTime(new Date())}
                     onChange={(event) =>
                       setInventoryAuditForm((prev) => ({ ...prev, performedAt: event.target.value }))
                     }

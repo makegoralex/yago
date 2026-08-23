@@ -117,6 +117,26 @@ const parseReceiptDate = (value: unknown): Date => {
     : date;
 };
 
+export const resolveInventoryAuditTimestamp = (
+  requestedAt: Date,
+  lastInventoryAt?: Date | null
+): Date => {
+  if (!lastInventoryAt) {
+    return requestedAt;
+  }
+
+  if (requestedAt < lastInventoryAt) {
+    throw new InventoryReceiptError(
+      409,
+      'Инвентаризация не может быть раньше предыдущей инвентаризации'
+    );
+  }
+
+  return requestedAt.getTime() === lastInventoryAt.getTime()
+    ? new Date(lastInventoryAt.getTime() + 1)
+    : requestedAt;
+};
+
 const normalizeReceiptItems = async (
   items: unknown,
   organizationId: Types.ObjectId
@@ -408,8 +428,9 @@ export const performInventoryAudit = async ({
 
   const warehouseObjectId = new Types.ObjectId(warehouseId);
 
-  const warehouseExists = await WarehouseModel.exists({ _id: warehouseObjectId, organizationId });
-  if (!warehouseExists) {
+  const warehouse = await WarehouseModel.findOne({ _id: warehouseObjectId, organizationId })
+    .select('lastInventoryAt');
+  if (!warehouse) {
     throw new InventoryReceiptError(404, 'Склад не найден');
   }
 
@@ -417,9 +438,12 @@ export const performInventoryAudit = async ({
     throw new InventoryReceiptError(400, 'Укажите позиции для инвентаризации');
   }
 
-  const snapshotDate = parseReceiptDate(performedAt);
-
-  await ensureNotLockedByInventory(warehouseObjectId, snapshotDate);
+  // datetime-local may submit the same second twice. Preserve ordering instead
+  // of rejecting a valid second audit performed at the same displayed time.
+  const snapshotDate = resolveInventoryAuditTimestamp(
+    parseReceiptDate(performedAt),
+    warehouse.lastInventoryAt
+  );
 
   const normalized: InventoryAuditDocument['items'] = [];
 
