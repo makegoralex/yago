@@ -12,6 +12,7 @@ import { recalculateProductCost, recalculateProductsForIngredient } from './prod
 import { canConvertUnit } from './unitConversion';
 import { catalogSchemas } from '../../validation/catalogSchemas';
 import { generateProductBarcode, generateProductSku, isValidEan } from './productIdentifiers';
+import { computeProductPricing, computeUpdatedProductPricing } from './productPricing';
 import { normalizeProductUnit, PRODUCT_UNITS } from './productUnit';
 
 const router = Router();
@@ -210,53 +211,6 @@ const normalizeModifierGroups = async (
   }
 
   return Array.from(uniqueIds, (id) => new Types.ObjectId(id));
-};
-
-const computeProductPricing = (
-  basePriceInput: unknown,
-  priceInput: unknown,
-  discountTypeInput: unknown,
-  discountValueInput: unknown
-) => {
-  const basePriceRaw =
-    basePriceInput !== undefined ? Number(basePriceInput) : priceInput !== undefined ? Number(priceInput) : undefined;
-
-  if (basePriceRaw === undefined || Number.isNaN(basePriceRaw) || basePriceRaw < 0) {
-    throw new Error('Valid basePrice or price is required');
-  }
-
-  const discountType =
-    discountTypeInput === 'percentage' || discountTypeInput === 'fixed' ? discountTypeInput : undefined;
-
-  const discountValue = discountValueInput !== undefined ? Number(discountValueInput) : undefined;
-
-  if (discountType && (discountValue === undefined || Number.isNaN(discountValue) || discountValue < 0)) {
-    throw new Error('discountValue must be a positive number');
-  }
-
-  let finalPrice = priceInput !== undefined ? Number(priceInput) : basePriceRaw;
-
-  if (discountType) {
-    if (discountType === 'percentage') {
-      if (discountValue === undefined || discountValue > 100) {
-        throw new Error('discountValue must be between 0 and 100 for percentage discounts');
-      }
-      finalPrice = basePriceRaw * (1 - discountValue / 100);
-    } else {
-      finalPrice = basePriceRaw - (discountValue ?? 0);
-    }
-  }
-
-  if (Number.isNaN(finalPrice) || finalPrice < 0) {
-    finalPrice = 0;
-  }
-
-  return {
-    basePrice: Number(basePriceRaw.toFixed(2)),
-    price: Number(finalPrice.toFixed(2)),
-    discountType: discountType ?? undefined,
-    discountValue: discountValue ?? undefined,
-  };
 };
 
 router.get(
@@ -1022,11 +976,14 @@ router.put(
       discountValue !== undefined
     ) {
       try {
-        const pricing = computeProductPricing(
-          basePrice ?? existingProduct.basePrice ?? existingProduct.price,
-          price ?? existingProduct.price,
-          discountType ?? existingProduct.discountType,
-          discountValue ?? existingProduct.discountValue
+        const pricing = computeUpdatedProductPricing(
+          {
+            basePrice: existingProduct.basePrice ?? existingProduct.price,
+            price: existingProduct.price,
+            discountType: existingProduct.discountType,
+            discountValue: existingProduct.discountValue,
+          },
+          { basePrice, price, discountType, discountValue }
         );
         update.basePrice = pricing.basePrice;
         update.price = pricing.price;

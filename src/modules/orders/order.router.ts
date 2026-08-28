@@ -6,6 +6,7 @@ import { evotorRequestDebug } from '../../middleware/evotorRequestDebug';
 import { enforceActiveSubscription } from '../../middleware/subscription';
 import { validateRequest } from '../../middleware/validation';
 import { CategoryModel, ProductModel } from '../catalog/catalog.model';
+import { resolveStoredProductPricing } from '../catalog/productPricing';
 import { getInventoryQuantity, getPricingQuantity, normalizeProductUnit } from '../catalog/productUnit';
 import { CustomerModel } from '../customers/customer.model';
 import { CertificateModel } from '../certificates/certificate.model';
@@ -461,7 +462,7 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
   }
 
   const products = await ProductModel.find({ _id: { $in: [...uniqueIds] } })
-    .select('name price isActive categoryId costPrice modifierGroups unit')
+    .select('name price basePrice discountType discountValue isActive categoryId costPrice modifierGroups unit')
     .populate('modifierGroups')
     .lean();
 
@@ -607,7 +608,14 @@ const buildOrderItems = async (items: ItemPayload[]): Promise<OrderItem[]> => {
         0
       );
 
-      const basePrice = roundCurrency(product.price);
+      const basePrice = roundCurrency(
+        resolveStoredProductPricing({
+          basePrice: product.basePrice,
+          price: product.price,
+          discountType: product.discountType,
+          discountValue: product.discountValue,
+        }).price
+      );
       const unitPrice = Math.max(0, roundCurrency(basePrice + priceAdjustment));
       const baseCost = typeof product.costPrice === 'number' ? product.costPrice : 0;
       const unitCost = Math.max(0, roundCurrency(baseCost + costAdjustment));
