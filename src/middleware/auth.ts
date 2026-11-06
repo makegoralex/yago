@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 
 import { appConfig } from '../config/env';
 import { UserModel } from '../models/User';
+import { isInvalidTokenError } from '../services/authErrors';
 
 interface TokenPayload {
   sub: string;
@@ -235,7 +236,11 @@ export const authMiddleware = async (
     next();
   } catch (error) {
     console.error('Authentication error:', error);
-    res.status(401).json({ data: null, error: 'Invalid or expired token' });
+    const invalidToken = isInvalidTokenError(error);
+    res.status(invalidToken ? 401 : 503).json({
+      data: null,
+      error: invalidToken ? 'Invalid or expired token' : 'Authentication temporarily unavailable',
+    });
   }
 };
 

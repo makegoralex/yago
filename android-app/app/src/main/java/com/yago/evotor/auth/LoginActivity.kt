@@ -2,6 +2,7 @@ package com.yago.evotor.auth
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -50,7 +51,7 @@ class LoginActivity : AppCompatActivity() {
 
             val baseUrl = baseUrlInput.text.toString().trim().ifBlank { DEFAULT_BASE_URL }
             val email = emailInput.text.toString().trim()
-            val password = passwordInput.text.toString().trim()
+            val password = passwordInput.text.toString()
             val organizationId = organizationInput.text.toString().trim().ifBlank { null }
 
             if (baseUrl.isBlank() || email.isBlank() || password.isBlank()) {
@@ -64,7 +65,6 @@ class LoginActivity : AppCompatActivity() {
 
             Thread {
                 try {
-                    ApiClient.checkHealth(baseUrl)
                     val response = ApiClient.login(baseUrl, email, password, organizationId)
                     sessionStorage.saveSession(
                         Session(
@@ -77,24 +77,32 @@ class LoginActivity : AppCompatActivity() {
                     )
 
                     runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
                         progressBar.visibility = View.GONE
                         loginButton.isEnabled = true
                         openPos()
                     }
                 } catch (error: ApiClient.ApiException) {
+                    Log.w("YagoEvotor", "Login failed (status=${error.statusCode})", error)
                     runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
                         progressBar.visibility = View.GONE
                         loginButton.isEnabled = true
                         errorText.text =
-                            if (error.statusCode == null) {
-                                getString(R.string.login_error_network, error.message)
-                            } else {
-                                getString(R.string.login_error_api, error.statusCode, error.message)
+                            when {
+                                error.statusCode == null -> getString(R.string.login_error_connection)
+                                error.statusCode == 401 && error.message == "Invalid credentials" ->
+                                    getString(R.string.login_error_invalid)
+                                error.statusCode in 500..599 || error.statusCode == 408 ->
+                                    getString(R.string.login_error_unavailable)
+                                else -> getString(R.string.login_error_api, error.statusCode, error.message)
                             }
                         errorText.visibility = View.VISIBLE
                     }
                 } catch (error: Exception) {
+                    Log.w("YagoEvotor", "Login failed", error)
                     runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
                         progressBar.visibility = View.GONE
                         loginButton.isEnabled = true
                         errorText.text = getString(R.string.login_error_generic, error.message ?: "")

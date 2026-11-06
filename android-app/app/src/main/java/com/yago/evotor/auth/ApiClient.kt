@@ -81,7 +81,7 @@ object ApiClient {
         val statusCode: Int
     )
 
-    class ApiException(val statusCode: Int?, override val message: String) : Exception(message)
+    class ApiException(val statusCode: Int?, override val message: String, cause: Throwable? = null) : Exception(message, cause)
 
     fun initialize(@Suppress("UNUSED_PARAMETER") context: Context) {
         if (httpClient != null) return
@@ -111,10 +111,7 @@ object ApiClient {
             }
         }
 
-        val response = executeRequest(endpoint, "POST", payload, emptyMap())
-        if (response.statusCode !in 200..299) {
-            throw ApiException(response.statusCode, extractErrorMessage(response.body))
-        }
+        val response = executeAuthRequest(endpoint, payload)
 
         val root = JSONObject(response.body)
         val data = root.getJSONObject("data")
@@ -134,10 +131,7 @@ object ApiClient {
             put("refreshToken", refreshToken)
         }
 
-        val response = executeRequest(endpoint, "POST", payload, emptyMap())
-        if (response.statusCode !in 200..299) {
-            throw ApiException(response.statusCode, extractErrorMessage(response.body))
-        }
+        val response = executeAuthRequest(endpoint, payload)
 
         val root = JSONObject(response.body)
         val data = root.getJSONObject("data")
@@ -477,6 +471,15 @@ object ApiClient {
         val body: String
     )
 
+    private fun executeAuthRequest(endpoint: String, payload: JSONObject): HttpResponse =
+        AuthRequestRetry().execute {
+            val response = executeRequest(endpoint, "POST", payload, emptyMap())
+            if (response.statusCode !in 200..299) {
+                throw ApiException(response.statusCode, extractErrorMessage(response.body))
+            }
+            response
+        }
+
     private fun buildHttpClient(): OkHttpClient {
         val clientBuilder = OkHttpClient.Builder()
             .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
@@ -545,7 +548,7 @@ object ApiClient {
                 )
             }
         } catch (error: Exception) {
-            throw ApiException(null, formatConnectionError(endpoint, "execute request", error))
+            throw ApiException(null, formatConnectionError(endpoint, "execute request", error), error)
         }
     }
 

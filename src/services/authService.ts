@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 
 import { appConfig } from '../config/env';
 import { IUser, UserModel, UserRole } from '../models/User';
+import { AuthenticationError } from './authErrors';
 
 interface AuthTokens {
   accessToken: string;
@@ -111,20 +112,20 @@ export const authenticateUser = async (
     const users = await UserModel.find({ email: normalizedEmail });
 
     if (users.length > 1) {
-      throw new Error('organizationId is required for this account');
+      throw new AuthenticationError('organizationId is required for this account');
     }
 
     user = users[0] ?? null;
   }
 
   if (!user) {
-    throw new Error('Invalid credentials');
+    throw new AuthenticationError('Invalid credentials');
   }
 
   const passwordMatches = await comparePasswords(password, user.passwordHash);
 
   if (!passwordMatches) {
-    throw new Error('Invalid credentials');
+    throw new AuthenticationError('Invalid credentials');
   }
 
   const tokens = generateTokens(user);

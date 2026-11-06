@@ -11,6 +11,9 @@
     <string name="login_error_required">Заполните адрес, email и пароль.</string>
     <string name="login_error_required_credentials">Заполните email и пароль.</string>
     <string name="login_error_invalid">Не удалось войти. Проверьте данные.</string>
+    <string name="login_error_connection">Не удалось связаться с сервером. Проверьте интернет на терминале и повторите вход.</string>
+    <string name="login_error_unavailable">Сервер временно недоступен. Повторите вход чуть позже.</string>
+    <string name="orders_connection_retry">Связь с сервером временно недоступна. Вход сохранён, подключение восстановится автоматически.</string>
     <string name="login_error_api">Ошибка %1$d: %2$s</string>
     <string name="login_error_network">Ошибка подключения: %1$s</string>
     <string name="login_error_generic">Не удалось войти: %1$s</string>

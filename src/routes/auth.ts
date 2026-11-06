@@ -11,6 +11,7 @@ import {
 import { validateRequest } from '../middleware/validation';
 import { authSchemas, type LoginBody, type RefreshBody, type RegisterBody } from '../validation/authSchemas';
 import { evotorRequestDebug } from '../middleware/evotorRequestDebug';
+import { AuthenticationError, isInvalidTokenError } from '../services/authErrors';
 
 export const authRouter = Router();
 
@@ -99,8 +100,12 @@ authRouter.post('/login', evotorRequestDebug('POST /api/auth/login'), validateRe
       error: null,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Authentication failed';
-    res.status(401).json({ data: null, error: message });
+    if (error instanceof AuthenticationError) {
+      res.status(401).json({ data: null, error: error.message });
+      return;
+    }
+    console.error('[auth-login] temporarily unavailable', error);
+    res.status(503).json({ data: null, error: 'Authentication temporarily unavailable' });
   }
 });
 
@@ -135,13 +140,15 @@ authRouter.post('/refresh', evotorRequestDebug('POST /api/auth/refresh'), valida
       userAgent,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Invalid refresh token';
-    res.status(401).json({ data: null, error: message || 'Invalid refresh token' });
+    const invalidToken = isInvalidTokenError(error);
+    const status = invalidToken ? 401 : 503;
+    const message = invalidToken ? 'Invalid refresh token' : 'Authentication temporarily unavailable';
+    res.status(status).json({ data: null, error: message });
     console.warn('[auth-refresh]', {
-      status: 401,
+      status,
       latencyMs: Date.now() - startedAt,
       userAgent,
-      error: message,
+      error: error instanceof Error ? error.message : message,
     });
   }
 });

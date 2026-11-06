@@ -15,9 +15,12 @@ import androidx.appcompat.app.AlertDialog
 import com.yago.evotor.auth.ApiClient
 import com.yago.evotor.auth.LoginActivity
 import com.yago.evotor.auth.SessionStorage
+import com.yago.evotor.auth.SessionManager
+import com.yago.evotor.auth.SessionExpiredException
 import ru.evotor.framework.core.IntegrationAppCompatActivity
 import ru.evotor.framework.navigation.NavigationApi
 import java.text.DecimalFormat
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : IntegrationAppCompatActivity() {
 
@@ -26,6 +29,8 @@ class MainActivity : IntegrationAppCompatActivity() {
     private val currencyFormat = DecimalFormat("0.00")
 
     private var pollingRunnable: Runnable? = null
+    private var pollingActive = false
+    private val pollInFlight = AtomicBoolean(false)
     @Volatile private var isProcessingRemoteSaleCommand = false
     @Volatile private var pendingRemoteOrderId: String? = null
     private val activeOrders = mutableListOf<ApiClient.ActiveOrder>()
@@ -137,6 +142,8 @@ class MainActivity : IntegrationAppCompatActivity() {
         }
 
         logoutButton.setOnClickListener {
+            pollingActive = false
+            pollingRunnable?.let { handler.removeCallbacks(it) }
             sessionStorage.clear()
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
@@ -144,11 +151,13 @@ class MainActivity : IntegrationAppCompatActivity() {
 
         pollingRunnable = object : Runnable {
             override fun run() {
+                if (!pollingActive || isFinishing || !pollInFlight.compareAndSet(false, true)) return
                 Thread {
                     try {
                         val orders = fetchOrdersWithRefresh(sessionStorage)
 
                         runOnUiThread {
+                            if (!pollingActive || isFinishing || isDestroyed) return@runOnUiThread
                             updateOrders(orders)
                             createOrderButton.isEnabled = availableProducts.isNotEmpty()
                             saleButton.isEnabled =
@@ -162,7 +171,8 @@ class MainActivity : IntegrationAppCompatActivity() {
 
                     } catch (error: SessionExpiredException) {
                         runOnUiThread {
-                            sessionStorage.clear()
+                            if (!pollingActive || isFinishing || isDestroyed || sessionStorage.loadSession() != null) return@runOnUiThread
+                            pollingActive = false
                             Toast.makeText(
                                 this@MainActivity,
                                 getString(R.string.session_expired),
@@ -177,63 +187,48 @@ class MainActivity : IntegrationAppCompatActivity() {
                             ?: getString(R.string.error_unknown)
 
                         runOnUiThread {
+                            if (!pollingActive || isFinishing || isDestroyed) return@runOnUiThread
+                            val temporary = error is ApiClient.ApiException &&
+                                (error.statusCode == null || error.statusCode == 408 || error.statusCode in 500..599)
                             showErrorRow(
-                                getString(R.string.orders_error, details),
+                                if (temporary) getString(R.string.orders_connection_retry)
+                                else getString(R.string.orders_error, details),
                                 ordersListView,
                                 saleButton
                             )
                         }
+                    } finally {
+                        runOnUiThread {
+                            pollInFlight.set(false)
+                            if (pollingActive && !isFinishing && !isDestroyed) {
+                                pollingRunnable?.let { handler.postDelayed(it, pollingIntervalMs) }
+                            }
+                        }
                     }
                 }.start()
-
-                handler.postDelayed(this, pollingIntervalMs)
             }
         }
     }
 
     override fun onStart() {
         super.onStart()
+        pollingActive = true
         pollingRunnable?.let { handler.post(it) }
     }
 
     override fun onStop() {
         super.onStop()
+        pollingActive = false
         pollingRunnable?.let { handler.removeCallbacks(it) }
     }
 
-    private class SessionExpiredException : Exception()
-
     private fun fetchOrdersWithRefresh(sessionStorage: SessionStorage): List<ApiClient.ActiveOrder> {
-        val currentSession = sessionStorage.loadSession() ?: throw SessionExpiredException()
-
-        return try {
+        return SessionManager(sessionStorage).withSession { currentSession ->
             logPoint("fetch_orders_started")
             val products = ApiClient.fetchCatalogProducts(currentSession.baseUrl, currentSession.accessToken)
             availableProducts = products
             availableDiscounts = ApiClient.fetchAvailableDiscounts(currentSession.baseUrl, currentSession.accessToken)
             ApiClient.fetchActiveOrders(currentSession.baseUrl, currentSession.accessToken)
-        } catch (error: ApiClient.ApiException) {
-            if (error.statusCode != 401 && error.statusCode != 403) throw error
-
-            val refreshed = try {
-                ApiClient.refreshTokens(currentSession.baseUrl, currentSession.refreshToken)
-            } catch (_: Exception) {
-                throw SessionExpiredException()
-            }
-
-            val updatedSession =
-                currentSession.copy(
-                    accessToken = refreshed.accessToken,
-                    refreshToken = refreshed.refreshToken
-                )
-            sessionStorage.saveSession(updatedSession)
-
-            logPoint("session_refreshed")
-
-            val products = ApiClient.fetchCatalogProducts(updatedSession.baseUrl, updatedSession.accessToken)
-            availableProducts = products
-            availableDiscounts = ApiClient.fetchAvailableDiscounts(updatedSession.baseUrl, updatedSession.accessToken)
-            ApiClient.fetchActiveOrders(updatedSession.baseUrl, updatedSession.accessToken)
         }
     }
 
@@ -340,6 +335,11 @@ class MainActivity : IntegrationAppCompatActivity() {
         logPoint("remote_sale_command_received", mapOf("commandId" to command.id, "orderId" to command.targetOrderId))
 
         runOnUiThread {
+            if (!pollingActive || isFinishing || isDestroyed) {
+                isProcessingRemoteSaleCommand = false
+                pendingRemoteOrderId = null
+                return@runOnUiThread
+            }
             try {
                 if (!openSellReceiptWithItems(command.order)) {
                     Toast.makeText(
